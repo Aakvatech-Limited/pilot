@@ -56,7 +56,17 @@
 
         <!-- Customize -->
         <div v-show="currentStep === 'customize'" class="flex flex-col gap-4">
-          <Select label="Frappe branch" v-model="appBranch" :options="branchOptions" />
+          <Combobox
+            label="Frappe branch"
+            v-model="appBranch"
+            :options="branchOptions"
+            trigger="button"
+            placeholder="Search or type a branch…"
+          >
+            <template #item-typed-branch="{ query }">
+              Use branch “{{ query }}”
+            </template>
+          </Combobox>
           <TextInput label="Frappe repository" v-model="appRepo" />
           <ErrorMessage v-show="errorMessage" :message="errorMessage" />
         </div>
@@ -188,6 +198,7 @@
 <script setup>
 import {
   Button,
+  Combobox,
   Select,
   TextInput,
   FormLabel,
