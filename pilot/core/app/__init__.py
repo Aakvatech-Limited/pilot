@@ -255,8 +255,8 @@ class App:
         if current and requested != current:
             raise BenchError(
                 f"'{self.config.name}' is already installed from branch '{current}', "
-                f"so this install cannot deliver '{requested}'. Remove the app and "
-                f"add it again to change its branch."
+                f"so this install cannot deliver '{requested}'. Run "
+                f"`pilot switch-branch {self.config.name} {requested}` to change it."
             )
 
     def _skip_already_installed(
