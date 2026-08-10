@@ -24,13 +24,17 @@
                 v-if="fetched"
                 label="Branch"
                 v-model="branch"
-                :options="branchOptions"
+                :options="manualBranchOptions"
                 :loading="fetching"
-                allowCustomValue
+                trigger="button"
                 placeholder="Search or type a branch…"
                 emptyText="No matching branch. Type one to use it."
                 class="w-40 shrink-0"
-              />
+              >
+                <template #item-typed-branch="{ query }">
+                  Use branch “{{ query }}”
+                </template>
+              </Combobox>
             </div>
           </template>
 
@@ -120,6 +124,7 @@ import {
 import { apiErrorMessage } from '@/api/client'
 import { appsApi } from '@/api/apps'
 import { gitApi } from '@/api/git'
+import { branchComboboxOptions } from '@/utils/branchComboboxOptions'
 import { openTaskDetailPage } from '@/utils/taskRoute'
 
 const props = defineProps({
@@ -140,6 +145,13 @@ const fetched = ref(false)
 const fetching = ref(false)
 const branches = ref([])
 const branchOptions = computed(() => branches.value.map((b) => ({ label: b, value: b })))
+// Manual URLs can name branches the listing missed (truncation, permissions),
+// so this picker also takes a typed branch; resolveApp still validates it.
+const manualBranchOptions = computed(() =>
+  branchComboboxOptions(branches.value, branch.value, (typed) => {
+    branch.value = typed
+  }),
+)
 
 const gitStatus = ref(null)
 const gitConnected = computed(() =>
