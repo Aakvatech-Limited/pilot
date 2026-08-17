@@ -65,6 +65,7 @@ def register_blueprints(app: Flask) -> None:
     from admin.backend.api.v1.git import git_bp
     from admin.backend.api.v1.logs import logs_bp
     from admin.backend.api.v1.migrations import migrations_bp
+    from admin.backend.api.v1.notifications import notifications_bp
     from admin.backend.api.v1.settings import audit_bp, network_bp, settings_bp
     from admin.backend.api.v1.setup import setup_bp
     from admin.backend.api.v1.sites import sites_bp
@@ -94,6 +95,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(editor_bp, url_prefix=f"{API_V1_PREFIX}/editor")
     app.register_blueprint(ssh_keys_bp, url_prefix=f"{API_V1_PREFIX}/ssh-keys")
     app.register_blueprint(stats_bp, url_prefix=API_V1_PREFIX)
+    app.register_blueprint(notifications_bp, url_prefix=API_V1_PREFIX)
 
 
 def register_editor_frontend(app: Flask) -> None:
@@ -163,10 +165,15 @@ def register_frontend(app: Flask) -> None:
                 "Frontend not built. Run: cd admin/frontend/dashboard && npm install && npm run build",
                 503,
             )
-        candidate = dashboard_dir / path
-        if path and candidate.exists() and candidate.is_file():
-            response = send_file(str(candidate))
-            return _immutable(response) if path.startswith("assets/") else response
+        if path:
+            try:
+                # send_from_directory, never `dir / path`: it is what keeps a traversing
+                # path inside the build instead of reaching bench.toml.
+                response = send_from_directory(dashboard_dir, path)
+            except NotFound:
+                pass  # unknown route: the SPA router owns it
+            else:
+                return _immutable(response) if path.startswith("assets/") else response
         return send_file(str(dashboard_dir / "index.html"))
 
 

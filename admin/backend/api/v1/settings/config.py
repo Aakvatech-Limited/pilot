@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pilot.config import BenchConfig, FirewallRule, S3Config, WafCondition, WafRule, WorkerGroup
+from pilot.config.alert_limit import RESOURCE_LIMIT_FIELDS
 from pilot.config.llm import LLMConfig
 
 
@@ -19,12 +20,15 @@ class ConfigPatcher:
 
     def apply(self) -> str | None:
         self._apply_bench()
+        self._apply_lite_mode()
         self._apply_workers()
         self._apply_firewall()
         self._apply_waf()
         if error := self._apply_llm():
             return error
         if error := self._apply_s3():
+            return error
+        if error := self._apply_resource_limits():
             return error
         try:
             self.config.validate()
@@ -43,6 +47,11 @@ class ConfigPatcher:
         if "allow_developer_mode" in bench:
             self.config.allow_developer_mode = bool(bench["allow_developer_mode"])
 
+    def _apply_lite_mode(self) -> None:
+        lite_mode = self.data.get("lite_mode") or {}
+        if "enabled" in lite_mode:
+            self.config.lite_mode.enabled = bool(lite_mode["enabled"])
+
     def _apply_workers(self) -> None:
         workers = self.data.get("workers")
         if not workers:
@@ -58,6 +67,40 @@ class ConfigPatcher:
             groups.append(WorkerGroup(queues=queues, count=int(entry.get("count", 1))))
         if groups:
             self.config.workers.groups = groups
+
+    def _apply_resource_limits(self) -> str | None:
+        resource_limits = self.data.get("resource_limits")
+        if not resource_limits:
+            return None
+        limits = self.config.resource_limits
+        for name in RESOURCE_LIMIT_FIELDS:
+            if name in resource_limits:
+                setattr(limits, name, _coerce_int(resource_limits[name]))
+        if "site_uptime" in resource_limits:
+            limits.site_uptime = bool(resource_limits["site_uptime"])
+        if "webhook_endpoints" in resource_limits:
+            limits.webhook_endpoints = self._webhook_endpoints(
+                resource_limits["webhook_endpoints"] or [], limits.webhook_endpoints
+            )
+        try:
+            limits.validate()
+        except ValueError as error:
+            return str(error)
+        return None
+
+    @staticmethod
+    def _webhook_endpoints(entries: list[dict], stored: dict[str, str]) -> dict[str, str]:
+        """A blank token keeps the stored one, found by the URL the row was loaded
+        with so editing the URL does not drop it."""
+        endpoints: dict[str, str] = {}
+        for entry in entries:
+            url = str(entry.get("url", "")).strip()
+            if not url:
+                continue
+            token = str(entry.get("token", "")).strip()
+            loaded_as = str(entry.get("original_url", "")).strip() or url
+            endpoints[url] = token or stored.get(loaded_as, "")
+        return endpoints
 
     def _apply_firewall(self) -> None:
         firewall = self.data.get("firewall")

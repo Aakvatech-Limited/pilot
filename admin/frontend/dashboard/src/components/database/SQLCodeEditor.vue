@@ -1,19 +1,10 @@
-<template>
-  <Codemirror
-    v-model="model"
-    :extensions="extensions"
-    :autofocus="true"
-    :style="{ height: '100%' }"
-    @ready="onReady"
-  />
-</template>
-
-<script setup>
+<script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { MariaSQL, PostgreSQL, SQLite as SQLiteDialect, sql } from '@codemirror/lang-sql'
 import { autocompletion } from '@codemirror/autocomplete'
 import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands'
+
 import {
   keymap,
   EditorView,
@@ -42,7 +33,7 @@ const model = computed({
 
 const view = shallowRef(null)
 
-function onReady({ view: v }) {
+const onReady = ({ view: v }) => {
   view.value = v
 }
 
@@ -59,7 +50,7 @@ const cmDialect = computed(() => dialects[props.dbType] || MariaSQL)
 
 const sqlCompartment = new Compartment()
 
-function reconfigureSql() {
+const reconfigureSql = () => {
   if (!view.value) return
   view.value.dispatch({
     effects: sqlCompartment.reconfigure(
@@ -70,12 +61,12 @@ function reconfigureSql() {
 
 watch([cmSchema, cmDialect], reconfigureSql)
 
-function getSelectedOrAll(v) {
+const getSelectedOrAll = (v) => {
   const { from, to } = v.state.selection.main
   return from !== to ? v.state.sliceDoc(from, to) : v.state.doc.toString()
 }
 
-function getQueryToRun() {
+const getQueryToRun = () => {
   return view.value ? getSelectedOrAll(view.value) : props.modelValue
 }
 
@@ -134,7 +125,7 @@ const theme = EditorView.theme({
   },
   '.cm-completionDetail': { color: 'var(--ink-gray-5, #64748b)', fontStyle: 'italic' },
   '.cm-completionMatchedText': {
-    color: 'var(--ink-blue-6, #2563eb)',
+    color: 'var(--ink-blue-5, #2563eb)',
     textDecoration: 'none',
     fontWeight: '600',
   },
@@ -146,16 +137,16 @@ const theme = EditorView.theme({
 // above - replaces that fallback and lets syntax colors flip with the app's
 // theme instead of staying stuck in light-mode hues on a dark background.
 const sqlHighlightStyle = HighlightStyle.define([
-  { tag: [tags.keyword, tags.standard(tags.name)], color: 'var(--ink-blue-6, #2563eb)' },
-  { tag: [tags.string, tags.special(tags.string)], color: 'var(--ink-green-6, #16a34a)' },
+  { tag: [tags.keyword, tags.standard(tags.name)], color: 'var(--ink-blue-5, #2563eb)' },
+  { tag: [tags.string, tags.special(tags.string)], color: 'var(--ink-green-5, #16a34a)' },
   {
     tag: [tags.lineComment, tags.blockComment],
     color: 'var(--ink-gray-5, #64748b)',
     fontStyle: 'italic',
   },
-  { tag: [tags.number, tags.bool, tags.null], color: 'var(--ink-amber-6, #d97706)' },
-  { tag: tags.typeName, color: 'var(--ink-amber-6, #d97706)' },
-  { tag: tags.special(tags.name), color: 'var(--ink-violet-6, #7c3aed)' },
+  { tag: [tags.number, tags.bool, tags.null], color: 'var(--ink-amber-5, #d97706)' },
+  { tag: tags.typeName, color: 'var(--ink-amber-5, #d97706)' },
+  { tag: tags.special(tags.name), color: 'var(--ink-violet-5, #7c3aed)' },
   { tag: tags.name, color: 'var(--ink-gray-8, #1e293b)' },
   {
     tag: [tags.operator, tags.punctuation, tags.paren, tags.brace, tags.squareBracket],
@@ -198,3 +189,13 @@ const extensions = [
 
 defineExpose({ getQueryToRun })
 </script>
+
+<template>
+  <Codemirror
+    v-model="model"
+    :extensions="extensions"
+    :autofocus="true"
+    :style="{ height: '100%' }"
+    @ready="onReady"
+  />
+</template>

@@ -1,21 +1,101 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Badge, Button, ErrorMessage, Skeleton } from 'frappe-ui'
+
+import AddAppFromGithubDialog from '@/components/apps/AddAppFromGithubDialog.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import ChooseSiteDialog from '@/components/sites/ChooseSiteDialog.vue'
+import InstallAppDialog from '@/components/apps/InstallAppDialog.vue'
+import MarketplaceAppCard from '@/components/marketplace/MarketplaceAppCard.vue'
+import MarketplaceAppCardSkeleton from '@/components/marketplace/MarketplaceAppCardSkeleton.vue'
+import MarketplaceFilters from '@/components/marketplace/MarketplaceFilters.vue'
+
+import { useMarketplace } from '@/composables/apps/useMarketplace'
+import { useIsMobile } from '@/composables/common/useIsMobile'
+
+const isMobile = useIsMobile()
+const route = useRoute()
+const router = useRouter()
+
+const {
+  loading,
+  error,
+  appCount,
+  search,
+  selectedPill,
+  worksWith,
+  worksWithOptions,
+  isFiltered,
+  filteredApps,
+  benchVersionLabel,
+  frappeApps,
+  communityApps,
+  load,
+  sites,
+  currentSiteName,
+  otherBenchApps,
+} = useMarketplace(route.query.site)
+
+const siteLabel = computed(() => currentSiteName.value || 'All sites')
+
+const appCountLabel = computed(
+  () => `${appCount.value} ${appCount.value === 1 ? 'app' : 'apps'} available`,
+)
+
+const filteredHeading = computed(() => {
+  const name = selectedPill.value !== 'All' ? selectedPill.value : 'Matching apps'
+  const count = filteredApps.value.length
+  return `${name} · ${count} ${count === 1 ? 'app' : 'apps'}`
+})
+
+const showChooseSite = ref(false)
+const showInstallApp = ref(false)
+const showAddFromGithub = ref(false)
+const installTarget = ref(null)
+
+watch(
+  () => route.query.addFromGithub,
+  (value) => {
+    if (!value) return
+    showAddFromGithub.value = true
+    router.replace({ name: 'Marketplace', query: { ...route.query, addFromGithub: undefined } })
+  },
+  { immediate: true },
+)
+
+const onInstall = (app) => {
+  installTarget.value = app
+  showInstallApp.value = true
+}
+
+onMounted(load)
+</script>
+
 <template>
-  <div class="mx-auto max-w-3xl pb-40">
-    <div
-      class="flex sm:flex-row flex-col sm:justify-between sm:items-end gap-3 sm:gap-4 pt-4 pb-2"
-    >
-      <div class="flex flex-col items-start">
-        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <h1 class="font-semibold text-ink-gray-9 text-xl">Explore Frappe Marketplace</h1>
-          <span
-            v-if="benchVersionLabel"
-            class="inline-flex items-center gap-1 bg-surface-gray-2 px-2 py-0.5 rounded-full h-min text-ink-gray-6 text-xs shrink-0"
-          >
-            <span class="size-3 lucide-box"></span> {{ benchVersionLabel }}
-          </span>
-        </div>
-      </div>
+  <PageHero v-if="loading">
+    <template #icon><Skeleton class="rounded-6 size-9 sm:size-10 shrink-0" /></template>
+    <template #title>
+      <Skeleton class="rounded-4 w-40 h-4" />
+      <Skeleton class="rounded-full w-14 h-5 shrink-0" />
+    </template>
+
+    <template #subtitle><Skeleton class="rounded-4 w-24 h-3.5" /></template>
+    <template #actions><Skeleton class="rounded-4 w-28 h-8 sm:h-7" /></template>
+  </PageHero>
+
+  <PageHero v-else icon="lucide-store">
+    <template #title>
+      <h1 class="font-medium text-ink-gray-9 text-lg truncate">Frappe Marketplace</h1>
+      <Badge v-if="benchVersionLabel" :label="benchVersionLabel" size="md" class="shrink-0">
+        <template #prefix><span class="size-2.5 lucide-box" /></template>
+      </Badge>
+    </template>
+
+    <template #subtitle>{{ error ? '' : appCountLabel }}</template>
+    <template #actions>
       <Button
-        class="[&>.truncate]:flex-1 [&>.truncate]:text-left text-base w-full sm:w-auto shrink-0"
+        class="[&>.truncate]:flex-1 [&>.truncate]:text-left text-base max-w-[180px] sm:max-w-[250px] overflow-hidden"
         :size="isMobile ? 'md' : 'sm'"
         @click="showChooseSite = true"
       >
@@ -27,8 +107,10 @@
           <span class="size-4 text-ink-gray-5 lucide-chevron-down" />
         </template>
       </Button>
-    </div>
+    </template>
+  </PageHero>
 
+  <div class="mx-auto max-w-3xl pb-40">
     <!-- Filters -->
     <MarketplaceFilters
       v-model:search="search"
@@ -41,8 +123,9 @@
     <!-- Mirrors one section of the real grid so apps land in place. -->
     <section v-if="loading" class="mt-12">
       <div class="flex items-center h-4">
-        <Skeleton class="rounded w-32 h-3.5" />
+        <Skeleton class="rounded-4 w-32 h-3.5" />
       </div>
+
       <div class="gap-x-6 gap-y-4 grid grid-cols-1 md:grid-cols-2 mt-3">
         <MarketplaceAppCardSkeleton v-for="i in 8" :key="i" :index="i - 1" />
       </div>
@@ -59,6 +142,7 @@
         <h2 class="font-medium text-ink-gray-9 text-base">
           {{ filteredHeading }}
         </h2>
+
         <div class="gap-x-6 gap-y-4 grid grid-cols-1 md:grid-cols-2 mt-3">
           <MarketplaceAppCard
             v-for="app in filteredApps"
@@ -68,6 +152,7 @@
           />
         </div>
       </section>
+
       <p v-else class="mt-8 text-ink-gray-5 text-sm text-center">No apps found.</p>
     </template>
 
@@ -126,69 +211,3 @@
   />
   <AddAppFromGithubDialog v-model:open="showAddFromGithub" :site-name="currentSiteName" />
 </template>
-
-<script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Button, ErrorMessage, Skeleton } from 'frappe-ui'
-import AddAppFromGithubDialog from '@/components/apps/AddAppFromGithubDialog.vue'
-import ChooseSiteDialog from '@/components/sites/ChooseSiteDialog.vue'
-import InstallAppDialog from '@/components/apps/InstallAppDialog.vue'
-import MarketplaceAppCard from '@/components/marketplace/MarketplaceAppCard.vue'
-import MarketplaceAppCardSkeleton from '@/components/marketplace/MarketplaceAppCardSkeleton.vue'
-import MarketplaceFilters from '@/components/marketplace/MarketplaceFilters.vue'
-import { useMarketplace } from '@/composables/apps/useMarketplace'
-import { useIsMobile } from '@/composables/common/useIsMobile'
-
-const isMobile = useIsMobile()
-const route = useRoute()
-const router = useRouter()
-
-const {
-  loading,
-  error,
-  search,
-  selectedPill,
-  worksWith,
-  worksWithOptions,
-  isFiltered,
-  filteredApps,
-  benchVersionLabel,
-  frappeApps,
-  communityApps,
-  load,
-  sites,
-  currentSiteName,
-  otherBenchApps,
-} = useMarketplace(route.query.site)
-
-const siteLabel = computed(() => currentSiteName.value || 'All sites')
-
-const filteredHeading = computed(() => {
-  const name = selectedPill.value !== 'All' ? selectedPill.value : 'Matching apps'
-  const count = filteredApps.value.length
-  return `${name} · ${count} ${count === 1 ? 'app' : 'apps'}`
-})
-
-const showChooseSite = ref(false)
-const showInstallApp = ref(false)
-const showAddFromGithub = ref(false)
-const installTarget = ref(null)
-
-watch(
-  () => route.query.addFromGithub,
-  (value) => {
-    if (!value) return
-    showAddFromGithub.value = true
-    router.replace({ name: 'Marketplace', query: { ...route.query, addFromGithub: undefined } })
-  },
-  { immediate: true },
-)
-
-function onInstall(app) {
-  installTarget.value = app
-  showInstallApp.value = true
-}
-
-onMounted(load)
-</script>

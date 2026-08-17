@@ -1,121 +1,7 @@
-<template>
-  <div v-if="loading" class="flex justify-center items-center h-40">
-    <Spinner size="lg" class="text-ink-gray-4" />
-  </div>
-  <div v-else class="space-y-6">
-    <Alert v-if="!connected" theme="blue" title="Why connect an AI assistant?" :dismissible="false">
-      <template #description>
-        <p class="text-ink-gray-6 text-p-sm">
-          Connect any LLM provider supported by litellm to power assistant features, like explaining
-          migration and task errors from the logs.
-        </p>
-      </template>
-    </Alert>
-
-    <div
-      v-if="connected"
-      class="flex sm:flex-row flex-col sm:justify-between sm:items-center gap-3"
-    >
-      <div>
-        <p class="font-medium text-ink-gray-8 text-base">Connected to {{ providerLabel }}</p>
-        <p class="text-ink-gray-5 text-p-sm">Model {{ model || '—' }} · API key set</p>
-      </div>
-      <Button
-        class="flex-1 sm:flex-none"
-        variant="subtle"
-        theme="red"
-        :loading="disconnecting"
-        @click="disconnect"
-        >Disconnect</Button
-      >
-    </div>
-
-    <div class="space-y-4">
-      <Autocomplete
-        label="Provider"
-        :options="providerOptions"
-        :model-value="providerSelection"
-        placeholder="Search providers…"
-        @update:model-value="onProviderSelect"
-      />
-
-      <div v-if="needsApiBase" class="space-y-1.5">
-        <FormControl
-          label="API Base URL"
-          type="text"
-          v-model="apiBase"
-          placeholder="http://your-host:8000/v1"
-        />
-        <p v-if="apiBaseError" class="text-ink-red-6 text-p-sm">{{ apiBaseError }}</p>
-      </div>
-      <FormControl
-        label="API Key"
-        type="password"
-        v-model="apiKey"
-        :placeholder="apiKeySet ? '••••••••' : 'Provider API key'"
-      />
-
-      <FormControl
-        v-if="freeTextModel"
-        label="Model"
-        type="text"
-        v-model="model"
-        placeholder="Your served model name"
-      />
-      <div v-else class="space-y-1.5">
-        <Autocomplete
-          label="Model"
-          :options="modelOptions"
-          :model-value="modelSelection"
-          :loading="modelsLoading"
-          :placeholder="modelPlaceholder"
-          @update:model-value="(o) => (model = o?.value || '')"
-        />
-        <p v-if="modelsError" class="text-ink-red-6 text-p-sm">{{ modelsError }}</p>
-        <p v-else-if="modelsHint" class="text-ink-gray-5 text-p-sm">{{ modelsHint }}</p>
-      </div>
-      <FormControl
-        label="System Prompt"
-        type="textarea"
-        v-model="systemPrompt"
-        :rows="6"
-        placeholder="Instructions sent with every request"
-      />
-
-      <details class="group">
-        <summary
-          class="flex items-center gap-1.5 text-ink-gray-6 text-base cursor-pointer select-none"
-        >
-          <span
-            class="size-4 transition-transform group-open:rotate-90 lucide-chevron-right"
-          ></span>
-          Advanced
-        </summary>
-        <div class="space-y-4 pt-4">
-          <FormControl
-            v-if="!needsApiBase"
-            label="API Base URL"
-            type="text"
-            v-model="apiBase"
-            placeholder="Leave blank to use the provider default"
-          />
-          <FormControl label="Max Tokens" type="number" v-model="maxTokens" placeholder="4096" />
-        </div>
-      </details>
-
-      <ErrorMessage v-if="error" :message="error" />
-      <div class="flex justify-end">
-        <Button variant="solid" :loading="saving" :disabled="!canSave" @click="save">
-          {{ connected ? 'Update' : 'Connect' }}
-        </Button>
-      </div>
-    </div>
-  </div>
-</template>
-
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Alert, Autocomplete, Button, ErrorMessage, FormControl, Spinner, toast } from 'frappe-ui'
+import { Alert, Button, Combobox, ErrorMessage, FormControl, Spinner, toast } from 'frappe-ui'
+
 import { apiErrorMessage } from '@/api/client'
 import { settingsApi } from '@/api/settings'
 
@@ -146,13 +32,7 @@ const hasApiKey = computed(() => Boolean(apiKey.value.trim() || apiKeySet.value)
 const providerOptions = computed(() =>
   providers.value.map((p) => ({ label: p.label, value: p.value })),
 )
-const providerSelection = computed(
-  () => providerOptions.value.find((o) => o.value === provider.value) || null,
-)
 const modelOptions = computed(() => models.value.map((m) => ({ label: m, value: m })))
-const modelSelection = computed(() =>
-  model.value ? { label: model.value, value: model.value } : null,
-)
 const hasApiBase = computed(() => Boolean(apiBase.value.trim()))
 const apiBaseError = computed(() => {
   if (!provider.value || !needsApiBase.value || hasApiBase.value) return ''
@@ -182,7 +62,7 @@ const modelsHint = computed(() => {
   return `Enter the ${providerLabel.value} API key above to load models.`
 })
 
-async function fetchModels(providerValue) {
+const fetchModels = async (providerValue) => {
   models.value = []
   modelsError.value = ''
   if (!providerValue || freeTextModel.value) return
@@ -201,8 +81,8 @@ async function fetchModels(providerValue) {
   }
 }
 
-function onProviderSelect(option) {
-  provider.value = option?.value || ''
+const onProviderSelect = (value) => {
+  provider.value = value || ''
   model.value = ''
   fetchModels(provider.value)
 }
@@ -215,7 +95,7 @@ watch([apiKey, apiBase], () => {
   apiKeyDebounce = setTimeout(() => fetchModels(provider.value), 600)
 })
 
-async function load() {
+const load = async () => {
   loading.value = true
   try {
     const data = await settingsApi.get()
@@ -233,7 +113,7 @@ async function load() {
   }
 }
 
-async function save() {
+const save = async () => {
   saving.value = true
   error.value = ''
   try {
@@ -261,7 +141,7 @@ async function save() {
   }
 }
 
-async function disconnect() {
+const disconnect = async () => {
   disconnecting.value = true
   try {
     const result = await settingsApi.update({ llm: { disconnect: true } })
@@ -288,3 +168,121 @@ async function disconnect() {
 
 onMounted(load)
 </script>
+
+<template>
+  <div v-if="loading" class="flex justify-center items-center h-40">
+    <Spinner size="lg" class="text-ink-gray-4" />
+  </div>
+
+  <div v-else class="space-y-6">
+    <Alert v-if="!connected" theme="blue" title="Why connect an AI assistant?" :dismissible="false">
+      <template #description>
+        <p class="text-ink-gray-6 text-p-sm">
+          Connect any LLM provider supported by litellm to power assistant features, like explaining
+          migration and task errors from the logs.
+        </p>
+      </template>
+    </Alert>
+
+    <div
+      v-if="connected"
+      class="flex sm:flex-row flex-col sm:justify-between sm:items-center gap-3"
+    >
+      <div>
+        <p class="font-medium text-ink-gray-8 text-base">Connected to {{ providerLabel }}</p>
+        <p class="text-ink-gray-5 text-p-sm">Model {{ model || '—' }} · API key set</p>
+      </div>
+
+      <Button
+        theme="red"
+        :loading="disconnecting"
+        @click="disconnect"
+        >Disconnect</Button
+      >
+    </div>
+
+    <div class="space-y-4">
+      <Combobox
+        label="Provider"
+        :options="providerOptions"
+        :model-value="provider"
+        placeholder="Search providers…"
+        @update:model-value="onProviderSelect"
+      />
+
+      <div v-if="needsApiBase" class="space-y-1.5">
+        <FormControl
+          label="API Base URL"
+          type="text"
+          v-model="apiBase"
+          placeholder="http://your-host:8000/v1"
+        />
+        <p v-if="apiBaseError" class="text-ink-red-5 text-p-sm">{{ apiBaseError }}</p>
+      </div>
+
+      <FormControl
+        label="API Key"
+        type="password"
+        v-model="apiKey"
+        :placeholder="apiKeySet ? '••••••••' : 'Provider API key'"
+      />
+
+      <FormControl
+        v-if="freeTextModel"
+        label="Model"
+        type="text"
+        v-model="model"
+        placeholder="Your served model name"
+      />
+      <div v-else class="space-y-1.5">
+        <Combobox
+          label="Model"
+          :options="modelOptions"
+          :model-value="model"
+          :loading="modelsLoading"
+          :placeholder="modelPlaceholder"
+          @update:model-value="(value) => (model = value || '')"
+        />
+        <p v-if="modelsError" class="text-ink-red-5 text-p-sm">{{ modelsError }}</p>
+        <p v-else-if="modelsHint" class="text-ink-gray-5 text-p-sm">{{ modelsHint }}</p>
+      </div>
+
+      <FormControl
+        label="System Prompt"
+        type="textarea"
+        v-model="systemPrompt"
+        :rows="6"
+        placeholder="Instructions sent with every request"
+      />
+
+      <details class="group">
+        <summary
+          class="flex items-center gap-1.5 text-ink-gray-6 text-base cursor-pointer select-none"
+        >
+          <span
+            class="size-4 transition-transform group-open:rotate-90 lucide-chevron-right"
+          ></span>
+          Advanced
+        </summary>
+
+        <div class="space-y-4 pt-4">
+          <FormControl
+            v-if="!needsApiBase"
+            label="API Base URL"
+            type="text"
+            v-model="apiBase"
+            placeholder="Leave blank to use the provider default"
+          />
+          <FormControl label="Max Tokens" type="number" v-model="maxTokens" placeholder="4096" />
+        </div>
+      </details>
+
+      <ErrorMessage v-if="error" :message="error" />
+      <div class="flex justify-end">
+        <Button variant="solid" :loading="saving" :disabled="!canSave" @click="save">
+          {{ connected ? 'Update' : 'Connect' }}
+        </Button>
+      </div>
+    </div>
+  </div>
+</template>

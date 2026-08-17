@@ -1,20 +1,21 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useColorScheme } from 'frappe-ui'
+
 import { authApi } from '@/api/auth'
 import { useSession } from '@/composables/auth/useSession'
-import { useTheme } from '@/composables/common/useTheme'
 
 // dialogs
 const showBenches = ref(false)
 const showNewBench = ref(false)
 
 // shared by mobile settings page & desktop sidebar
-export function useAppMenu() {
+export const useAppMenu = () => {
   const router = useRouter()
-  const { setTheme } = useTheme()
+  const { setColorScheme } = useColorScheme()
   const { session } = useSession()
 
-  async function logout() {
+  const logout = async () => {
     await authApi.logout()
     window.location.reload()
   }
@@ -49,9 +50,9 @@ export function useAppMenu() {
       label: 'Theme',
       icon: 'lucide-sun-moon',
       submenu: [
-        { label: 'Light', icon: 'lucide-sun', onClick: () => setTheme('light') },
-        { label: 'Dark', icon: 'lucide-moon', onClick: () => setTheme('dark') },
-        { label: 'System', icon: 'lucide-monitor', onClick: () => setTheme('system') },
+        { label: 'Light', icon: 'lucide-sun', onClick: () => setColorScheme('light') },
+        { label: 'Dark', icon: 'lucide-moon', onClick: () => setColorScheme('dark') },
+        { label: 'System', icon: 'lucide-monitor', onClick: () => setColorScheme('system') },
       ],
     },
     { label: 'Logout', icon: 'lucide-log-out', onClick: logout },

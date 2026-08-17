@@ -1,3 +1,16 @@
+<script setup lang="ts">
+import SettingsRow from '@/components/settings/SettingsRow.vue'
+
+defineProps({ sections: { type: Array, required: true } })
+const emit = defineEmits(['passwordChanged'])
+const openSection = defineModel('openSection')
+
+const handlePasswordChanged = () => {
+  openSection.value = null
+  emit('passwordChanged')
+}
+</script>
+
 <template>
   <div v-if="openSection">
     <component :is="openSection.component" @passwordChanged="handlePasswordChanged" />
@@ -5,7 +18,7 @@
 
   <!-- -mx cancels the rows' own padding, so their text still lines up with the
        section heading while a hovered row reads as inset. -->
-  <div v-else class="-mx-2.5 divide-y divide-outline-alpha-gray-1">
+  <div v-else class="-mx-2.5 divide-y divide-outline-alpha-gray-1 hover-merges-dividers">
     <SettingsRow
       v-for="section in sections"
       :key="section.id"
@@ -19,16 +32,3 @@
     </SettingsRow>
   </div>
 </template>
-
-<script setup>
-import SettingsRow from '@/components/settings/SettingsRow.vue'
-
-defineProps({ sections: { type: Array, required: true } })
-const emit = defineEmits(['passwordChanged'])
-const openSection = defineModel('openSection')
-
-function handlePasswordChanged() {
-  openSection.value = null
-  emit('passwordChanged')
-}
-</script>

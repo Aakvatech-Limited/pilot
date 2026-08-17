@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from pilot.config.admin import AdminConfig
+from pilot.config.alert_limit import ResourceLimitConfig
 from pilot.config.app import AppConfig
 from pilot.config.central import CentralConfig
 from pilot.config.common import CommonConfig
@@ -17,6 +18,7 @@ from pilot.config.datum import DatumConfig
 from pilot.config.firewall import FirewallConfig, FirewallRule
 from pilot.config.gunicorn import GunicornConfig
 from pilot.config.letsencrypt import LetsEncryptConfig
+from pilot.config.lite_mode import LiteModeConfig
 from pilot.config.llm import LLMConfig
 from pilot.config.mariadb import MariaDBConfig
 from pilot.config.nginx import NginxConfig
@@ -118,6 +120,7 @@ class BenchConfig:
     # Gates whether developer mode can be toggled per site; sets nothing itself.
     allow_developer_mode: bool = False
     production: ProductionConfig = field(default_factory=ProductionConfig)
+    lite_mode: LiteModeConfig = field(default_factory=LiteModeConfig)
     nginx: NginxConfig = field(default_factory=NginxConfig)
     gunicorn: GunicornConfig = field(default_factory=GunicornConfig)
     letsencrypt: LetsEncryptConfig = field(default_factory=LetsEncryptConfig)
@@ -128,6 +131,7 @@ class BenchConfig:
     waf: WafConfig = field(default_factory=WafConfig)
     s3: S3Config = field(default_factory=S3Config)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    resource_limits: ResourceLimitConfig = field(default_factory=ResourceLimitConfig)
 
     # -- construction --
 
@@ -177,7 +181,9 @@ class BenchConfig:
         return config
 
     @classmethod
-    def _from_dict(cls, data: dict, *, common: CommonConfig | None = None, strict: bool = False) -> "BenchConfig":
+    def _from_dict(
+        cls, data: dict, *, common: CommonConfig | None = None, strict: bool = False
+    ) -> "BenchConfig":
         cls._report_unknown_fields(data, strict=strict)
         common = common or CommonConfig()
         bench_data = data.get("bench", {})
@@ -209,6 +215,7 @@ class BenchConfig:
             letsencrypt=common.letsencrypt,
             central=common.central,
             datum=common.datum,
+            resource_limits=common.resource_limits,
             **sections,
         )
         config.admin.jwks_url = common.jwks_url
@@ -241,15 +248,18 @@ class BenchConfig:
         self._validate_ports()
         self._validate_socketio_backend()
         self._validate_db_type()
+        self._validate_external_urls()
         self.redis.validate()
         self.workers.validate()
         self.letsencrypt.validate()
         self.gunicorn.validate()
+        self.lite_mode.validate()
         self.production.validate(self.name)
         self.admin.validate(self.production.enabled, self.name)
         self.firewall.validate()
         self.waf.validate(self.nginx.client_max_body_size)
         self.llm.validate()
+        self.resource_limits.validate()
 
     def _validate_required_fields(self) -> None:
         if not self.name:
@@ -296,6 +306,20 @@ class BenchConfig:
             raise ConfigError(
                 f"bench.socketio_backend '{self.socketio_backend}' is invalid. Must be 'python' or 'node'."
             )
+
+    def _validate_external_urls(self) -> None:
+        """Every endpoint this bench fetches from, checked before anything reaches it."""
+        from pilot.internal.validators import validate_external_url
+
+        endpoints = {
+            "admin.jwks_url": self.admin.jwks_url,
+            "central.endpoint": self.central.endpoint,
+            "datum.endpoint": self.datum.endpoint,
+            "llm.api_base": self.llm.api_base,
+        }
+        for name, url in endpoints.items():
+            if error := validate_external_url(url, name):
+                raise ConfigError(error)
 
     def _validate_db_type(self) -> None:
         if self.db_type not in ("mariadb", "postgres", "sqlite"):
@@ -425,7 +449,8 @@ class BenchConfig:
 
     def _write_common(self, bench_root: Path) -> None:
         """Persist this config's shared subset (mariadb/postgres/letsencrypt/
-        central/datum/jwks) to common_config.toml, the single source every bench merges.
+        central/datum/resource_limits/jwks) to common_config.toml, the single
+        source every bench merges.
         A no-op when nothing shared changed, so an unrelated bench.toml write
         never disturbs the file other benches are reading."""
         common = CommonConfig(
@@ -434,6 +459,7 @@ class BenchConfig:
             letsencrypt=self.letsencrypt,
             central=self.central,
             datum=self.datum,
+            resource_limits=self.resource_limits,
             jwks_url=self.admin.jwks_url,
             jwks_audience=self.admin.jwks_audience,
         )
@@ -504,13 +530,20 @@ class BenchConfig:
         return [{"queues": group.queues, "count": group.count} for group in self.workers.groups]
 
     def _production_section(self) -> ConfigDict:
-        production: ConfigDict = {
-            "enabled": self.production.enabled,
-            "use_companion_manager": self.production.use_companion_manager,
-        }
+        production: ConfigDict = {"enabled": self.production.enabled}
         if self.production.process_manager:
             production["process_manager"] = self.production.process_manager
         return production
+
+    def _lite_mode_section(self) -> ConfigDict:
+        return {
+            "enabled": self.lite_mode.enabled,
+            "restart_after_requests": self.lite_mode.restart_after_requests,
+            "restart_after_jobs": self.lite_mode.restart_after_jobs,
+            "restart_idle_seconds": self.lite_mode.restart_idle_seconds,
+            "request_drain_seconds": self.lite_mode.request_drain_seconds,
+            "job_drain_seconds": self.lite_mode.job_drain_seconds,
+        }
 
     def _gunicorn_section(self) -> ConfigDict:
         return {
@@ -518,7 +551,6 @@ class BenchConfig:
             "threads": self.gunicorn.threads,
             "timeout": self.gunicorn.timeout,
             "worker_class": self.gunicorn.worker_class,
-            "malloc_arena_max": self.gunicorn.malloc_arena_max,
             "max_requests": self.gunicorn.max_requests,
             "max_requests_jitter": self.gunicorn.max_requests_jitter,
         }
@@ -611,7 +643,9 @@ class BenchConfig:
             self._apply_setting(key, value)
 
     def _apply_setting(self, key: str, value) -> None:
-        if key in FLAT_KEYS:
+        if key == "admin_password":
+            self.admin.set_password(str(value))
+        elif key in FLAT_KEYS:
             _set_path(self, FLAT_KEYS[key], value)
         elif key == "app_repo":
             self.apps[0].repo = str(value)
@@ -704,6 +738,12 @@ _SECTIONS: tuple[_Section, ...] = (
         "production",
         lambda data: ProductionConfig.from_dict(data.get("production")),
         lambda config: config._production_section(),
+    ),
+    _Section(
+        "lite_mode",
+        lambda data: LiteModeConfig.from_dict(data.get("lite_mode", {})),
+        # Off by default, so an ordinary bench.toml never carries the section.
+        lambda config: config._lite_mode_section() if config.lite_mode.enabled else None,
     ),
     _Section(
         "gunicorn",
@@ -818,7 +858,8 @@ _BENCH_KEYS = {
     "allow_developer_mode",
 }
 # Keys older Pilot versions wrote that the parser still tolerates.
-_PRODUCTION_LEGACY = {"lightweight", "nginx"}
+_PRODUCTION_LEGACY = {"lightweight", "nginx", "use_companion_manager"}
+_GUNICORN_LEGACY = {"malloc_arena_max"}
 _WORKER_LEGACY = {"queue"}
 
 
@@ -828,7 +869,8 @@ def _bench_schema() -> _Table:
             "bench": _Table(keys=set(_BENCH_KEYS)),
             "redis": _Table(keys=_keys(RedisConfig)),
             "production": _Table(keys=_keys(ProductionConfig) | _PRODUCTION_LEGACY),
-            "gunicorn": _Table(keys=_keys(GunicornConfig)),
+            "lite_mode": _Table(keys=_keys(LiteModeConfig)),
+            "gunicorn": _Table(keys=_keys(GunicornConfig) | _GUNICORN_LEGACY),
             "admin": _Table(keys=_keys(AdminConfig)),
             "s3": _Table(keys=_keys(S3Config)),
             "llm": _Table(keys=_keys(LLMConfig)),

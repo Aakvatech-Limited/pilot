@@ -1,122 +1,16 @@
-<template>
-  <!-- The real hero's frame; only the text inside it resolves. -->
-  <div v-if="loading" class="mx-auto w-full max-w-3xl">
-    <div class="relative -mx-4 sm:-mx-6 -mt-6 px-4 sm:px-6 pt-6 pb-7 overflow-hidden">
-      <div class="absolute inset-0 pointer-events-none dot-field" aria-hidden="true" />
-      <div
-        class="relative flex justify-between items-center gap-3 mt-2 bg-surface-base p-2 sm:p-4 border rounded-xl border-outline-gray-2"
-      >
-        <div class="flex items-center gap-3 min-w-0">
-          <Skeleton class="rounded-lg size-9 sm:size-10 shrink-0" />
-          <div>
-            <div class="flex items-center gap-2 h-7">
-              <Skeleton class="rounded w-40 h-4" />
-              <Skeleton class="rounded-full w-14 h-4 shrink-0" />
-            </div>
-            <div class="hidden sm:flex items-center mt-1 h-5">
-              <Skeleton class="rounded w-24 h-3" />
-            </div>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <Skeleton class="hidden sm:block rounded w-24 h-7" />
-          <Skeleton class="rounded w-9 h-7" />
-        </div>
-      </div>
-    </div>
-    <Skeleton class="rounded w-64 h-7" />
-  </div>
-  <div v-else-if="error" class="py-12">
-    <ErrorMessage :message="error" />
-  </div>
-  <div v-else-if="site" class="mx-auto w-full max-w-3xl">
-    <!-- Hero -->
-    <div class="relative -mx-4 sm:-mx-6 -mt-6 px-4 sm:px-6 pt-6 pb-7 overflow-hidden">
-      <div class="absolute inset-0 pointer-events-none dot-field" aria-hidden="true" />
-      <div
-        class="relative flex justify-between items-center gap-3 mt-2 bg-surface-base p-2 sm:p-4 border rounded-xl border-outline-gray-2"
-      >
-        <div class="flex items-center gap-3 min-w-0">
-          <span
-            class="place-items-center grid bg-surface-gray-2 rounded-lg size-9 sm:size-10 text-ink-gray-6 shrink-0"
-          >
-            <span class="size-4 sm:size-5 lucide-globe" />
-          </span>
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 min-w-0">
-              <h1 class="font-medium text-ink-gray-9 text-lg truncate">
-                {{ site.name }}
-              </h1>
-              <Badge
-                :label="statusLabel"
-                :theme="statusBadgeTheme"
-                variant="subtle"
-                size="md"
-                class="shrink-0"
-              />
-            </div>
-            <div
-              v-if="storageUsed"
-              class="hidden sm:flex items-center gap-1.5 mt-1 text-ink-gray-5 text-sm"
-            >
-              <span class="size-3.5 lucide-hard-drive" />
-              {{ storageUsed }} used
-            </div>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <Button size="sm" class="hidden sm:flex" @click="goToMarketplace">
-            <template #prefix><span class="size-4 lucide-plus" /></template>
-            Install app
-          </Button>
-          <Dropdown :options="menuOptions" placement="bottom-end">
-            <template #default="{ open }">
-              <Button variant="subtle" size="sm" :active="open">
-                <span class="size-4 lucide-ellipsis" />
-              </Button>
-            </template>
-          </Dropdown>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tabs -->
-    <StickyToolbar>
-      <TabButtons v-model="activeTab" :options="tabs" :size="isMobile ? 'md' : 'sm'" />
-    </StickyToolbar>
-
-    <!-- Sections -->
-    <SiteApps v-if="activeTab === 'apps'" :site-name="siteName" />
-    <SiteBackups v-else-if="activeTab === 'backups'" :site-name="siteName" />
-    <SiteConfig v-else-if="activeTab === 'config'" :site-name="siteName" />
-    <Activities v-else-if="activeTab === 'activity'" :site-name="siteName" />
-    <SiteSettings v-else-if="activeTab === 'settings'" :site-name="siteName" />
-  </div>
-
-  <Teleport defer to="#header-actions">
-    <Button
-      :variant="site?.setup_complete ? 'subtle' : 'solid'"
-      size="sm"
-      :loading="settingUpSite"
-      @click="site?.setup_complete ? openSite() : setupSite()"
-    >
-      <template #prefix><span class="size-4 lucide-external-link" /></template>
-      <span class="hidden sm:inline">{{ site?.setup_complete ? 'Open site' : 'Setup site' }}</span>
-      <span class="sm:hidden">{{ site?.setup_complete ? 'Open' : 'Setup' }}</span>
-    </Button>
-  </Teleport>
-</template>
-
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Badge, Button, Dropdown, ErrorMessage, Skeleton, TabButtons, toast } from 'frappe-ui'
+
 import SiteApps from '@/components/sites/Apps.vue'
 import SiteBackups from '@/components/sites/Backups.vue'
 import SiteConfig from '@/components/sites/Config.vue'
 import SiteSettings from '@/components/sites/Settings.vue'
+import PageHero from '@/components/common/PageHero.vue'
 import Activities from '@/pages/Activities.vue'
 import StickyToolbar from '@/components/common/StickyToolbar.vue'
+
 import { apiErrorMessage } from '@/api/client'
 import { useBreadcrumbs } from '@/composables/common/useBreadcrumbs'
 import { useSite } from '@/composables/sites/useSite'
@@ -201,12 +95,12 @@ watch(
 
 const isMobile = useIsMobile()
 
-function openSite() {
+const openSite = () => {
   window.open(`https://${site.value.name}/desk`, '_blank')
 }
 
 const settingUpSite = ref(false)
-async function setupSite() {
+const setupSite = async () => {
   settingUpSite.value = true
   try {
     await login()
@@ -217,11 +111,15 @@ async function setupSite() {
   }
 }
 
-function goToMarketplace() {
+const goToMarketplace = () => {
   router.push({ path: '/marketplace', query: { site: siteName } })
 }
 
-function loginAsAdmin() {
+const goToAnalytics = () => {
+  router.push({ name: 'Analytics', query: { view: 'site', window: '24h', site: siteName } })
+}
+
+const loginAsAdmin = () => {
   toast.promise(login(), {
     loading: 'Logging in as admin',
     success: 'Logged in as admin',
@@ -229,7 +127,7 @@ function loginAsAdmin() {
   })
 }
 
-async function backupNow() {
+const backupNow = async () => {
   try {
     const result = await backup()
     if (result.ok) openTaskDetailPage(router, result.task_id)
@@ -241,16 +139,13 @@ async function backupNow() {
 
 const menuOptions = computed(() => [
   ...(isMobile.value
-    ? [{ label: 'Install app', icon: 'lucide-plus', onClick: goToMarketplace }]
+    ? [
+        { label: 'View analytics', icon: 'lucide-chart-line', onClick: goToAnalytics },
+        { label: 'Install app', icon: 'lucide-plus', onClick: goToMarketplace },
+      ]
     : []),
   { label: 'Login as admin', icon: 'lucide-log-in', onClick: loginAsAdmin },
   { label: 'Back up now', icon: 'lucide-archive', onClick: backupNow },
-  {
-    label: 'View analytics',
-    icon: 'lucide-chart-line',
-    onClick: () =>
-      router.push({ name: 'Analytics', query: { view: 'site', window: '24h', site: siteName } }),
-  },
   {
     label: 'View jobs',
     icon: 'lucide-list-checks',
@@ -296,11 +191,101 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
-.dot-field {
-  background-image: radial-gradient(var(--outline-gray-3) 1.1px, transparent 1.3px);
-  background-size: 12px 12px;
-  background-position: -5px -5px;
-  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.95), transparent 100%);
-}
-</style>
+<template>
+  <template v-if="loading">
+    <PageHero>
+      <template #icon><Skeleton class="rounded-6 size-9 sm:size-10 shrink-0" /></template>
+      <template #title>
+        <Skeleton class="rounded-4 w-40 h-4" />
+        <Skeleton class="rounded-full w-14 h-5 shrink-0" />
+      </template>
+
+      <template #actions>
+        <Skeleton class="hidden sm:block rounded-4 w-28 h-7" />
+        <Skeleton class="hidden sm:block rounded-4 w-24 h-7" />
+        <Skeleton class="rounded-4 size-7" />
+      </template>
+    </PageHero>
+
+    <div class="mx-auto w-full max-w-3xl">
+      <StickyToolbar>
+        <Skeleton class="rounded-4 w-64 h-7 sm:h-8" />
+      </StickyToolbar>
+    </div>
+  </template>
+
+  <div v-else-if="error" class="py-12">
+    <ErrorMessage :message="error" />
+  </div>
+
+  <template v-else-if="site">
+    <PageHero icon="lucide-globe">
+      <template #title>
+        <h1 class="font-medium text-ink-gray-9 text-lg truncate">
+          {{ site.name }}
+        </h1>
+
+        <Badge
+          :label="statusLabel"
+          :theme="statusBadgeTheme"
+          variant="subtle"
+          size="md"
+          class="shrink-0"
+        />
+      </template>
+
+      <template v-if="storageUsed" #subtitle>{{ storageUsed }} used</template>
+      <template #actions>
+        <Button variant="ghost" size="sm" class="hidden sm:flex" @click="goToAnalytics">
+          <template #prefix><span class="size-4 lucide-chart-line" /></template>
+          View analytics
+        </Button>
+
+        <Button size="sm" class="hidden sm:flex" @click="goToMarketplace">
+          <template #prefix><span class="size-4 lucide-plus" /></template>
+          Install app
+        </Button>
+
+        <Dropdown :options="menuOptions">
+          <template #default="{ open }">
+            <Button
+              variant="subtle"
+              size="sm"
+              :active="open"
+              icon="lucide-ellipsis"
+              label="Site actions"
+              tooltip="Site actions"
+            />
+          </template>
+        </Dropdown>
+      </template>
+    </PageHero>
+
+    <div class="mx-auto w-full max-w-3xl">
+      <!-- Tabs -->
+      <StickyToolbar>
+        <TabButtons v-model="activeTab" :options="tabs" :size="isMobile ? 'md' : 'sm'" />
+      </StickyToolbar>
+
+      <!-- Sections -->
+      <SiteApps v-if="activeTab === 'apps'" :site-name="siteName" />
+      <SiteBackups v-else-if="activeTab === 'backups'" :site-name="siteName" />
+      <SiteConfig v-else-if="activeTab === 'config'" :site-name="siteName" />
+      <Activities v-else-if="activeTab === 'activity'" :site-name="siteName" />
+      <SiteSettings v-else-if="activeTab === 'settings'" :site-name="siteName" />
+    </div>
+  </template>
+
+  <Teleport defer to="#header-actions">
+    <Button
+      :variant="site?.setup_complete ? 'subtle' : 'solid'"
+      size="sm"
+      :loading="settingUpSite"
+      @click="site?.setup_complete ? openSite() : setupSite()"
+    >
+      <template #prefix><span class="size-4 lucide-external-link" /></template>
+      <span class="hidden sm:inline">{{ site?.setup_complete ? 'Open site' : 'Setup site' }}</span>
+      <span class="sm:hidden">{{ site?.setup_complete ? 'Open' : 'Setup' }}</span>
+    </Button>
+  </Teleport>
+</template>
