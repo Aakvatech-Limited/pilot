@@ -142,9 +142,9 @@ def send_mail(mail: MailConfig, recipients: list[str], payload: dict[str, typing
     message["To"] = ", ".join(recipients)
     message.set_content(text)
     message.add_alternative(html, subtype="html")
-    if logo:
+    html_part = message.get_body(("html",))
+    if logo and html_part is not None:
         # Attach the logo to the HTML part so it shows as an inline image, not a download.
-        html_part = message.get_payload()[1]
         html_part.add_related(logo, "image", "png", cid=f"<{logo_cid}>")
 
     with smtp_session(mail) as server:
