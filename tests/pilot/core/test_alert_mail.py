@@ -101,7 +101,12 @@ def test_the_alert_is_mailed_over_starttls() -> None:
     assert sent.logged_in_as == ("alerts@test", "secret")
     assert message["To"] == "ops@test, oncall@test"
     assert message["Subject"] == "[Pilot] my-bench: a.test unreachable"
-    assert "a.test" in message.get_content()
+    # Both a plain-text and an HTML body, each carrying the alert.
+    text = message.get_body(("plain",)).get_content()
+    html = message.get_body(("html",)).get_content()
+    assert "a.test" in text
+    assert "a.test" in html
+    assert "<table" in html
 
 
 def test_both_transports_verify_the_server_certificate() -> None:
@@ -152,6 +157,48 @@ def test_a_configured_port_wins_over_the_default() -> None:
         send_mail(_mail(port=2525), RECIPIENTS, PAYLOAD)
 
     assert FakeSMTP.sends[0].port == 2525
+
+
+def test_the_html_body_renders_the_breach_details_as_a_table() -> None:
+    payload = {
+        "event": "resource_limit_breached",
+        "message": "my-bench: disk at 93%",
+        "context": {
+            "bench": "my-bench",
+            "time": "2026-09-01T00:00:00+00:00",
+            "breached_limits": [{"limit": "disk", "threshold": 85, "reading": 93}],
+        },
+    }
+    with patch("smtplib.SMTP", FakeSMTP):
+        send_mail(_mail(), RECIPIENTS, payload)
+
+    html = FakeSMTP.sends[0].messages[0].get_body(("html",)).get_content()
+    assert "<table" in html and "Threshold" in html and "93" in html
+    # The body is for a person: no raw JSON dump.
+    assert "{" not in html
+    assert "Team Pilot" in html
+
+
+def test_the_logo_is_embedded_inline_not_attached() -> None:
+    with patch("smtplib.SMTP", FakeSMTP):
+        send_mail(_mail(), RECIPIENTS, PAYLOAD)
+
+    message = FakeSMTP.sends[0].messages[0]
+    images = [p for p in message.walk() if p.get_content_type() == "image/png"]
+    assert len(images) == 1
+    assert images[0].get("Content-Disposition", "").startswith("inline")
+    html = message.get_body(("html",)).get_content()
+    assert f'cid:{images[0]["Content-ID"].strip("<>")}' in html
+
+
+def test_an_unknown_event_still_mails_the_summary() -> None:
+    payload = {"event": "brand_new", "message": "my-bench: something", "context": {"bench": "my-bench"}}
+    with patch("smtplib.SMTP", FakeSMTP):
+        send_mail(_mail(), RECIPIENTS, payload)
+
+    message = FakeSMTP.sends[0].messages[0]
+    assert "my-bench: something" in message.get_body(("plain",)).get_content()
+    assert "my-bench: something" in message.get_body(("html",)).get_content()
 
 
 def test_a_relay_without_a_password_sends_anonymously() -> None:

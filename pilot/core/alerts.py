@@ -8,10 +8,13 @@ import time
 import typing
 import urllib.request
 from email.message import EmailMessage
+from email.utils import make_msgid
+from html import escape as html_escape
 from pathlib import Path
 
 from pilot.config.mail import MailConfig
 from pilot.integrations.central import CentralClient, CentralClientError
+from pilot.internal.template import Template
 
 if typing.TYPE_CHECKING:
     from pilot.core.bench import Bench
@@ -67,17 +70,82 @@ def check_mail_credentials(mail: MailConfig) -> None:
         pass
 
 
+_LOGO_PATH = Path(__file__).parent / "assets" / "pilot-logo.png"
+_TEMPLATE = Template.from_path(Path(__file__).parent / "templates" / "alert_mail.html.template")
+
+# Detail columns per alert type: (context key holding the rows, [(heading, row key), ...]).
+_ALERT_TABLES = {
+    "resource_limit_breached": ("breached_limits", [("Limit", "limit"), ("Threshold", "threshold"), ("Reading", "reading")]),
+    "site_down": ("sites", [("Site", "site"), ("Status", "status_code"), ("Response (ms)", "response_ms")]),
+}
+
+
+def _rows(payload: dict[str, typing.Any]) -> tuple[list[str], list[list[str]]]:
+    """The detail table for this alert as (headings, rows of cells). Empty for
+    an unrecognised event, which then renders as the summary line alone."""
+    spec = _ALERT_TABLES.get(payload.get("event", ""))
+    if not spec:
+        return [], []
+    key, columns = spec
+    items = payload["context"].get(key, [])
+    # Alerts carry structured rows (dicts); tolerate a bare list of names too.
+    if items and not isinstance(items[0], dict):
+        return [columns[0][0]], [[str(item)] for item in items]
+    headings = [heading for heading, _ in columns]
+    rows = [
+        [str(item.get(field) if item.get(field) is not None else "—") for _, field in columns]
+        for item in items
+    ]
+    return headings, rows
+
+
+def _render_alert(payload: dict[str, typing.Any], logo_cid: str = "") -> tuple[str, str]:
+    """Plain-text and HTML bodies for one alert. The markup lives in
+    templates/alert_mail.html.template; only the values are filled in here."""
+    summary = payload["message"]
+    context = payload["context"]
+    bench = context.get("bench", "")
+    time_sent = context.get("time", "")
+
+    headings, rows = _rows(payload)
+    text = summary + "\n"
+    if rows:
+        text += "\n" + "\n".join("  " + " / ".join(cells) for cells in rows) + "\n"
+    text += f"\nBench: {bench}\nTime: {time_sent}\n\nThanks,\nTeam Pilot\n"
+
+    # Nothing here is trusted markup: a site or limit name with a bracket in it
+    # would otherwise land in the body as tags.
+    html = _TEMPLATE.render(
+        summary=html_escape(summary),
+        bench=html_escape(bench),
+        time=html_escape(time_sent),
+        logo_cid=logo_cid,
+        headings=[html_escape(heading) for heading in headings],
+        rows=[[html_escape(cell) for cell in row] for row in rows],
+    )
+    return text, html
+
+
 def send_mail(mail: MailConfig, recipients: list[str], payload: dict[str, typing.Any]) -> None:
     """Email one alert to every configured recipient.
 
     Raises if any recipient is refused: a partial send still leaves someone
     uninformed, and the caller retires the alert once this returns.
     """
+    logo = _LOGO_PATH.read_bytes() if _LOGO_PATH.exists() else b""
+    logo_cid = make_msgid()[1:-1] if logo else ""
+    text, html = _render_alert(payload, logo_cid)
+
     message = EmailMessage()
     message["Subject"] = f"[Pilot] {payload['message']}"
     message["From"] = mail.get_endpoint().sender
     message["To"] = ", ".join(recipients)
-    message.set_content(f"{payload['message']}\n\n{json.dumps(payload['context'], indent=2)}")
+    message.set_content(text)
+    message.add_alternative(html, subtype="html")
+    if logo:
+        # Attach the logo to the HTML part so it shows as an inline image, not a download.
+        html_part = message.get_payload()[1]
+        html_part.add_related(logo, "image", "png", cid=f"<{logo_cid}>")
 
     with smtp_session(mail) as server:
         refused = server.send_message(message)
