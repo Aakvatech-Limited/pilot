@@ -197,9 +197,10 @@ def test_patch_keeps_stored_mail_password_when_blank(tmp_path: Path) -> None:
     assert (stored.server, stored.port, stored.password) == ("smtp.example.com", 2525, "secret")
 
 
-def test_patch_does_not_send_the_stored_password_to_a_new_server(tmp_path: Path) -> None:
+def test_patch_asks_for_the_password_again_when_the_server_changes(tmp_path: Path) -> None:
     """The password belongs to the server it was saved for. Naming a different host
-    with the password left blank must not disclose the stored one to that host."""
+    must neither disclose the stored one to that host nor quietly save a mailbox
+    with no authentication at all, so the save is refused until it is retyped."""
     benches_root = tmp_path / "benches"
     sites = benches_root / "current" / "sites"
     client = _client(benches_root / "current")
@@ -207,17 +208,34 @@ def test_patch_does_not_send_the_stored_password_to_a_new_server(tmp_path: Path)
     with _accepting_server() as check:
         client.patch("/api/v1/settings", json={"mail": {**mail, "password": "secret"}})
 
-        client.patch(
+        response = client.patch(
             "/api/v1/settings",
             json={"mail": {**mail, "server": "smtp2.example.com", "password": ""}},
         )
 
-    dialled = [call.args[0] for call in check.call_args_list]
+    assert response.status_code == 422
     assert not any(
-        settings.server == "smtp2.example.com" and settings.password == "secret"
-        for settings in dialled
+        call.args[0].server == "smtp2.example.com" for call in check.call_args_list
     )
-    assert MailConfig.read(sites).password == ""
+    stored = MailConfig.read(sites)
+    assert (stored.server, stored.password) == ("smtp.example.com", "secret")
+
+
+def test_patch_moves_to_a_new_server_when_the_password_comes_with_it(tmp_path: Path) -> None:
+    benches_root = tmp_path / "benches"
+    sites = benches_root / "current" / "sites"
+    client = _client(benches_root / "current")
+    mail = {"server": "smtp.example.com", "email": "alerts@example.com"}
+    with _accepting_server():
+        client.patch("/api/v1/settings", json={"mail": {**mail, "password": "secret"}})
+
+        client.patch(
+            "/api/v1/settings",
+            json={"mail": {**mail, "server": "smtp2.example.com", "password": "fresh"}},
+        )
+
+    stored = MailConfig.read(sites)
+    assert (stored.server, stored.password) == ("smtp2.example.com", "fresh")
 
 
 def test_patch_clears_the_password_with_the_server(tmp_path: Path) -> None:

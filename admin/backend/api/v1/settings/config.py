@@ -102,28 +102,26 @@ class ConfigPatcher:
         return None
 
     def _apply_mail(self) -> str | None:
-        """A blank password keeps the stored one, the same way webhook tokens work,
-        unless the server changed. Clearing the server drops it, so a rotated
-        credential has a way out."""
+        """A blank password keeps the stored one, the same way webhook tokens work.
+        Clearing the server drops it, so a rotated credential has a way out."""
         mail_data = self.data.get("mail")
         if not mail_data:
             return None
-        self._patch_mail_fields(mail_data)
+        error = self._patch_mail_fields(mail_data)
+        if error:
+            return error
         try:
             self.mail.validate()
         except ValueError as error:
             return str(error)
         return self._check_mail()
 
-    def _patch_mail_fields(self, mail_data: dict) -> None:
+    def _patch_mail_fields(self, mail_data: dict) -> str | None:
+        had_password = bool(self.mail.password)
         previous_server = self.mail.server
         for name in ("server", "email", "login"):
             if name in mail_data:
                 setattr(self.mail, name, str(mail_data[name]).strip())
-        # The stored password belongs to the server it was saved for. Sending it
-        # to a newly named host would disclose it there, so it has to be retyped.
-        if self.mail.server != previous_server:
-            self.mail.password = ""
         if "port" in mail_data:
             self.mail.port = _coerce_int(mail_data["port"] or 0)
         if "use_ssl" in mail_data:
@@ -132,6 +130,14 @@ class ConfigPatcher:
             self.mail.password = str(mail_data["password"])
         if not self.mail.server:
             self.mail.password = ""
+            return None
+        # The stored password belongs to the server it was saved for. Sending it to
+        # a newly named host would disclose it there, and dropping it silently would
+        # save an unauthenticated mailbox, so ask for it again.
+        if had_password and self.mail.server != previous_server and not mail_data.get("password"):
+            self.mail.password = ""
+            return "Enter the password for the new mail server."
+        return None
 
     def _check_mail(self) -> str | None:
         """Prove the settings can actually reach the server before they are stored,
