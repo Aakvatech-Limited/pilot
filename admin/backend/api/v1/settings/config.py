@@ -102,8 +102,9 @@ class ConfigPatcher:
         return None
 
     def _apply_mail(self) -> str | None:
-        """A blank password keeps the stored one, the same way webhook tokens work.
-        Clearing the server drops it, so a rotated credential has a way out."""
+        """A blank password keeps the stored one, the same way webhook tokens work,
+        unless the server changed. Clearing the server drops it, so a rotated
+        credential has a way out."""
         mail_data = self.data.get("mail")
         if not mail_data:
             return None
@@ -115,9 +116,14 @@ class ConfigPatcher:
         return self._check_mail()
 
     def _patch_mail_fields(self, mail_data: dict) -> None:
+        previous_server = self.mail.server
         for name in ("server", "email", "login"):
             if name in mail_data:
                 setattr(self.mail, name, str(mail_data[name]).strip())
+        # The stored password belongs to the server it was saved for. Sending it
+        # to a newly named host would disclose it there, so it has to be retyped.
+        if self.mail.server != previous_server:
+            self.mail.password = ""
         if "port" in mail_data:
             self.mail.port = _coerce_int(mail_data["port"] or 0)
         if "use_ssl" in mail_data:
