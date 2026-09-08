@@ -8,6 +8,7 @@ import Git from '@/components/settings/Git.vue'
 import S3Bucket from '@/components/settings/S3Bucket.vue'
 import LLM from '@/components/settings/LLM.vue'
 import Notifications from '@/components/settings/Notifications.vue'
+import Mail from '@/components/settings/Mail.vue'
 import Workers from '@/components/settings/Workers.vue'
 
 import { settingsApi } from '@/api/settings'
@@ -77,6 +78,7 @@ onMounted(async () => {
   <S3Bucket v-else-if="openSection?.id === 's3-bucket'" />
   <LLM v-else-if="openSection?.id === 'llm'" />
   <Notifications v-else-if="openSection?.id === 'notifications'" />
+  <Mail v-else-if="openSection?.id === 'mail'" />
   <Workers v-else-if="openSection?.id === 'workers'" />
 
   <template v-else>
