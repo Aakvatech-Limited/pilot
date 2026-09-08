@@ -316,11 +316,18 @@ def test_apply_metrics_token_fetches_from_central_and_persists(tmp_path: Path) -
     setup = ProductionSetup(bench)
 
     with patch("pilot.integrations.central.CentralClient") as client_cls:
-        client_cls.return_value.metrics_token.return_value = {"token": "jwt-metrics"}
+        client_cls.return_value.metrics_token.return_value = {
+            "token": "jwt-metrics",
+            "endpoint": "https://datum.region.test",
+        }
         setup._apply_metrics_token(lambda message: None)
 
     assert bench.config.datum.token == "jwt-metrics"
-    assert CommonConfig.read(bench.path.parent).datum.token == "jwt-metrics"
+    assert bench.config.datum.endpoint == "https://datum.region.test"
+
+    # Persisted, so the next run ships without asking Central again.
+    persisted = CommonConfig.read(bench.path.parent).datum
+    assert (persisted.token, persisted.endpoint) == ("jwt-metrics", "https://datum.region.test")
 
 
 def test_apply_metrics_token_keeps_a_configured_token(tmp_path: Path) -> None:
@@ -360,5 +367,85 @@ def test_apply_metrics_token_skips_without_central_enrolment(tmp_path: Path) -> 
 
     with patch("pilot.integrations.central.CentralClient") as client_cls:
         ProductionSetup(bench)._apply_metrics_token(lambda message: None)
+
+    client_cls.assert_not_called()
+
+
+def test_apply_log_token_fetches_from_central_and_persists(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from pilot.config.common import CommonConfig
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        client_cls.return_value.log_token.return_value = {
+            "token": "jwt-logs",
+            "endpoint": "https://datum.region.test",
+        }
+        ProductionSetup(bench)._apply_log_token(lambda message: None)
+
+    assert bench.config.logs.token == "jwt-logs"
+    assert bench.config.logs.endpoint == "https://datum.region.test"
+
+    persisted = CommonConfig.read(bench.path.parent).logs
+    assert (persisted.token, persisted.endpoint) == ("jwt-logs", "https://datum.region.test")
+
+
+def test_apply_log_token_keeps_a_configured_token(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+    bench.config.logs.token = "already-set"
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        ProductionSetup(bench)._apply_log_token(lambda message: None)
+
+    client_cls.return_value.log_token.assert_not_called()
+
+
+def test_apply_log_token_reports_and_continues_when_central_is_unreachable(tmp_path: Path) -> None:
+    """Log shipping is not worth failing a production deploy over."""
+    from unittest.mock import patch
+
+    from pilot.integrations.central.client import CentralClientError
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+    reported: list[str] = []
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        client_cls.return_value.log_token.side_effect = CentralClientError("Cannot reach Central")
+        ProductionSetup(bench)._apply_log_token(reported.append)
+
+    assert bench.config.logs.token == ""
+    assert "Cannot reach Central" in reported[0]
+
+
+def test_apply_log_token_skips_when_central_names_no_datum(tmp_path: Path) -> None:
+    """A region whose Cargo has not reported its Datum yet: a token with nowhere to go
+    would leave Fluent Bit posting into the void."""
+    from unittest.mock import patch
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        client_cls.return_value.log_token.return_value = {"token": "jwt-logs", "endpoint": None}
+        ProductionSetup(bench)._apply_log_token(lambda message: None)
+
+    assert bench.config.logs.token == ""
+    assert bench.config.logs.endpoint == ""
+
+
+def test_apply_log_token_skips_without_central_enrolment(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    bench = _make_bench(tmp_path)
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        ProductionSetup(bench)._apply_log_token(lambda message: None)
 
     client_cls.assert_not_called()

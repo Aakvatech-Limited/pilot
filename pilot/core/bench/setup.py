@@ -61,7 +61,7 @@ class ProductionSetup:
             self._build_admin_for_production()
 
             self._setup_monitoring(on_progress)
-            self._setup_log_shipping()
+            self._setup_log_shipping(on_progress)
             self._persist_production_state()
         except BaseException:
             # A later step failed but the new admin route is already live at the
@@ -169,20 +169,46 @@ class ProductionSetup:
             return
 
         try:
-            token = CentralClient(self.bench).metrics_token().get("token")
+            token_info = CentralClient(self.bench).metrics_token()
+            token, endpoint = token_info.get("token"), token_info.get("endpoint")
         except CentralClientError as exc:
             on_progress(f"Could not fetch a metrics token from Central: {exc}")
             return
-        if not token:
+        if not token or not endpoint:
             return
 
-        datum.token = token
+        datum.token, datum.endpoint = token, endpoint
         with BenchConfig.open(self.bench.path) as config:
-            config.datum.token = token
+            config.datum.token, config.datum.endpoint = token, endpoint
 
-    def _setup_log_shipping(self) -> None:
+    def _apply_log_token(self, on_progress: Callable[[str], None]) -> None:
+        """Fetch the Datum logs JWT and endpoint from Central when common_config.toml has none."""
+        from pilot.config import BenchConfig
+        from pilot.integrations.central import CentralClient
+        from pilot.integrations.central.client import CentralClientError
+
+        logs = self.bench.config.logs
+        if logs.token or not self.bench.config.central.auth_token:
+            return
+
+        try:
+            token_info = CentralClient(self.bench).log_token()
+            token, endpoint = token_info.get("token"), token_info.get("endpoint")
+        except CentralClientError as exc:
+            on_progress(f"Could not fetch a logs token from Central: {exc}")
+            return
+        if not token or not endpoint:
+            return
+
+        logs.token, logs.endpoint = token, endpoint
+        with BenchConfig.open(self.bench.path) as config:
+            config.logs.token, config.logs.endpoint = token, endpoint
+
+    def _setup_log_shipping(self, on_progress: Callable[[str], None] = lambda message: None) -> None:
         """Install Fluent Bit as a systemd service, if a logs endpoint is configured."""
         from pilot.managers.fluentbit import LogsConfigurator
+
+        self._apply_log_token(on_progress)
 
         log_config = self.bench.config.logs
         if not log_config.is_enabled:
