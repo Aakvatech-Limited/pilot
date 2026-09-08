@@ -359,16 +359,38 @@ def test_apply_metrics_token_fetches_from_central_and_persists(tmp_path: Path) -
 
 
 def test_apply_metrics_token_keeps_a_configured_token(tmp_path: Path) -> None:
+    """Configured means both halves: a token names no destination on its own."""
     from unittest.mock import patch
 
     bench = _make_bench(tmp_path)
     _enrol_with_central(bench)
     bench.config.datum.token = "already-set"
+    bench.config.datum.endpoint = "https://datum.configured.test"
 
     with patch("pilot.integrations.central.CentralClient") as client_cls:
         ProductionSetup(bench)._apply_metrics_token(lambda message: None)
 
     client_cls.return_value.metrics_token.assert_not_called()
+    assert bench.config.datum.token == "already-set"
+
+
+def test_apply_metrics_token_refetches_a_token_with_no_endpoint(tmp_path: Path) -> None:
+    """A token with nowhere to ship is not a working config, so Central is asked again."""
+    from unittest.mock import patch
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+    bench.config.datum.token = "stranded"
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        client_cls.return_value.metrics_token.return_value = {
+            "token": "jwt-metrics",
+            "endpoint": "https://datum.region.test",
+        }
+        ProductionSetup(bench)._apply_metrics_token(lambda message: None)
+
+    assert bench.config.datum.token == "jwt-metrics"
+    assert bench.config.datum.endpoint == "https://datum.region.test"
 
 
 def test_apply_metrics_token_reports_and_continues_when_central_is_unreachable(tmp_path: Path) -> None:
@@ -422,16 +444,38 @@ def test_apply_log_token_fetches_from_central_and_persists(tmp_path: Path) -> No
 
 
 def test_apply_log_token_keeps_a_configured_token(tmp_path: Path) -> None:
+    """Configured means both halves: a token names no destination on its own."""
     from unittest.mock import patch
 
     bench = _make_bench(tmp_path)
     _enrol_with_central(bench)
     bench.config.logs.token = "already-set"
+    bench.config.logs.endpoint = "https://datum.configured.test"
 
     with patch("pilot.integrations.central.CentralClient") as client_cls:
         ProductionSetup(bench)._apply_log_token(lambda message: None)
 
     client_cls.return_value.log_token.assert_not_called()
+    assert bench.config.logs.token == "already-set"
+
+
+def test_apply_log_token_refetches_a_token_with_no_endpoint(tmp_path: Path) -> None:
+    """A token with nowhere to ship is not a working config, so Central is asked again."""
+    from unittest.mock import patch
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+    bench.config.logs.token = "stranded"
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        client_cls.return_value.log_token.return_value = {
+            "token": "jwt-logs",
+            "endpoint": "https://datum.region.test",
+        }
+        ProductionSetup(bench)._apply_log_token(lambda message: None)
+
+    assert bench.config.logs.token == "jwt-logs"
+    assert bench.config.logs.endpoint == "https://datum.region.test"
 
 
 def test_apply_log_token_reports_and_continues_when_central_is_unreachable(tmp_path: Path) -> None:
