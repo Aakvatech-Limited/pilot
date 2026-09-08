@@ -152,11 +152,11 @@ const siteOptions = computed(() => [
 
 const activityTable = computed(() => ({
   columns: [
-    { key: 'activity', label: 'Activity', class: 'flex items-center gap-3' },
+    { key: 'activity', label: 'Activity', cellClass: 'flex items-center gap-3' },
     ...(props.siteName ? [] : [{ key: 'resource', label: 'Resource' }]),
     { key: 'actor', label: 'Triggered by' },
-    { key: 'time', label: 'Date/time', class: 'text-right whitespace-nowrap' },
-    { key: 'actions', label: '', class: 'text-right' },
+    { key: 'time', label: 'Date/time', class: 'whitespace-nowrap' },
+    { key: 'actions', label: '' },
   ],
 
   rows: activities.value
@@ -202,16 +202,9 @@ onMounted(() => {
 <template>
   <div
     class="flex flex-col"
-    :class="siteName ? '' : 'p-3 md:p-4 mx-auto max-w-4xl h-[calc(100vh-3rem)]'"
+    :class="siteName ? '' : 'p-3 md:p-4 h-[calc(100vh-3rem)]'"
   >
-    <div v-if="!siteName">
-      <h1 class="font-semibold text-xl">Activity</h1>
-      <p class="mt-1 text-ink-gray-5 text-p-base">
-        A trail of actions taken on this bench - logins, backups, app changes and more.
-      </p>
-    </div>
-
-    <div class="flex flex-wrap items-center gap-3 shrink-0" :class="siteName ? '' : 'mt-4'">
+    <div class="flex flex-wrap items-center gap-3 shrink-0">
       <Combobox
         v-model="typeFilter"
         class="w-48"
@@ -235,7 +228,7 @@ onMounted(() => {
     <ErrorMessage :message="'error'" v-else-if="error" class="mt-4" />
 
     <div v-else-if="activities.length" class="flex flex-col flex-1 mt-4 min-h-0 overflow-hidden">
-      <Table v-bind="activityTable">
+      <Table v-bind="activityTable" height="flex-1">
         <template #activity="{ row }">
           <span
             class="place-items-center grid rounded-full size-6 shrink-0"

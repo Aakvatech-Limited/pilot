@@ -88,7 +88,7 @@ const listColumns = [
   { label: 'Status', key: 'status' },
   { label: 'Storage', key: 'storage', class: 'text-ink-gray-6 text-sm' },
   { label: 'Apps', key: 'apps', class: 'text-ink-gray-6 text-sm' },
-  { label: '', key: 'actions', class: 'text-right' },
+  { label: '', key: 'actions' },
 ]
 
 const listRows = computed(() =>
@@ -245,7 +245,7 @@ onMounted(() => {
         <template #site="{ row }">
           <router-link
             :to="{ name: 'SiteDetail', params: { name: row.site.name } }"
-            class="font-medium hover:underline"
+            class="font-medium"
           >
             {{ row.site.name }}
           </router-link>

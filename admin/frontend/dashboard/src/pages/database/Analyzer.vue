@@ -2,10 +2,23 @@
 import { useRoute } from 'vue-router'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
-import { Button, Checkbox, Dialog, ErrorMessage, LoadingText, TextInput, Tooltip, toast } from 'frappe-ui'
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  ErrorMessage,
+  LoadingText,
+  Select,
+  Skeleton,
+  Switch,
+  Tooltip,
+  toast,
+} from 'frappe-ui'
 
 import SizeBreakup from '@/components/database/SizeBreakup.vue'
 import DatabasePanel from '@/components/database/DatabasePanel.vue'
+import IndexAnalysisPanel from '@/components/database/IndexAnalysisPanel.vue'
+import QueryAnalysisPanel from '@/components/database/QueryAnalysisPanel.vue'
 import Table from '@/components/common/Table.vue'
 import TableSizesDialog from '@/components/database/TableSizesDialog.vue'
 
@@ -21,12 +34,12 @@ const processColumns = [
   { label: '#', key: 'number', class: 'w-10' },
   { label: 'ID', key: 'id', class: 'w-[10%]' },
   { label: 'State', key: 'state', class: 'w-[10%]' },
-  { label: 'Time', key: 'time', class: 'w-[10%] text-right' },
+  { label: 'Time', key: 'time', class: 'w-[10%]' },
   { label: 'User', key: 'user', class: 'w-[10%]' },
   { label: 'Host', key: 'host', class: 'w-[24%]' },
   { label: 'Command', key: 'command', class: 'w-[10%]' },
   { label: 'Query', key: 'query', class: 'w-[12%]' },
-  { label: '', key: 'actions', class: 'w-20 text-right' },
+  { label: '', key: 'actions', class: 'w-20' },
 ]
 
 const lockColumns = [
@@ -39,8 +52,8 @@ const lockColumns = [
   { label: 'State', key: 'state', class: 'w-[8%]' },
   { label: 'Started', key: 'started', class: 'w-[12%]' },
   { label: 'Query', key: 'query', class: 'w-[15%]' },
-  { label: 'Rows Locked', key: 'rowsLocked', class: 'w-[9%] text-right' },
-  { label: 'Rows Modified', key: 'rowsModified', class: 'w-[10%] text-right' },
+  { label: 'Rows Locked', key: 'rowsLocked', class: 'w-[9%]' },
+  { label: 'Rows Modified', key: 'rowsModified', class: 'w-[10%]' },
 ]
 
 const binlogColumns = [
@@ -48,8 +61,8 @@ const binlogColumns = [
   { label: '', key: 'selected', class: 'w-10' },
   { label: 'File', key: 'name', class: 'w-[44%]' },
   { label: 'Date', key: 'date', class: 'w-[33%]' },
-  { label: 'Size', key: 'size', class: 'w-[23%] text-right' },
-  { label: '', key: 'actions', class: 'w-12 text-right' },
+  { label: 'Size', key: 'size', class: 'w-[23%]' },
+  { label: '', key: 'actions', class: 'w-12' },
 ]
 
 const route = useRoute()
@@ -186,6 +199,12 @@ const siteOptions = computed(() => [
 ])
 
 const scopeBadge = computed(() => selectedSite.value)
+
+const siteByDatabase = computed(() =>
+  Object.fromEntries(
+    sites.value.filter((site) => site.db_name).map((site) => [site.db_name, site.name]),
+  ),
+)
 
 const MAX_QUERY_LENGTH = 30
 
@@ -326,6 +345,11 @@ const loadSize = async () => {
   }
 }
 
+const openLockWaits = () => {
+  loadLockWaits()
+  if (autoRefreshLocks.value) startLockWaitsAutoRefresh()
+}
+
 const loadBinlogs = async () => {
   binlogsLoading.value = true
   binlogsError.value = ''
@@ -384,10 +408,8 @@ const load = async () => {
     diagnostics.value = result
     configuredEngine.value = result.engine
     if (!result.supported) return
-    const panels = [loadSites(), loadSize(), loadProcesses(), loadLockWaits()]
-    if (hasBinlogs.value) panels.push(loadBinlogs())
-    await Promise.all(panels)
-    if (autoRefreshLocks.value) startLockWaitsAutoRefresh()
+    // The rest of the panels start collapsed and load themselves on first expand.
+    await Promise.all([loadSites(), loadSize()])
   } catch (e) {
     error.value = e.message || 'Could not load database diagnostics.'
   } finally {
@@ -409,9 +431,8 @@ onMounted(load)
 
 <template>
   <Teleport defer to="#header-actions">
-    <TextInput
+    <Select
       v-if="siteOptions.length > 1"
-      type="select"
       v-model="selectedSite"
       :options="siteOptions"
       class="w-32 sm:w-44"
@@ -436,6 +457,7 @@ onMounted(load)
       <DatabasePanel
         title="Database Size Breakup"
         subtitle="Analyze how storage is used"
+        hide-chevron
         :badge="selectedSite ? scopeBadge : 'Server-wide'"
         :loading="sizeLoading"
         @refresh="loadSize"
@@ -445,7 +467,16 @@ onMounted(load)
         </template>
 
         <ErrorMessage v-if="sizeError" :message="sizeError" class="m-4" />
-        <p v-else-if="!size" class="py-6 text-ink-gray-5 text-sm text-center">
+
+        <div v-else-if="sizeLoading" class="px-4 pb-4">
+          <Skeleton class="rounded-full w-full h-5" />
+          <div v-for="row in 3" :key="row" class="flex justify-between gap-4 py-2">
+            <Skeleton class="rounded-4 w-32 h-4" />
+            <Skeleton class="rounded-4 w-16 h-4" />
+          </div>
+        </div>
+
+        <p v-else-if="!size" class="py-10 border-t border-outline-gray-2 text-ink-gray-5 text-sm text-center">
           No results to display
         </p>
 
@@ -457,12 +488,13 @@ onMounted(load)
         subtitle="Analyze the processes of the database"
         :badge="scopeBadge"
         :loading="processesLoading"
+        @open="loadProcesses"
         @refresh="loadProcesses"
       >
         <ErrorMessage v-if="processesError" :message="processesError" class="m-4" />
         <Table
           v-else-if="processRows.length"
-          class="p-4"
+          class="px-4 pb-4"
           :columns="processColumns"
           :rows="processRows"
         >
@@ -473,7 +505,7 @@ onMounted(load)
           </template>
         </Table>
 
-        <p v-else class="py-6 text-ink-gray-5 text-sm text-center">No results to display</p>
+        <p v-else class="py-10 border-t border-outline-gray-2 text-ink-gray-5 text-sm text-center">No results to display</p>
       </DatabasePanel>
 
       <DatabasePanel
@@ -481,16 +513,37 @@ onMounted(load)
         subtitle="Analyze the lock waits of the database"
         :badge="[scopeBadge, lockColumnsBadge]"
         :loading="lockWaitsLoading"
-        show-auto-refresh
-        :auto-refresh="autoRefreshLocks"
-        @update:auto-refresh="autoRefreshLocks = $event"
+        @open="openLockWaits"
         @refresh="loadLockWaits"
       >
-        <ErrorMessage v-if="lockWaitsError" :message="lockWaitsError" class="m-4" />
-        <Table v-else-if="lockRows.length" class="p-4" :columns="lockColumns" :rows="lockRows" />
+        <template #actions>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <Switch v-model="autoRefreshLocks" />
+            <span class="text-ink-gray-7 text-sm">Auto Refresh</span>
+          </label>
+        </template>
 
-        <p v-else class="py-6 text-ink-gray-5 text-sm text-center">No results to display</p>
+        <ErrorMessage v-if="lockWaitsError" :message="lockWaitsError" class="m-4" />
+        <Table v-else-if="lockRows.length" class="px-4 pb-4" :columns="lockColumns" :rows="lockRows" />
+
+        <p v-else class="py-10 border-t border-outline-gray-2 text-ink-gray-5 text-sm text-center">No results to display</p>
       </DatabasePanel>
+
+      <QueryAnalysisPanel
+        :site="selectedSite"
+        :badge="scopeBadge"
+        :enabled="Boolean(diagnostics?.performance_schema_enabled)"
+        :show-site="!selectedSite"
+        :site-by-database="siteByDatabase"
+      />
+
+      <IndexAnalysisPanel
+        :site="selectedSite"
+        :badge="scopeBadge"
+        :enabled="Boolean(diagnostics?.performance_schema_enabled)"
+        :show-site="!selectedSite"
+        :site-by-database="siteByDatabase"
+      />
 
       <DatabasePanel
         v-if="hasBinlogs"
@@ -498,11 +551,20 @@ onMounted(load)
         subtitle="Manage the binary logs of the database"
         :badge="selectedSite ? 'Server-wide' : ''"
         :loading="binlogsLoading"
+        @open="loadBinlogs"
         @refresh="loadBinlogs"
       >
         <ErrorMessage v-if="binlogsError" :message="binlogsError" class="m-4" />
+
+        <p
+          v-else-if="!binlogRows.length"
+          class="py-10 border-t border-outline-gray-2 text-ink-gray-5 text-sm text-center"
+        >
+          No results to display
+        </p>
+
         <div v-else class="p-4">
-          <Table v-if="binlogRows.length" :columns="binlogColumns" :rows="binlogRows">
+          <Table :columns="binlogColumns" :rows="binlogRows">
             <template #selected="{ row }">
               <Checkbox
                 :modelValue="row.index <= selectedIndex"
@@ -523,8 +585,6 @@ onMounted(load)
               </Tooltip>
             </template>
           </Table>
-
-          <p v-else class="py-6 text-ink-gray-5 text-sm text-center">No results to display</p>
 
           <div v-if="binlogs.length" class="flex flex-wrap justify-between items-center gap-2 mt-3">
             <p class="text-ink-gray-5 text-p-xs">
@@ -614,13 +674,3 @@ onMounted(load)
     </template>
   </Dialog>
 </template>
-
-<style scoped>
-/* A `1fr` grid track takes its minimum from the item's min-content width, so a
-   long header label or query would widen the table past the panel and add a
-   horizontal scrollbar. Letting the cells shrink keeps every column in view. */
-:deep(.grid) > * {
-  min-width: 0;
-  overflow: hidden;
-}
-</style>
