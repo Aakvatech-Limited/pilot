@@ -294,3 +294,71 @@ def test_persist_production_state_writes_enabled_and_drops_nginx(tmp_path: Path)
     assert "nginx" not in data["production"]
     assert data["admin"]["tls"] is True
     assert data["admin"]["enabled"] is True
+
+
+def _enrol_with_central(bench: Bench) -> None:
+    from pilot.config.central import CentralConfig
+    from pilot.config.common import CommonConfig
+
+    common = CommonConfig.read(bench.path.parent)
+    common.central = CentralConfig(endpoint="https://central.test", auth_token="tok-9")
+    common.write(bench.path.parent)
+    bench.config = BenchConfig.read(bench.path)
+
+
+def test_apply_metrics_token_fetches_from_central_and_persists(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from pilot.config.common import CommonConfig
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+    setup = ProductionSetup(bench)
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        client_cls.return_value.metrics_token.return_value = {"token": "jwt-metrics"}
+        setup._apply_metrics_token(lambda message: None)
+
+    assert bench.config.datum.token == "jwt-metrics"
+    assert CommonConfig.read(bench.path.parent).datum.token == "jwt-metrics"
+
+
+def test_apply_metrics_token_keeps_a_configured_token(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+    bench.config.datum.token = "already-set"
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        ProductionSetup(bench)._apply_metrics_token(lambda message: None)
+
+    client_cls.return_value.metrics_token.assert_not_called()
+
+
+def test_apply_metrics_token_reports_and_continues_when_central_is_unreachable(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from pilot.integrations.central.client import CentralClientError
+
+    bench = _make_bench(tmp_path)
+    _enrol_with_central(bench)
+    reported: list[str] = []
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        client_cls.return_value.metrics_token.side_effect = CentralClientError("Cannot reach Central")
+        ProductionSetup(bench)._apply_metrics_token(reported.append)
+
+    assert bench.config.datum.token == ""
+    assert "Cannot reach Central" in reported[0]
+
+
+def test_apply_metrics_token_skips_without_central_enrolment(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    bench = _make_bench(tmp_path)
+
+    with patch("pilot.integrations.central.CentralClient") as client_cls:
+        ProductionSetup(bench)._apply_metrics_token(lambda message: None)
+
+    client_cls.assert_not_called()

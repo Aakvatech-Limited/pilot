@@ -60,7 +60,7 @@ class ProductionSetup:
 
             self._build_admin_for_production()
 
-            self._setup_monitoring()
+            self._setup_monitoring(on_progress)
             self._setup_log_shipping()
             self._persist_production_state()
         except BaseException:
@@ -141,10 +141,12 @@ class ProductionSetup:
 
             SystemdProcessManager(self.bench).remove_units()
 
-    def _setup_monitoring(self):
+    def _setup_monitoring(self, on_progress: Callable[[str], None] = lambda message: None):
         from pilot.core.server.monitoring_config import MonitorConfigurator
         from pilot.core.site.storage.systemd import SiteStorageConfigurator
         from pilot.core.site.uptime_monitoring_config import UptimeMonitorConfigurator
+
+        self._apply_metrics_token(on_progress)
 
         monitor = MonitorConfigurator(self.bench)
         monitor.install()
@@ -155,6 +157,28 @@ class ProductionSetup:
         uptime.setup()
 
         SiteStorageConfigurator().install()
+
+    def _apply_metrics_token(self, on_progress: Callable[[str], None]) -> None:
+        """Fetch the Datum metrics JWT from Central when common_config.toml has none."""
+        from pilot.config import BenchConfig
+        from pilot.integrations.central import CentralClient
+        from pilot.integrations.central.client import CentralClientError
+
+        datum = self.bench.config.datum
+        if datum.token or not self.bench.config.central.auth_token:
+            return
+
+        try:
+            token = CentralClient(self.bench).metrics_token().get("token")
+        except CentralClientError as exc:
+            on_progress(f"Could not fetch a metrics token from Central: {exc}")
+            return
+        if not token:
+            return
+
+        datum.token = token
+        with BenchConfig.open(self.bench.path) as config:
+            config.datum.token = token
 
     def _setup_log_shipping(self) -> None:
         """Install Fluent Bit as a systemd service, if a logs endpoint is configured."""
