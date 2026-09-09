@@ -46,13 +46,28 @@ class IgnoredPaths:
 
     @staticmethod
     def _patterns(app: "App") -> list[str]:
-        patterns = (read_pyproject(app) or {}).get("tool", {}).get("bench", {}).get("validation-ignore", [])
+        patterns = bench_table(app).get("validation-ignore", [])
         if not isinstance(patterns, list) or any(not isinstance(pattern, str) for pattern in patterns):
             raise AppValidationError(
                 f"'{app.config.name}' has an invalid [tool.bench] validation-ignore in pyproject.toml.\n"
                 'It must be a list of glob patterns, such as validation-ignore = ["atlas/internal/*"].'
             )
         return patterns
+
+
+def bench_table(app: "App") -> dict:
+    """The app's `[tool.bench]` table, or {} when it has none.
+
+    Only `bench` is pilot's to police; the rest of `[tool]` belongs to other tools.
+    """
+    tool = (read_pyproject(app) or {}).get("tool")
+    table = tool.get("bench", {}) if isinstance(tool, dict) else {}
+    if not isinstance(table, dict):
+        raise AppValidationError(
+            f"'{app.config.name}' has an invalid [tool.bench] in pyproject.toml: expected a table, "
+            f"got {type(table).__name__}."
+        )
+    return table
 
 
 def read_pyproject(app: "App") -> dict | None:

@@ -1046,3 +1046,30 @@ def test_validation_ignore_rejects_a_non_list_value(tmp_path: Path) -> None:
 
     with pytest.raises(AppValidationError, match=r"invalid \[tool\.bench\] validation-ignore"):
         Validator(app, checks=_static_checks()).validate()
+
+
+def test_validation_rejects_a_non_table_bench_key(tmp_path: Path) -> None:
+    """A non-table must fail as AppValidationError, not AttributeError: only a
+    BenchError rolls a switched branch back."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool]\nbench = "nope"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+
+    with pytest.raises(AppValidationError, match=r"invalid \[tool\.bench\] in pyproject\.toml"):
+        Validator(app, checks=_static_checks()).validate()
+
+
+def test_validation_ignores_unrelated_tool_tables(tmp_path: Path) -> None:
+    """Other tools' keys under [tool] are not pilot's to validate."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool]\nx = ["sss"]\n\n'
+        '[tool.ruff]\nline-length = 110\n\n[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+
+    Validator(app, checks=_static_checks()).validate()  # no raise
