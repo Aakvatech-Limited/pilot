@@ -20,7 +20,7 @@ FILENAME = "common_config.toml"
 class CommonConfig:
     """Settings shared by every bench under one benches directory: one MariaDB
     server, one Postgres server, one ACME account, one trusted admin JWKS
-    issuer, one Central enrolment, one metrics destination, one logs
+    issuer, one Central integration, one metrics destination, one logs
     destination. Stored once at ``common_config.toml`` next to the bench
     folders. BenchConfig is the only reader/writer; other code reaches these
     values through a bench's own config instead."""
@@ -93,7 +93,10 @@ class CommonConfig:
             },
         }
         if self.central != CentralConfig():
-            data["central"] = self._central_section()
+            data["central"] = {
+                "enabled": self.central.enabled,
+                "bootstrapped": self.central.bootstrapped,
+            }
         if self.datum != DatumConfig():
             data["datum"] = {"endpoint": self.datum.endpoint, "token": self.datum.token}
         if self.logs != LogsConfig():
@@ -106,12 +109,6 @@ class CommonConfig:
             data["resource_limits"] = asdict(self.resource_limits)
         if self.jwks_url:
             data["admin"] = {"jwks_url": self.jwks_url, "jwks_audience": self.jwks_audience}
-        return data
-
-    def _central_section(self) -> ConfigDict:
-        data: ConfigDict = {"endpoint": self.central.endpoint, "auth_token": self.central.auth_token}
-        if self.central.bootstrap_token:
-            data["bootstrap_token"] = self.central.bootstrap_token
         return data
 
 

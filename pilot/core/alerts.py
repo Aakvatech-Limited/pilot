@@ -175,7 +175,7 @@ def notify(bench: "Bench", payload: dict[str, typing.Any]) -> bool:
             delivered = True
 
     try:
-        CentralClient(bench).notify_central(**payload)
+        CentralClient().notify_central(**payload)
     except CentralClientError:
         return delivered
     return True

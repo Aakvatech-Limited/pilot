@@ -329,7 +329,7 @@ def _enrol_with_central(bench: Bench) -> None:
     from pilot.config.common import CommonConfig
 
     common = CommonConfig.read(bench.path.parent)
-    common.central = CentralConfig(endpoint="https://central.test", auth_token="tok-9")
+    common.central = CentralConfig(enabled=True, bootstrapped=True)
     common.write(bench.path.parent)
     bench.config = BenchConfig.read(bench.path)
 

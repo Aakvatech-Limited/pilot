@@ -317,7 +317,6 @@ class BenchConfig:
 
         endpoints = {
             "admin.jwks_url": self.admin.jwks_url,
-            "central.endpoint": self.central.endpoint,
             "datum.endpoint": self.datum.endpoint,
             "llm.api_base": self.llm.api_base,
         }
