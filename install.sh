@@ -199,7 +199,8 @@ add_distro_repos() {
     case "$DISTRO" in
         debian|ubuntu)
             fetch_and_run_as_root "$MARIADB_REPO_SETUP_URL" \
-                --mariadb-server-version="mariadb-$MARIADB_VERSION" ;;
+                --mariadb-server-version="mariadb-$MARIADB_VERSION" \
+                --skip-maxscale;;
     esac
 }
 
