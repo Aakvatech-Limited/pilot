@@ -181,7 +181,7 @@ Unknown fields are ignored by normal loads for compatibility. Strict validation 
 
 ## Fetched Endpoints
 
-`admin.jwks_url`, `central.endpoint`, `datum.endpoint`, and `llm.api_base` are URLs this bench requests itself, so `BenchConfig.validate` sends each through `validate_external_url`: the scheme must be `http` or `https`, credentials must not be embedded, and the host must not be link-local or a cloud metadata name. Loopback and private addresses stay allowed - a self-hosted model or a local JWKS issuer is a normal setup. Validation reads the literal host only; a domain that resolves to a blocked address is not caught.
+`admin.jwks_url`, `datum.endpoint`, and `llm.api_base` are URLs this bench requests itself, so `BenchConfig.validate` sends each through `validate_external_url`: the scheme must be `http` or `https`, credentials must not be embedded, and the host must not be link-local or a cloud metadata name. Loopback and private addresses stay allowed - a self-hosted model or a local JWKS issuer is a normal setup. Validation reads the literal host only; a domain that resolves to a blocked address is not caught.
 
 ## Common Config
 
@@ -208,8 +208,7 @@ email = "ops@example.com"
 webroot_path = "/var/www/letsencrypt"
 
 [central]
-endpoint = "https://central.example.com"
-auth_token = ""
+enabled = false
 
 [datum]
 endpoint = "https://datum.internal"
@@ -261,6 +260,8 @@ Saving these through the Admin UI opens a session against the server first, so a
 `email_recipients` is edited on the notification settings page, the mailbox on its own one, so either may be saved before the other exists.
 
 `BenchConfig` is the only reader/writer of this file - it merges these values into `config.mariadb`, `config.postgres`, `config.letsencrypt`, `config.central`, `config.datum`, and `config.admin.jwks_url`/`jwks_audience` on every read, and writes them back on save. Other code reaches these values through a bench's own `BenchConfig`, never by reading `common_config.toml` directly. `admin.tls` is not part of this file - it stays a per-bench choice in `bench.toml`.
+
+`[central]` records that this host is Central-managed. The endpoint and auth token are deliberately not here: instance metadata owns them, and `CentralClient` reads them from there on every call.
 
 `[datum]` is where the monitor ships metrics. With both `endpoint` and `token` set, and the optional `datum` package installed (`pip install pilot[metrics]`), every collection tick is posted as one batch of samples. The JSON-Lines monitor logs are written either way - they stay the Admin UI's source of truth.
 

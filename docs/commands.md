@@ -73,8 +73,6 @@ These commands control the task worker, not individual Frappe workers.
 
 - `pilot admin build`: rebuild Admin frontend assets from source.
 - `pilot admin upgrade`: update Pilot to the latest version, run pending upgrade patches (pre_update before, post_update after), and restart the admin service.
-- `pilot admin enroll`: exchange the bootstrap token for this bench's Central credential.
-- `pilot admin set-central-config`: store Central endpoint and Pilot auth token.
 - `pilot admin issue-site-token`: issue a scoped site-to-bench API token.
 - `pilot admin run-patches [--phase pre_update|post_update|all]`: run pending Pilot upgrade patches by hand (see [Configuration](configuration.md#common-config)); `pilot admin upgrade` already runs both phases automatically.
 
