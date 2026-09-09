@@ -28,7 +28,7 @@ from pilot.managers.waf import WafManager
 from pilot.utils import run_command
 
 if TYPE_CHECKING:
-    from pilot.config import SiteConfig
+    from pilot.config import HostnameAlias, SiteConfig
     from pilot.core.bench import Bench
 
 _NGINX_CONF = Path("/etc/nginx/nginx.conf")
@@ -43,6 +43,10 @@ _SERVER_TEMPLATE = Template.from_path(_TEMPLATES / "server.conf.template")
 _ERROR_PAGE_TEMPLATE = Template.from_path(_TEMPLATES / "error_page.html.template")
 
 _CORS_PATHS = ["/api/v1/health", "/api/v1/bootstrap", "/api/v1/setup/actions/finish"]
+
+# Cloud hostnames are anchored to the VM's zone, so customer domains do not match.
+CLOUD_ADMIN_PREFIX = "vm-"
+CLOUD_SITE_PREFIX = "site-"
 
 
 def _admin_static_dir() -> Path:
@@ -74,6 +78,12 @@ def _shared_nginx_dir() -> Path:
     from pilot.utils import cli_root
 
     return cli_root() / "system" / "nginx"
+
+
+def vm_hostname_pattern(pattern: str) -> str:
+    """Convert a VM hostname glob to an nginx regex server name."""
+    regex = re.escape(pattern).replace(r"\*", "[a-z0-9-]+")
+    return f"~^{regex}$"
 
 
 def render_error_html(code: int, title: str, message: str) -> str:
@@ -114,7 +124,56 @@ class NginxConfigRenderer:
         vhosts = [self._site_vhost(site, ssl) for site, ssl in sites]
         if self.bench.config.admin.domain:
             vhosts.append(self._admin_vhost(admin_ssl))
-        return _BENCH_TEMPLATE.render(**self._bench_context(vhosts))
+
+        aliases = self._cloud_aliases(sites)
+        return _BENCH_TEMPLATE.render(**self._bench_context(vhosts, aliases))
+
+    def _cloud_aliases(self, sites: list[tuple["SiteConfig", bool]]) -> list[SimpleNamespace]:
+        """Build permanent, HTTP-only aliases for a Central-managed VM."""
+        central = self.bench.config.central
+        if not central.enabled:
+            return []
+
+        aliases = []
+        for mapping in central.hostname_aliases:
+            if mapping.type == "admin":
+                alias = self._admin_alias(mapping)
+            elif mapping.type == "site":
+                alias = self._site_alias(mapping, sites)
+            else:
+                alias = None
+            if alias:
+                aliases.append(alias)
+        return aliases
+
+    def _admin_alias(self, mapping: "HostnameAlias") -> SimpleNamespace | None:
+        admin = self.bench.config.admin
+        if not admin.domain or admin.domain != mapping.target:
+            return None
+
+        socket_activated = self.bench.config.production.process_manager == "systemd"
+        port = admin.internal_port if socket_activated else admin.port
+        return SimpleNamespace(
+            server_name=vm_hostname_pattern(mapping.pattern),
+            redirect=f"{'https' if admin.tls else 'http'}://{mapping.target}" if mapping.redirect else "",
+            proxy_pass=f"http://127.0.0.1:{port}",
+            site="",
+        )
+
+    def _site_alias(
+        self, mapping: "HostnameAlias", sites: list[tuple["SiteConfig", bool]]
+    ) -> SimpleNamespace | None:
+        entry = next((entry for entry in sites if entry[0].name == mapping.target), None)
+        if entry is None:
+            return None
+
+        site, ssl = entry
+        return SimpleNamespace(
+            server_name=vm_hostname_pattern(mapping.pattern),
+            redirect=f"{'https' if ssl else 'http'}://{mapping.target}" if mapping.redirect else "",
+            proxy_pass=f"http://bench-{self.bench.config.name}",
+            site=site.name,
+        )
 
     def generate_server_config(self, error_dir: Path) -> str:
         """The host-wide catch-all vhost, shared by every bench on the box."""
@@ -165,7 +224,9 @@ class NginxConfigRenderer:
             port=admin.internal_port if socket_activated else admin.port,
         )
 
-    def _bench_context(self, vhosts: list[SimpleNamespace]) -> dict[str, Any]:
+    def _bench_context(
+        self, vhosts: list[SimpleNamespace], aliases: list[SimpleNamespace] | None = None
+    ) -> dict[str, Any]:
         config = self.bench.config
         nginx = config.nginx
         return {
@@ -188,6 +249,7 @@ class NginxConfigRenderer:
             "cors_paths": _CORS_PATHS,
             "admin_static": _admin_static_dir(),
             "vhosts": vhosts,
+            "aliases": aliases or [],
         }
 
 

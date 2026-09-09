@@ -12,9 +12,16 @@ from unittest.mock import PropertyMock, patch
 import pytest
 
 from pilot.config import BenchConfig, SiteConfig
+from pilot.config.central import HostnameAlias
 from pilot.core.bench import Bench
 from pilot.exceptions import CommandError
-from pilot.managers.nginx import NginxConfigRenderer, NginxManager
+from pilot.managers.nginx import (
+    CLOUD_ADMIN_PREFIX,
+    CLOUD_SITE_PREFIX,
+    NginxConfigRenderer,
+    NginxManager,
+    vm_hostname_pattern,
+)
 
 _BASE_DATA: dict = {
     "bench": {"name": "test-bench", "python": "3.14"},
@@ -497,6 +504,8 @@ def test_install_config_rolls_back_symlink_when_reload_fails(tmp_path: Path) -> 
 
     mock_run.assert_called_once()
     assert mock_run.call_args[0][0][-2:] == ["unlink", str(symlink_path)]
+
+
 def test_stage_and_copy_creates_missing_nginx_config_dir(tmp_path: Path) -> None:
     """install() runs setup_sudoers() before generate_config() ever mkdirs
     config/nginx - staging must not assume that directory already exists."""
@@ -554,6 +563,8 @@ def test_setup_sudoers_grants_only_start_stop_reload(tmp_path: Path) -> None:
 
     mock_run.assert_called_once()
     assert mock_run.call_args.args[0][-3:] == ["chmod", "440", str(sudoers_file)]
+
+
 def test_prune_dangling_symlinks_removes_only_broken_ones(tmp_path: Path) -> None:
     nginx_dir = tmp_path / "conf.d"
     nginx_dir.mkdir()
@@ -603,3 +614,121 @@ def test_cert_files_exist_true_when_both_files_present() -> None:
         "-f",
         "/etc/letsencrypt/live/site.example.com/privkey.pem",
     ]
+
+
+# --- cloud VM hostnames ------------------------------------------------------
+
+_VM_DOMAIN = "par-1.frappe.cloud"
+_SITE_GLOB = f"{CLOUD_SITE_PREFIX}*.{_VM_DOMAIN}"
+_ADMIN_GLOB = f"{CLOUD_ADMIN_PREFIX}*.{_VM_DOMAIN}"
+_SITE_PATTERN = vm_hostname_pattern(_SITE_GLOB)
+_ADMIN_PATTERN = vm_hostname_pattern(_ADMIN_GLOB)
+_PLACEHOLDER_SITE = SiteConfig(name=f"site-a1b2c3.{_VM_DOMAIN}", apps=["frappe"])
+
+
+def _cloud_config(
+    tmp_path: Path,
+    sites: list[tuple[SiteConfig, bool]],
+    central_enabled: bool = True,
+    hostname_mappings: dict[str, str] | None = None,
+) -> str:
+    data = copy.deepcopy(_BASE_DATA)
+    data["admin"] = {"domain": "admin.example.com"}
+    renderer = _renderer(tmp_path, data)
+    # Central settings are host-shared.
+    central = renderer.bench.config.central
+    central.enabled = central_enabled
+    central.hostname_aliases = [
+        HostnameAlias(
+            type="admin" if pattern.startswith(CLOUD_ADMIN_PREFIX) else "site",
+            pattern=pattern,
+            target=target,
+        )
+        for pattern, target in (hostname_mappings or {}).items()
+    ]
+    return renderer.generate_bench_config(sites, admin_ssl=False)
+
+
+def test_vm_hostnames_serve_site_and_admin(tmp_path: Path) -> None:
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False)],
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name, _ADMIN_GLOB: "admin.example.com"},
+    )
+
+    assert _SITE_PATTERN in config
+    assert _ADMIN_PATTERN in config
+    assert "return 301 http://site-a1b2c3.par-1.frappe.cloud$request_uri;" in config
+    assert "return 301 http://admin.example.com$request_uri;" in config
+
+
+def test_vm_hostname_redirects_to_renamed_site(tmp_path: Path) -> None:
+    renamed = SiteConfig(name="shop.example.com", apps=["frappe"])
+    config = _cloud_config(tmp_path, [(renamed, False)], hostname_mappings={_SITE_GLOB: renamed.name})
+
+    assert _SITE_PATTERN in config
+    assert "return 301 http://shop.example.com$request_uri;" in config
+
+
+def test_vm_hostname_redirects_to_https_site(tmp_path: Path) -> None:
+    renamed = SiteConfig(name="shop.example.com", apps=["frappe"], ssl=True)
+    config = _cloud_config(tmp_path, [(renamed, True)], hostname_mappings={_SITE_GLOB: renamed.name})
+
+    assert "return 301 https://shop.example.com$request_uri;" in config
+
+
+def test_vm_hostname_targets_named_site(tmp_path: Path) -> None:
+    second = SiteConfig(name="other.example.com", apps=["frappe"])
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False), (second, False)],
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name},
+    )
+
+    assert _SITE_PATTERN in config
+    assert f"X-Frappe-Site-Name site-a1b2c3.{_VM_DOMAIN}" in config
+
+
+def test_vm_hostname_pattern_targets_site(tmp_path: Path) -> None:
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False)],
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name},
+    )
+
+    assert f"X-Frappe-Site-Name site-a1b2c3.{_VM_DOMAIN}" in config
+
+
+def test_vm_alias_is_not_a_site_domain(tmp_path: Path) -> None:
+    config = _cloud_config(tmp_path, [(_PLACEHOLDER_SITE, False)], hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name})
+
+    assert f"server_name {_SITE_PATTERN};" in config
+    assert f"server_name site-a1b2c3.localhost {_SITE_PATTERN}" not in config
+
+
+def test_aliases_are_http_only(tmp_path: Path) -> None:
+    site = SiteConfig(name="shop.example.com", apps=["frappe"], ssl=True)
+    config = _cloud_config(tmp_path, [(site, True)], hostname_mappings={_SITE_GLOB: site.name})
+
+    alias_block = config.split(_SITE_PATTERN)[1].split("}\n\nserver")[0]
+    assert "listen 443" not in alias_block
+    assert "return 301 https://shop.example.com$request_uri;" in alias_block
+
+
+def test_self_hosted_bench_has_no_vm_hostnames(tmp_path: Path) -> None:
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False)],
+        central_enabled=False,
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name, _ADMIN_GLOB: "admin.example.com"},
+    )
+
+    assert _SITE_PATTERN not in config
+    assert _ADMIN_PATTERN not in config
+
+
+def test_unmapped_hostname_is_ignored(tmp_path: Path) -> None:
+    config = _cloud_config(tmp_path, [(_PLACEHOLDER_SITE, False)], hostname_mappings={"other-*.example.com": "site1.local"})
+
+    assert _SITE_PATTERN not in config
+    assert _ADMIN_PATTERN not in config

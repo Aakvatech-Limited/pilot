@@ -96,6 +96,15 @@ class CommonConfig:
             data["central"] = {
                 "enabled": self.central.enabled,
                 "bootstrapped": self.central.bootstrapped,
+                "hostname_aliases": [
+                    {
+                        "type": alias.type,
+                        "pattern": alias.pattern,
+                        "target": alias.target,
+                        "redirect": alias.redirect,
+                    }
+                    for alias in self.central.hostname_aliases
+                ],
             }
         if self.datum != DatumConfig():
             data["datum"] = {"endpoint": self.datum.endpoint, "token": self.datum.token}
