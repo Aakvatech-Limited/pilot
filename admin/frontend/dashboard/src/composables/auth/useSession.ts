@@ -6,6 +6,7 @@ const session = reactive({
   loaded: false,
   authenticated: false,
   wizard: false,
+  pending: false,
   enabled: false,
   benchName: '',
   allowBenchManagement: false,
@@ -17,6 +18,7 @@ const loadSession = async () => {
     const [bootstrap, currentSession] = await Promise.all([authApi.bootstrap(), authApi.session()])
     session.authenticated = currentSession.authenticated === true
     session.wizard = bootstrap.mode === 'setup'
+    session.pending = bootstrap.mode === 'pending'
     session.enabled = bootstrap.enabled === true
     session.benchName = bootstrap.name || ''
     session.allowBenchManagement = bootstrap.allow_bench_management === true
@@ -24,6 +26,7 @@ const loadSession = async () => {
   } catch {
     session.authenticated = false
     session.wizard = false
+    session.pending = false
     session.enabled = false
     session.benchName = ''
     session.allowBenchManagement = false
