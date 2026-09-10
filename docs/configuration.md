@@ -103,6 +103,24 @@ Set the admin password with `pilot set-admin-password` or the Settings page. Pil
 
 Site-specific settings, including developer mode, live in each site's `site_config.json`.
 
+### Per-domain TLS
+
+A site answers on its own name plus every entry in its `site_config.json` `domains` list. Each entry is either a bare hostname, which follows the site's `ssl` flag, or a mapping that decides for itself:
+
+```json
+{
+  "ssl": false,
+  "domains": [
+    "www.example.com",
+    { "domain": "shop.customer.com", "tls": true }
+  ]
+}
+```
+
+Pilot renders one vhost per group. Domains that do not terminate TLS here are served as plain HTTP on port 80 and are never redirected to HTTPS - an edge proxy has already terminated them. Domains that do terminate here get an HTTPS vhost plus the usual redirect from port 80, and are the only ones a certificate is requested for. A site whose domains all follow `ssl` behaves exactly as before.
+
+A domain the certificate does not name is served over HTTP rather than off a certificate that would fail to validate, so a half-finished `--expand` costs only that domain. Certificates are held in a certbot lineage named by the site's `cert_name`, defaulting to the site name; [renaming](commands.md#renaming-without-downtime) pins it so the certificate survives the site changing name.
+
 ## Other bench tables
 
 These tables are per-bench unless noted otherwise:
@@ -159,6 +177,9 @@ pattern = "vm-*.par-1.frappe.cloud"
 target = "admin.local"
 redirect = true
 
+[proxy]
+protocol_v2 = true
+
 [datum]
 endpoint = "https://datum.internal"
 token = ""
@@ -181,9 +202,11 @@ webhook_endpoints = { "https://alerts.example.com/pilot" = "bearer-token" }
 email_recipients = ["ops@example.com"]
 ```
 
-Shared tables are MariaDB, Postgres, Let's Encrypt, Central, Datum, logs, resource limits, and the admin JWKS issuer. A bench exposes these values through its own `BenchConfig`; the model merges shared values on read and writes them back to the common file.
+Shared tables are MariaDB, Postgres, Let's Encrypt, Central, the edge proxy, Datum, logs, resource limits, and the admin JWKS issuer. A bench exposes these values through its own `BenchConfig`; the model merges shared values on read and writes them back to the common file.
 
-Central endpoint and authentication data come from instance metadata. `central.hostname_aliases` maps a VM hostname pattern to its current local target. The VM ID is assigned at runtime, so use `*` for that part. Pilot creates redirect rules only for aliases whose targets exist on the bench. Update an alias when a site or admin domain changes; remove it when the rule is no longer needed.
+Central endpoint and authentication data come from instance metadata. `central.hostname_aliases` maps a VM hostname pattern to its current local target. The VM ID is assigned at runtime, so use `*` for that part. Pilot creates redirect rules only for aliases whose targets exist on the bench. Renaming a site or moving the admin domain re-points the matching alias automatically; remove one when the rule is no longer needed.
+
+`[proxy]` describes the edge in front of the host. With `protocol_v2 = true` the HTTPS listener expects PROXY protocol v2 ahead of the TLS handshake, because the edge streams custom domains to port 443 by SNI without unwrapping them; the client address arrives in that header rather than in `X-Forwarded-For`. Leave it off when nothing fronts the host. See [Per-domain TLS](#per-domain-tls).
 
 Datum sends collected metrics only when both endpoint and token are set and the optional `datum` package is installed (`pip install pilot[metrics]`). Logs are written locally regardless of shipping settings.
 
