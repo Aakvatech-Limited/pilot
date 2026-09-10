@@ -96,3 +96,45 @@ def test_a_bench_write_that_changes_nothing_shared_leaves_the_file_alone(tmp_pat
     stale.write(bench_root)
 
     assert CommonConfig.read(benches).logs.endpoint == "https://logs.committed-later"
+
+
+def test_a_change_in_one_table_keeps_that_tables_other_settings(tmp_path: Path) -> None:
+    """Comparing whole tables is enough to spot a change but not to apply one:
+    writing the table back would carry this view's stale copy of the rest of it."""
+    from pilot.config.central import HostnameAlias
+
+    common = CommonConfig()
+    common.central.enabled = True
+    bench_root = _bench_with_common(tmp_path, common)
+    benches = bench_root.parent
+    stale = BenchConfig.read(bench_root)
+
+    with CommonConfig.open(benches) as concurrent:
+        concurrent.central.bootstrapped = True
+        concurrent.central.hostname_aliases = [
+            HostnameAlias(type="site", pattern="site-*.zone.test", target="s.zone.test")
+        ]
+
+    stale.central.enabled = False
+    stale.write(bench_root)
+
+    saved = CommonConfig.read(benches).central
+    assert saved.enabled is False
+    assert saved.bootstrapped is True
+    assert [alias.target for alias in saved.hostname_aliases] == ["s.zone.test"]
+
+
+def test_a_change_in_one_table_leaves_other_tables_alone(tmp_path: Path) -> None:
+    bench_root = _bench_with_common(tmp_path, CommonConfig())
+    benches = bench_root.parent
+    stale = BenchConfig.read(bench_root)
+
+    with CommonConfig.open(benches) as concurrent:
+        concurrent.mariadb.root_password = "committed-later"
+
+    stale.central.enabled = True
+    stale.write(bench_root)
+
+    saved = CommonConfig.read(benches)
+    assert saved.central.enabled is True
+    assert saved.mariadb.root_password == "committed-later"

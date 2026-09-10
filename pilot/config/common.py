@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
 
 from pilot.config.alert_limit import ResourceLimitConfig
@@ -93,22 +93,18 @@ class CommonConfig:
         """Commit only the settings that differ from `baseline`, under the lock.
 
         A caller holding a view read earlier must not write the whole file back:
-        anything another bench committed since would be undone. Without a
-        baseline there is nothing to compare, so the view is written as a whole.
+        anything another bench committed since would be undone. Comparison goes
+        down to individual settings, so changing one value in a table leaves the
+        table's others as whoever committed them. Without a baseline there is
+        nothing to compare, and the view is written as a whole.
         """
         if baseline is None:
             updated.write_if_changed(benches_root)
             return
-        changed = [
-            field.name
-            for field in fields(cls)
-            if getattr(baseline, field.name) != getattr(updated, field.name)
-        ]
-        if not changed:
+        if baseline == updated:
             return
         with cls.open(benches_root) as current:
-            for name in changed:
-                setattr(current, name, getattr(updated, name))
+            _copy_changed_settings(baseline, updated, current)
 
     def write_if_changed(self, benches_root: Path) -> None:
         """Replace the shared file when this view differs from it."""
@@ -173,3 +169,21 @@ class CommonConfig:
 def _known_fields(dataclass_type: type, data: dict) -> dict:
     known = {f.name for f in fields(dataclass_type)}
     return {key: value for key, value in data.items() if key in known}
+
+
+def _copy_changed_settings(baseline, updated, current) -> None:
+    """Copy across the individual settings that changed, recursing into tables.
+
+    Comparing whole tables would be enough to spot a change but not to apply
+    one: writing the table back would carry this view's stale copy of every
+    other setting in it with it.
+    """
+    for setting in fields(updated):
+        was = getattr(baseline, setting.name)
+        now = getattr(updated, setting.name)
+        if was == now:
+            continue
+        if is_dataclass(was) and is_dataclass(now):
+            _copy_changed_settings(was, now, getattr(current, setting.name))
+        else:
+            setattr(current, setting.name, now)
