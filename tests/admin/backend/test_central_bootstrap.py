@@ -138,3 +138,30 @@ def test_only_one_bootstrap_takes_effect(tmp_path: Path) -> None:
     with _staged(json.dumps(_ATTRIBUTE)):
         assert apply_central_config(first) is True
         assert apply_central_config(second) is False
+
+
+def test_the_poll_interval_never_grows(tmp_path: Path) -> None:
+    """A host waiting on its credential is a signup waiting on it, so the watcher
+    keeps checking at one short interval rather than backing off."""
+    watcher = CentralBootstrapWatcher(_awaiting_host(tmp_path), interval=0.01)
+    attempts = iter([False, False, False, True])
+    slept: list[float] = []
+
+    with patch.object(CentralBootstrapWatcher, "check_once", lambda self: next(attempts)), patch(
+        "admin.backend.central_bootstrap.time.sleep", slept.append
+    ):
+        watcher._watch()
+
+    assert slept == [0.01, 0.01, 0.01]
+
+
+def test_the_watcher_stops_as_soon_as_the_credential_lands(tmp_path: Path) -> None:
+    watcher = CentralBootstrapWatcher(_awaiting_host(tmp_path), interval=0.01)
+    slept: list[float] = []
+
+    with patch.object(CentralBootstrapWatcher, "check_once", lambda self: True), patch(
+        "admin.backend.central_bootstrap.time.sleep", slept.append
+    ):
+        watcher._watch()
+
+    assert slept == []

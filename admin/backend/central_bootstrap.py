@@ -9,23 +9,15 @@ from flask import Flask
 
 from pilot.integrations.central import CentralClientError
 
-_INITIAL_POLL_SECONDS = 0.05
-_MAX_POLL_SECONDS = 2.0
-_POLL_BACKOFF = 1.6
+_POLL_SECONDS = 0.05
 
 
 class CentralBootstrapWatcher:
     """Poll instance metadata and apply the Central credential when available."""
 
-    def __init__(
-        self,
-        bench_root: Path,
-        interval: float = _INITIAL_POLL_SECONDS,
-        max_interval: float = _MAX_POLL_SECONDS,
-    ) -> None:
+    def __init__(self, bench_root: Path, interval: float = _POLL_SECONDS) -> None:
         self.bench_root = bench_root
         self.interval = interval
-        self.max_interval = max_interval
 
     def install(self, app: Flask) -> None:
         threading.Thread(
@@ -47,10 +39,8 @@ class CentralBootstrapWatcher:
             return False
 
     def _watch(self) -> None:
-        delay = self.interval
         while not self.check_once():
-            time.sleep(delay)
-            delay = min(delay * _POLL_BACKOFF, self.max_interval)
+            time.sleep(self.interval)
         logging.info("Central bootstrap applied; this host is configured.")
 
 
