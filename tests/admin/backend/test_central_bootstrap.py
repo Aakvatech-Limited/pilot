@@ -165,20 +165,3 @@ def test_the_watcher_stops_as_soon_as_the_credential_lands(tmp_path: Path) -> No
         watcher._watch()
 
     assert slept == []
-
-
-def test_polling_idles_once_no_credential_is_coming(tmp_path: Path) -> None:
-    """Nothing arrives on a schedule after that, and reading metadata 20 times a
-    second forever is waste - a credential put in place by hand is still seen."""
-    watcher = CentralBootstrapWatcher(
-        _awaiting_host(tmp_path), interval=0.01, fast_window=0, idle_interval=5
-    )
-    attempts = iter([False, False, True])
-    slept: list[float] = []
-
-    with patch.object(CentralBootstrapWatcher, "check_once", lambda self: next(attempts)), patch(
-        "admin.backend.central_bootstrap.time.sleep", slept.append
-    ):
-        watcher._watch()
-
-    assert slept == [5, 5]

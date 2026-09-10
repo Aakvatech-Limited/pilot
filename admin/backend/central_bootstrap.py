@@ -10,28 +10,14 @@ from flask import Flask
 from pilot.integrations.central import CentralClientError
 
 _POLL_SECONDS = 0.1
-# Provisioning writes the credential within seconds of boot, so every real
-# bootstrap lands inside this window and is picked up at the rate above.
-_FAST_POLL_WINDOW_SECONDS = 120.0
-# Past it nothing is arriving on a schedule, and polling ten times a second
-# forever is waste - but a credential put in place by hand is still picked up.
-_IDLE_POLL_SECONDS = 5.0
 
 
 class CentralBootstrapWatcher:
     """Poll instance metadata and apply the Central credential when available."""
 
-    def __init__(
-        self,
-        bench_root: Path,
-        interval: float = _POLL_SECONDS,
-        fast_window: float = _FAST_POLL_WINDOW_SECONDS,
-        idle_interval: float = _IDLE_POLL_SECONDS,
-    ) -> None:
+    def __init__(self, bench_root: Path, interval: float = _POLL_SECONDS) -> None:
         self.bench_root = bench_root
         self.interval = interval
-        self.fast_window = fast_window
-        self.idle_interval = idle_interval
 
     def install(self, app: Flask) -> None:
         threading.Thread(
@@ -53,14 +39,9 @@ class CentralBootstrapWatcher:
             return False
 
     def _watch(self) -> None:
-        # One short interval for as long as a credential could still plausibly be
-        # on its way, never backing off within it: a host waiting on its
-        # credential is a signup waiting on it, so pickup must not be delayed by a
-        # poll that has slowed itself down. Only once nothing is arriving on any
-        # schedule does it idle, rather than read metadata forever at that rate.
-        fast_until = time.monotonic() + self.fast_window
+        # Never backs off: a host waiting on its credential is a signup waiting.
         while not self.check_once():
-            time.sleep(self.interval if time.monotonic() < fast_until else self.idle_interval)
+            time.sleep(self.interval)
         logging.info("Central bootstrap applied; this host is configured.")
 
 
