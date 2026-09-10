@@ -136,6 +136,10 @@ class BenchConfig:
     s3: S3Config = field(default_factory=S3Config)
     llm: LLMConfig = field(default_factory=LLMConfig)
     resource_limits: ResourceLimitConfig = field(default_factory=ResourceLimitConfig)
+    # What common_config.toml held when this was read, so a write can tell which
+    # shared settings this view changed. Not a setting itself: kept out of
+    # equality so it never makes a write look necessary, and out of repr.
+    _common_baseline: CommonConfig | None = field(default=None, compare=False, repr=False)
 
     # -- construction --
 
@@ -465,11 +469,7 @@ class BenchConfig:
         # This view of the shared file was read without holding its lock, so only
         # the settings it actually changed are applied - writing all of them back
         # would undo whatever another bench committed in the meantime.
-        CommonConfig.apply_changes(
-            self._benches_root(bench_root),
-            getattr(self, "_common_baseline", None),
-            common,
-        )
+        CommonConfig.apply_changes(self._benches_root(bench_root), self._common_baseline, common)
 
     @classmethod
     def _validate_serialized(cls, content: str, bench_root: Path | None = None) -> None:
