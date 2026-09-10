@@ -7,25 +7,25 @@ from pathlib import Path
 
 from flask import Flask
 
-from admin.backend.watchdog import AdminProcessOwner
 from pilot.integrations.central import CentralClientError
 
-_POLL_SECONDS = 0.5
+_INITIAL_POLL_SECONDS = 0.05
+_MAX_POLL_SECONDS = 2.0
+_POLL_BACKOFF = 1.6
 
 
 class CentralBootstrapWatcher:
-    """Polls metadata for this host's Central credential. On arrival it writes the
-    config and stops the admin, which its socket re-activates."""
+    """Poll instance metadata and apply the Central credential when available."""
 
     def __init__(
         self,
         bench_root: Path,
-        owner: AdminProcessOwner,
-        interval: float = _POLL_SECONDS,
+        interval: float = _INITIAL_POLL_SECONDS,
+        max_interval: float = _MAX_POLL_SECONDS,
     ) -> None:
         self.bench_root = bench_root
-        self.owner = owner
         self.interval = interval
+        self.max_interval = max_interval
 
     def install(self, app: Flask) -> None:
         threading.Thread(
@@ -35,26 +35,23 @@ class CentralBootstrapWatcher:
         ).start()
 
     def check_once(self) -> bool:
-        """True once the credential is written and the admin asked to stop."""
+        """True once the credential has been written to this host's config."""
         from pilot.core.bench import Bench
         from pilot.integrations.central import apply_central_config
 
         try:
-            if not apply_central_config(Bench(self.bench_root)):
-                return False
+            return apply_central_config(Bench(self.bench_root))
         except CentralClientError as exc:
             # The cloud can still fix the attribute in place, so keep waiting.
             logging.error("Central bootstrap rejected the instance metadata: %s", exc)
             return False
 
-        return self.owner.terminate()
-
     def _watch(self) -> None:
-        while True:
-            if self.check_once():
-                return
-
-            time.sleep(self.interval)
+        delay = self.interval
+        while not self.check_once():
+            time.sleep(delay)
+            delay = min(delay * _POLL_BACKOFF, self.max_interval)
+        logging.info("Central bootstrap applied; this host is configured.")
 
 
 def install_central_bootstrap_watcher(app: Flask, bench_root: Path) -> CentralBootstrapWatcher | None:
@@ -74,7 +71,7 @@ def install_central_bootstrap_watcher(app: Flask, bench_root: Path) -> CentralBo
     if existing is not None:
         return existing
 
-    watcher = CentralBootstrapWatcher(bench_root, AdminProcessOwner.current())
+    watcher = CentralBootstrapWatcher(bench_root)
     app.extensions["central_bootstrap_watcher"] = watcher
     watcher.install(app)
     return watcher

@@ -10,24 +10,11 @@ from admin.backend.central_bootstrap import (
     CentralBootstrapWatcher,
     install_central_bootstrap_watcher,
 )
-from admin.backend.watchdog import AdminProcessOwner
 from pilot.config import BenchConfig
 from pilot.config.common import CommonConfig
 from pilot.integrations.central import CentralClientError
 from tests.pilot.integrations.test_central_client import _bench
 from tests.pilot.integrations.test_central_metadata import _ATTRIBUTE
-
-
-class _FakeOwner(AdminProcessOwner):
-    """Records the stop instead of signalling this test process."""
-
-    def __init__(self) -> None:
-        super().__init__(pid=0, parent_owned=False)
-        self.terminated = False
-
-    def terminate(self) -> bool:
-        self.terminated = True
-        return True
 
 
 def _awaiting_host(tmp_path: Path) -> Path:
@@ -47,39 +34,31 @@ def _staged(value: str | None):
 
 
 def test_a_pass_without_the_attribute_keeps_waiting(tmp_path: Path) -> None:
-    owner = _FakeOwner()
-    watcher = CentralBootstrapWatcher(_awaiting_host(tmp_path), owner)
+    watcher = CentralBootstrapWatcher(_awaiting_host(tmp_path))
 
     with _staged(None):
         assert watcher.check_once() is False
 
-    assert owner.terminated is False
 
-
-def test_the_attribute_arriving_writes_config_and_stops_the_admin(tmp_path: Path) -> None:
+def test_the_attribute_arriving_writes_the_config(tmp_path: Path) -> None:
     bench_root = _awaiting_host(tmp_path)
-    owner = _FakeOwner()
 
     with _staged(json.dumps(_ATTRIBUTE)):
-        assert CentralBootstrapWatcher(bench_root, owner).check_once() is True
+        assert CentralBootstrapWatcher(bench_root).check_once() is True
 
-    assert owner.terminated is True
     saved = BenchConfig.read(bench_root)
     assert saved.central.bootstrapped is True
     assert saved.admin.jwks_audience == "vm-boot-1"
 
 
 def test_a_malformed_attribute_is_logged_and_retried(tmp_path: Path) -> None:
-    owner = _FakeOwner()
-    watcher = CentralBootstrapWatcher(_awaiting_host(tmp_path), owner)
+    watcher = CentralBootstrapWatcher(_awaiting_host(tmp_path))
 
     with patch(
         "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
         side_effect=CentralClientError("bad attribute"),
     ):
         assert watcher.check_once() is False
-
-    assert owner.terminated is False
 
 
 def test_the_watcher_starts_only_while_a_host_is_awaiting_bootstrap(tmp_path: Path) -> None:
@@ -120,7 +99,7 @@ def test_bootstrap_leaves_pending_once_the_credential_lands(tmp_path: Path) -> N
 
     bench_root = _awaiting_host(tmp_path)
     with _staged(json.dumps(_ATTRIBUTE)):
-        CentralBootstrapWatcher(bench_root, _FakeOwner()).check_once()
+        CentralBootstrapWatcher(bench_root).check_once()
 
     body = create_app(bench_root).test_client().get("/api/v1/bootstrap").get_json()
 
