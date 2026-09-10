@@ -143,12 +143,19 @@ def _nginx_state(domain: str) -> str:
         for line in active.stdout.splitlines()
         if "listen" in line or "server_name" in line or "ssl_certificate " in line
     ]
+    # If an explicit reload makes the request work, the config on disk was right
+    # all along and the reload during the operation never reached the workers.
+    reload_result = _run("sudo", "systemctl", "reload", "nginx")
+    time.sleep(1)
+    after_reload, _ = _request(domain, "/api/method/frappe.ping")
     return "\n".join(
         [
             f"nginx -t: {_run('sudo', 'nginx', '-t').stderr.strip()}",
             f"service: {_run('systemctl', 'is-active', 'nginx').stdout.strip()}",
-            f"curl: {_run('curl', '-sv', '--resolve', f'{domain}:{HTTPS_PORT}:127.0.0.1', f'https://{domain}:{HTTPS_PORT}/api/method/frappe.ping', '-k').stderr.strip()[-800:]}",
-            "active listeners/server_names:",
+            f"journal: {_run('sudo', 'journalctl', '-u', 'nginx', '--no-pager', '-n', '15').stdout.strip()[-1200:]}",
+            f"explicit reload rc={reload_result.returncode} {reload_result.stderr.strip()}",
+            f"status after an explicit reload: {after_reload}",
+            "config on disk (listeners/server_names):",
             *listeners,
         ]
     )
