@@ -63,6 +63,7 @@ class SystemdRenderer(ServiceRenderer):
     def render_central_bootstrap(
         self, python: str, cli_root: str, bench_root: str, log_file: str
     ) -> str:
+        """Render the boot-time Central credential service."""
         return (
             f"[Unit]\n"
             f"Description={self.bench_name} central bootstrap\n\n"

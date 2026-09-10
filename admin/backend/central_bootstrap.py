@@ -44,6 +44,7 @@ class CentralBootstrapWatcher:
             return False
 
     def run_until_applied(self) -> None:
+        """Retry until the Central credential is applied."""
         while not self.check_once():
             time.sleep(self.interval)
 

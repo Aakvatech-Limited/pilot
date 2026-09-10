@@ -76,6 +76,7 @@ Firewall and WAF config are bench settings. Settings apply code should delegate 
 ## Operational Notes
 
 - Production changes may need non-interactive sudo.
+- Central-enabled systemd benches retry the metadata credential at boot until it is applied.
 - Generated config belongs under the bench `config/` directory or system config locations managed by the relevant manager.
 - Logs should remain available after production removal.
 - Database services are selected by `bench.db_type` and configured in `bench.toml`.
