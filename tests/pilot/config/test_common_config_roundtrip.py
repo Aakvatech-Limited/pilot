@@ -64,3 +64,35 @@ def test_a_bench_reads_back_the_proxy_setting(tmp_path: Path) -> None:
     bench_root = _bench_with_common(tmp_path, common)
 
     assert BenchConfig.read(bench_root).proxy.protocol_v2 is True
+
+
+def test_a_bench_write_keeps_a_setting_committed_after_it_read(tmp_path: Path) -> None:
+    """A bench reads the shared file without holding its lock, so writing the
+    whole view back would undo whatever another bench committed since."""
+    bench_root = _bench_with_common(tmp_path, CommonConfig())
+    benches = bench_root.parent
+    stale = BenchConfig.read(bench_root)
+
+    with CommonConfig.open(benches) as concurrent:
+        concurrent.datum.endpoint = "https://datum.committed-later"
+
+    stale.proxy.protocol_v2 = True
+    stale.write(bench_root)
+
+    saved = CommonConfig.read(benches)
+    assert saved.proxy.protocol_v2 is True
+    assert saved.datum.endpoint == "https://datum.committed-later"
+
+
+def test_a_bench_write_that_changes_nothing_shared_leaves_the_file_alone(tmp_path: Path) -> None:
+    bench_root = _bench_with_common(tmp_path, CommonConfig())
+    benches = bench_root.parent
+    stale = BenchConfig.read(bench_root)
+
+    with CommonConfig.open(benches) as concurrent:
+        concurrent.logs.endpoint = "https://logs.committed-later"
+
+    stale.admin.timeout = 200  # a bench-local setting
+    stale.write(bench_root)
+
+    assert CommonConfig.read(benches).logs.endpoint == "https://logs.committed-later"

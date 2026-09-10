@@ -83,6 +83,33 @@ class CommonConfig:
             if config != original:
                 replace_private_text_locked(path, Toml.dumps(config._to_toml_dict()))
 
+    @classmethod
+    def apply_changes(
+        cls,
+        benches_root: Path,
+        baseline: "CommonConfig | None",
+        updated: "CommonConfig",
+    ) -> None:
+        """Commit only the settings that differ from `baseline`, under the lock.
+
+        A caller holding a view read earlier must not write the whole file back:
+        anything another bench committed since would be undone. Without a
+        baseline there is nothing to compare, so the view is written as a whole.
+        """
+        if baseline is None:
+            updated.write_if_changed(benches_root)
+            return
+        changed = [
+            field.name
+            for field in fields(cls)
+            if getattr(baseline, field.name) != getattr(updated, field.name)
+        ]
+        if not changed:
+            return
+        with cls.open(benches_root) as current:
+            for name in changed:
+                setattr(current, name, getattr(updated, name))
+
     def write_if_changed(self, benches_root: Path) -> None:
         """Replace the shared file when this view differs from it."""
         path = self.path(benches_root)

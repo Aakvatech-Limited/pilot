@@ -221,6 +221,9 @@ class BenchConfig:
         )
         config.admin.jwks_url = common.jwks_url
         config.admin.jwks_audience = common.jwks_audience
+        # What the shared file held when this was read, so a later write can tell
+        # which shared settings this view actually changed.
+        config._common_baseline = copy.deepcopy(common)
         return config
 
     @staticmethod
@@ -442,7 +445,11 @@ class BenchConfig:
         atomic_write_private_text(cls.toml_path(bench_root), content)
 
     def _write_common(self, bench_root: Path) -> None:
-        """Persist shared settings to common_config.toml."""
+        """Persist shared settings to common_config.toml.
+
+        Every shared field has to be listed here: one left out is written back as
+        its default, so an unrelated write silently drops it.
+        """
         common = CommonConfig(
             mariadb=self.mariadb,
             postgres=self.postgres,
@@ -455,7 +462,14 @@ class BenchConfig:
             jwks_url=self.admin.jwks_url,
             jwks_audience=self.admin.jwks_audience,
         )
-        common.write_if_changed(self._benches_root(bench_root))
+        # This view of the shared file was read without holding its lock, so only
+        # the settings it actually changed are applied - writing all of them back
+        # would undo whatever another bench committed in the meantime.
+        CommonConfig.apply_changes(
+            self._benches_root(bench_root),
+            getattr(self, "_common_baseline", None),
+            common,
+        )
 
     @classmethod
     def _validate_serialized(cls, content: str, bench_root: Path | None = None) -> None:
