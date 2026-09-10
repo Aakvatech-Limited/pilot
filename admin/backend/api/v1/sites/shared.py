@@ -50,9 +50,16 @@ def site_name_failure(message: str):
     return error_response("invalid_site_name", message, 422)
 
 
+def host_resource_key(host: str) -> str:
+    """Return the host-wide task resource key for a hostname."""
+    from pilot.internal.tasks.store import HOST_RESOURCE_PREFIX
+    from pilot.utils import normalize_host
+
+    return f"{HOST_RESOURCE_PREFIX}{normalize_host(host)}"
+
+
 def new_site_name_error(bench_root: Path, name: str) -> str | None:
-    """Validate a new-site name before any task starts, so the error lands in the UI
-    instead of failing mid-run. Mirrors NewSiteCommand._validate."""
+    """Validate a new-site name before its task starts."""
     from pilot.config import BenchConfig
     from pilot.utils import host_owner, normalize_host
 
@@ -66,6 +73,9 @@ def new_site_name_error(bench_root: Path, name: str) -> str | None:
     owner = host_owner(bench_root, name)
     if owner:
         return f"'{name}' is already used by bench '{owner}' (as a site or its admin domain). All benches share one nginx, so hostnames must be unique."
+
+    if error := _claimed_in_bench(bench_root, name):
+        return error
 
     try:
         admin_domain = BenchConfig.read(bench_root).admin.domain
@@ -81,3 +91,19 @@ def new_site_name_error(bench_root: Path, name: str) -> str | None:
     if patterns and not matches_wildcard(name, patterns):
         return f"Site name must match one of this bench's wildcard domains: {', '.join(patterns)}."
     return None
+
+
+def _claimed_in_bench(bench_root: Path, name: str) -> str | None:
+    """Find a conflicting site claim within this bench."""
+    from pilot.core.bench import Bench
+
+    try:
+        claimed_by = Bench(bench_root).site_claiming(name)
+    except Exception:
+        return None
+    if not claimed_by:
+        return None
+    return (
+        f"'{name}' is already claimed by this bench's site '{claimed_by}'. "
+        f"All benches share one nginx, so hostnames must be unique."
+    )
