@@ -23,6 +23,7 @@ class SystemdRenderer(ServiceRenderer):
             f"{working_dir}{env}"
             f"ExecStart={shlex.join(pd.argv)}\n"
             f"Restart=on-failure\n"
+            f"LimitNOFILE=65535\n"
             f"{stop}"
             f"StandardOutput=append:{pd.log_file}\n"
             f"StandardError=append:{pd.log_file}.error.log\n"

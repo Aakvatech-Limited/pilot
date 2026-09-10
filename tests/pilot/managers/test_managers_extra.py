@@ -385,6 +385,18 @@ def test_systemd_unit_redis_gets_stop_timeout(tmp_path: Path) -> None:
     assert "TimeoutStopSec=300" in unit
 
 
+def test_systemd_unit_raises_descriptor_limit(tmp_path: Path) -> None:
+    """A workload unit gets more descriptors than the default of a user unit."""
+    from pilot.managers.processes.local import ProcessDefinition
+    from pilot.managers.processes.systemd import SystemdRenderer
+
+    pd = ProcessDefinition(
+        name="web", argv=["/env/bin/python", "serve"], log_file=tmp_path / "logs" / "web.log"
+    )
+    unit = SystemdRenderer("test-bench").render(pd)
+    assert "LimitNOFILE=65535" in unit
+
+
 def test_systemd_target_wanted_by_default(tmp_path: Path) -> None:
     from pilot.managers.processes.systemd import SystemdRenderer
 

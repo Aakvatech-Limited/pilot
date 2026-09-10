@@ -37,6 +37,10 @@ A new bench deploys one bench process plus admin and the two redis servers, beca
 `[lite_mode] enabled` is the default. Turn lite mode off and the set becomes web,
 socketio, admin, workers, and redis - see [Lite Mode](configuration.md#lite-mode).
 
+Each workload unit sets `LimitNOFILE=65535`. A systemd user unit gets 1024
+descriptors by default, which is too few for a lite-mode bench process and for
+redis under load.
+
 Runtime commands:
 
 - `pilot start`
