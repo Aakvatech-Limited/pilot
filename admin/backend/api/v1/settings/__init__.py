@@ -239,6 +239,49 @@ def my_ip():
     return jsonify({"ip": client_ip(default="")})
 
 
+@settings_bp.post("/admin-domain")
+def change_admin_domain():
+    """Queue an admin hostname change."""
+    from admin.backend.api.responses import accepted_task_response
+    from admin.backend.api.v1.sites.shared import host_resource_key, task_failure
+    from pilot.internal.validators import validate_hostname
+    from pilot.tasks.change_admin_domain import ChangeAdminDomainTask
+
+    bench_root = Path(current_app.config["BENCH_ROOT"])
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return error_response("malformed_request", "Expected a JSON object.", 400)
+
+    domain = data.get("domain")
+    if not isinstance(domain, str):
+        return error_response("invalid_settings", "admin domain must be a string.", 422)
+    domain = domain.strip().lower()
+    if error := validate_hostname(domain, "Admin domain"):
+        return error_response("invalid_settings", error, 422)
+
+    tls = data.get("tls")
+    if tls is not None and not isinstance(tls, bool):
+        return error_response("invalid_settings", "tls must be true or false.", 422)
+
+    bench = Bench(bench_root)
+    resources = ["admin-domain", host_resource_key(domain)]
+    if bench.config.admin.domain:
+        resources.append(host_resource_key(bench.config.admin.domain))
+
+    try:
+        task_id = ChangeAdminDomainTask.queue(
+            bench,
+            domain=domain,
+            tls=tls,
+            idempotency_key=request.headers.get("Idempotency-Key"),
+            # Hold both hostnames until the old provider route is released.
+            resource_key=resources,
+        )
+    except Exception as error:
+        return task_failure(error)
+    return accepted_task_response(bench_root, task_id)
+
+
 @settings_bp.patch("")
 def update_settings():
     bench_root = Path(current_app.config["BENCH_ROOT"])

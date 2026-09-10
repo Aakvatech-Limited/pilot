@@ -40,9 +40,13 @@ def bootstrap():
             503,
         )
 
+    if config.central.is_awaiting_bootstrap:
+        return jsonify({"mode": "pending", "name": config.name, "enabled": True})
+
     initialized = (bench_root / "env" / "bin" / "python").exists()
     if not initialized or not config.admin.password:
         return jsonify(_setup_bootstrap(bench_root))
+
     marker = wizard_marker_path(bench_root)
     if marker.exists():
         with exclusive_file_lock(marker):

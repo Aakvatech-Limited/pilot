@@ -76,6 +76,14 @@ Two app operations answer inline instead of returning a task id, because both ar
 
 `POST /sites/<name>/login` returns `{"url": ...}` plus an optional `hint` when the URL's host does not resolve on the server - the UI surfaces it so the user knows to add a hosts entry or use a `*.localhost` name.
 
+### Renaming And Domains
+
+`POST /sites/<name>/actions/rename` takes `{"new_name": "...", "keep_old_hostname": true}` and queues `rename-site`. The new name is validated the same way a new site's is, and both names are claimed as task resources so nothing can create or drop either while the site is moving between them. `keep_old_hostname` defaults to true and keeps the old hostname on the site, so open tabs and existing links keep working; pass false to release a pooled name a fleet reuses. See [Renaming without downtime](commands.md#renaming-without-downtime).
+
+`POST /settings/admin-domain` takes `{"domain": "...", "tls": true|false}` (`tls` optional) and queues `change-admin-domain`, which registers the route with the domain provider, writes `bench.toml`, reissues the certificate when TLS is on, and republishes nginx. The previous hostname is released only once the switch has committed.
+
+Both operations re-point any matching `central.hostname_aliases` entry, so a VM hostname keeps reaching the thing it named. Every route that claims a hostname - creating a site, renaming one, moving the admin - also takes the task resource `host:<hostname>`, so two of them cannot run at once for the same name. That key is host-wide - benches share one nginx and one `/etc/letsencrypt` - so it conflicts with active tasks on every bench of the host, not only its own.
+
 ### Site Storage
 
 `GET /sites/storage` returns every site's `private_bytes`, `public_bytes`, `database_bytes`, and `total_bytes`, plus the `collected_at` of the reading. `database_bytes` is what the schema holds on disk, allocated-but-freed pages included, since nothing else can use that space until the tables are rebuilt.

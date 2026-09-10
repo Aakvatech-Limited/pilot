@@ -52,14 +52,18 @@ def validate_branch_name(branch: str) -> str | None:
     return None
 
 
-def validate_site_name(name: str) -> str | None:
+def validate_hostname(name: str, label: str = "Hostname") -> str | None:
     if not name:
-        return "Site name is required."
+        return f"{label} is required."
     if len(name) > 253:
-        return "Site name is too long (max 253 characters)."
+        return f"{label} is too long (max 253 characters)."
     if not _SITE_NAME_RE.match(name):
-        return "Site name must be a valid hostname (letters, numbers, hyphens, and dots only)."
+        return f"{label} must be a valid hostname (letters, numbers, hyphens, and dots only)."
     return None
+
+
+def validate_site_name(name: str) -> str | None:
+    return validate_hostname(name, "Site name")
 
 
 def validate_cron_expression(expr: str) -> str | None:
