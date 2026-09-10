@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from admin.backend.api.responses import error_response
@@ -41,6 +42,10 @@ def task_failure(error: Exception):
         return error_response("task_conflict", "A conflicting task is already active.", 409)
     if isinstance(error, ValueError):
         return error_response("invalid_task", str(error), 422)
+
+    # Anything else is a bug or a broken bench, and the caller only ever sees a
+    # generic 500 - so record it here or the cause is lost entirely.
+    logging.exception("Could not queue task: %s", error)
     return internal_error("Could not start the requested task.")
 
 

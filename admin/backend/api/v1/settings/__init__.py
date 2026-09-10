@@ -243,7 +243,7 @@ def my_ip():
 def change_admin_domain():
     """Queue an admin hostname change."""
     from admin.backend.api.responses import accepted_task_response
-    from admin.backend.api.v1.sites.shared import host_resource_key
+    from admin.backend.api.v1.sites.shared import host_resource_key, task_failure
     from pilot.internal.validators import validate_hostname
     from pilot.tasks.change_admin_domain import ChangeAdminDomainTask
 
@@ -277,8 +277,8 @@ def change_admin_domain():
             # Hold both hostnames until the old provider route is released.
             resource_key=resources,
         )
-    except Exception:
-        return error_response("settings_update_failed", "Could not start the domain change.", 500)
+    except Exception as error:
+        return task_failure(error)
     return accepted_task_response(bench_root, task_id)
 
 

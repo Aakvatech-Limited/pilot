@@ -169,3 +169,46 @@ def test_a_rename_and_an_admin_move_to_one_hostname_share_a_resource(tmp_path: P
         client.post("/api/v1/settings/admin-domain", json={"domain": "shared.example.com"})
 
     assert set(rename.call_args.kwargs["resource_key"]) & set(move.call_args.kwargs["resource_key"])
+
+
+def test_a_hostname_conflict_on_an_admin_move_is_a_conflict_not_a_server_error(tmp_path: Path) -> None:
+    """The hostname resource is shared with renames and new sites, so an active
+    task holding it is an ordinary conflict - the same 409 those routes give."""
+    from pilot.exceptions import TaskConflictError
+
+    client = _client(tmp_path / "bench")
+
+    with patch(
+        "pilot.tasks.change_admin_domain.ChangeAdminDomainTask.queue",
+        side_effect=TaskConflictError("host:admin.example.com is taken"),
+    ):
+        response = client.post("/api/v1/settings/admin-domain", json={"domain": "admin.example.com"})
+
+    assert response.status_code == 409
+    assert response.get_json()["error"]["code"] == "task_conflict"
+
+
+def test_an_invalid_admin_move_is_reported_as_invalid(tmp_path: Path) -> None:
+    client = _client(tmp_path / "bench")
+
+    with patch(
+        "pilot.tasks.change_admin_domain.ChangeAdminDomainTask.queue",
+        side_effect=ValueError("unknown task argument"),
+    ):
+        response = client.post("/api/v1/settings/admin-domain", json={"domain": "admin.example.com"})
+
+    assert response.status_code == 422
+
+
+def test_an_unexpected_queue_failure_is_logged(tmp_path: Path, caplog) -> None:
+    """A generic 500 is all the caller sees, so the cause has to reach the log."""
+    client = _client(tmp_path / "bench")
+
+    with patch(
+        "pilot.tasks.change_admin_domain.ChangeAdminDomainTask.queue",
+        side_effect=RuntimeError("disk exploded"),
+    ), caplog.at_level("ERROR"):
+        response = client.post("/api/v1/settings/admin-domain", json={"domain": "admin.example.com"})
+
+    assert response.status_code == 500
+    assert "disk exploded" in caplog.text
