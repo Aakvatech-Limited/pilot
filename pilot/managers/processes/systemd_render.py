@@ -60,15 +60,20 @@ class SystemdRenderer(ServiceRenderer):
             f"StandardError=append:{pd.log_file}.error.log\n"
         )
 
-    def render_central_bootstrap(self, python: str, bench_root: str, log_file: str) -> str:
+    def render_central_bootstrap(
+        self, python: str, cli_root: str, bench_root: str, log_file: str
+    ) -> str:
         return (
             f"[Unit]\n"
-            f"Description={self.bench_name} central bootstrap\n"
-            f"After=network-online.target\n"
-            f"Wants=network-online.target\n\n"
+            f"Description={self.bench_name} central bootstrap\n\n"
             f"[Service]\n"
-            f"Type=oneshot\n"
+            f"Type=simple\n"
+            f"WorkingDirectory={cli_root}\n"
+            f"Environment=PYTHONUNBUFFERED=1\n"
+            f"Environment=PYTHONPATH={cli_root}\n"
             f"ExecStart={python} -m admin.backend.central_bootstrap --bench-root {bench_root}\n"
+            f"Restart=on-failure\n"
+            f"RestartSec=5s\n"
             f"StandardOutput=append:{log_file}\n"
             f"StandardError=append:{log_file}.error.log\n\n"
             f"[Install]\n"

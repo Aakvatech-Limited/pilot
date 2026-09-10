@@ -322,12 +322,15 @@ def test_central_bootstrap_unit_runs_once_at_boot(tmp_path: Path) -> None:
 
     unit = SystemdRenderer("test-bench").render_central_bootstrap(
         "/cli/.admin-venv/bin/python",
+        "/cli",
         "/home/frappe/pilot/benches/test-bench",
         str(tmp_path / "logs" / "central-bootstrap.log"),
     )
 
-    assert "Type=oneshot" in unit
+    assert "Type=simple" in unit
     assert "WantedBy=default.target" in unit
+    assert "Environment=PYTHONPATH=/cli" in unit
+    assert "WorkingDirectory=/cli" in unit
     assert (
         "ExecStart=/cli/.admin-venv/bin/python -m admin.backend.central_bootstrap "
         "--bench-root /home/frappe/pilot/benches/test-bench" in unit

@@ -62,6 +62,7 @@ class SystemdProcessManager(SystemdUserMixin, ManagedProcessManager):
             (self.systemd_conf_dir / self._central_bootstrap_name()).write_text(
                 renderer.render_central_bootstrap(
                     str(AdminEnvManager(cli_root()).python),
+                    str(cli_root()),
                     str(self.bench.path),
                     str(self.bench.logs_path / "central-bootstrap.log"),
                 )
