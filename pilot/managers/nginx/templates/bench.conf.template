@@ -20,6 +20,32 @@ server {
         return 301 {{ alias.redirect }}$request_uri;
     }
     {% else %}
+    {% if alias.site %}
+    root {{ sites_root }};
+    client_max_body_size {{ client_max_body_size }};
+
+    location /assets {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location ~ ^/files/.*\.(jpg|jpeg|png|gif|svg|webp|pdf|docx?|xlsx?)$ {
+        root {{ alias.public_root }};
+        try_files $uri =404;
+    }
+
+    location /socket.io {
+        proxy_pass         http://127.0.0.1:{{ socketio_port }};
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   X-Frappe-Site-Name {{ alias.site }};
+        proxy_set_header   Origin $scheme://$http_host;
+        proxy_set_header   Host $host;
+    }
+
+    {% endif %}
     location / {
         proxy_pass         {{ alias.proxy_pass }};
         proxy_read_timeout 120;
