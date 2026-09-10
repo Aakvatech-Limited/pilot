@@ -416,9 +416,12 @@ class TestProductionSSL:
         assert f"server_name {RENAMED_SITE} {SITE};" in conf
         assert f"server_name {SITE};" not in conf, "stale site vhost not pruned"
 
-        # No polling: the reload waits for the workers serving the new config, so
-        # the new name answers by the time the command returns.
-        status, body = _request(RENAMED_SITE, "/api/method/frappe.ping")
+        # `systemctl reload` returns before nginx has even taken the signal, and
+        # the workers still running answer until it has - they have never heard
+        # of a hostname the reload just added. Riding that out is what
+        # _request_ok is for; it is the new name's first moment of existence, not
+        # an outage of anything that was being served.
+        status, body = _request_ok(RENAMED_SITE, "/api/method/frappe.ping")
         assert status == "200", f"renamed site frappe.ping returned {status}: {body!r}"
         assert "pong" in body, f"renamed site not serving frappe: {body!r}"
 

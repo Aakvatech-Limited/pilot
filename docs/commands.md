@@ -51,7 +51,7 @@ Disabling needs a Frappe that supports it and is exposed through the Admin UI on
 
 ### Renaming Without Downtime
 
-A rename never drops traffic already on the site: requests keep arriving on the old hostname and keep being answered, and the new hostname is serving by the time the command returns - reloading only signals nginx, so the reload waits for the workers that serve the new config before reporting done. Two things would otherwise break in the gap, and both are handled:
+A rename never drops traffic already on the site: requests keep arriving on the old hostname and keep being answered throughout. The new hostname follows a moment later - `systemctl reload` returns before nginx has taken the signal, and the workers still running answer until it has - so a caller that redirects straight to the new URL should expect to retry once. Two things would otherwise break in the gap, and both are handled:
 
 - The site directory moves while nginx is still sending the old name in `X-Frappe-Site-Name`. The move leaves the old path behind as a symlink until nginx has reloaded, then removes it, so that header always resolves. Both steps are `rename(2)`, so the old path is absent only between two consecutive syscalls.
 - The old hostname would stop being served. It stays on the site as a domain instead, so anyone already on that URL is served rather than dropped. Pass `--release-old-hostname` to give the name up - a pooled hostname a fleet reuses. The domain provider is asked to route the new hostname before anything moves, and a released one is handed back only once the switch has committed.

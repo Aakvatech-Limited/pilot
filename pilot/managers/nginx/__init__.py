@@ -87,46 +87,6 @@ def vm_hostname_pattern(pattern: str) -> str:
     return f"~^{regex}$"
 
 
-RELOAD_TIMEOUT_SECONDS = 5.0
-
-
-def nginx_worker_pids() -> set[str]:
-    """The pids of nginx's worker processes, empty when they cannot be listed."""
-    import subprocess
-
-    try:
-        listed = subprocess.run(
-            ["pgrep", "-f", "nginx: worker process"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return set()
-    return set(listed.stdout.split())
-
-
-def await_reloaded_workers(serving: set[str], timeout: float = RELOAD_TIMEOUT_SECONDS) -> None:
-    """Wait for the workers that serve the reloaded config to appear.
-
-    Reloading only signals nginx: the master re-reads the config and forks new
-    workers a moment later, and until it does the workers already running keep
-    answering - and they have never heard of a hostname the reload just added.
-    Every caller treats a returned reload as "the new config is live", so this
-    waits until that is true. Bounded and best-effort: an environment where the
-    workers cannot be listed carries on as before.
-    """
-    import time
-
-    if not serving:
-        return
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if nginx_worker_pids() - serving:
-            return
-        time.sleep(0.05)
-
-
 def render_error_html(code: int, title: str, message: str) -> str:
     return _ERROR_PAGE_TEMPLATE.render(code=code, title=title, message=message)
 
@@ -539,9 +499,7 @@ class NginxManager:
             return
         # reload needs a running nginx; a fresh install may not be started yet.
         action = "reload" if service_running("nginx") else "start"
-        serving = nginx_worker_pids() if action == "reload" else set()
         run_command(service_command(action, "nginx"))
-        await_reloaded_workers(serving)
 
     def cert_path(self, site: "SiteConfig") -> Path:
         return live_cert_path(self.bench.certificate_name(site))
