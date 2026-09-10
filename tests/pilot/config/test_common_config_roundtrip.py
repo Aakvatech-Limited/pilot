@@ -1,0 +1,66 @@
+from pathlib import Path
+
+from pilot.config import BenchConfig
+from pilot.config.common import CommonConfig
+
+
+def _populated_common() -> CommonConfig:
+    """Every shared section carrying a valid, recognisably non-default value."""
+    common = CommonConfig()
+    common.mariadb.root_password = "root-secret"
+    common.postgres.root_password = "postgres-secret"
+    common.letsencrypt.email = "ops@example.com"
+    common.central.enabled = True
+    common.central.bootstrapped = True
+    common.proxy.protocol_v2 = True
+    common.datum.endpoint = "https://datum.example.com"
+    common.logs.endpoint = "https://logs.example.com"
+    common.resource_limits.cpu_usage_limit = 77
+    common.jwks_url = "https://issuer.example.com/jwks.json"
+    common.jwks_audience = "bench-fleet"
+    return common
+
+
+def _bench_with_common(tmp_path: Path, common: CommonConfig) -> Path:
+    benches = tmp_path / "benches"
+    (benches / "b1").mkdir(parents=True)
+    common.write(benches)
+    bench_root = benches / "b1"
+    config = BenchConfig._from_dict(
+        {"bench": {"name": "b1", "python": "3.14"}}, common=CommonConfig.read(benches)
+    )
+    (bench_root / "bench.toml").write_text(config.dumps())
+    return bench_root
+
+
+def _touch_unrelated_setting(bench_root: Path) -> None:
+    with BenchConfig.open(bench_root) as config:
+        config.admin.timeout = config.admin.timeout + 1
+
+
+def test_no_shared_section_is_lost_by_an_unrelated_write(tmp_path: Path) -> None:
+    """Every shared section survives an unrelated bench write."""
+    expected = _populated_common()
+    bench_root = _bench_with_common(tmp_path, expected)
+
+    _touch_unrelated_setting(bench_root)
+
+    assert CommonConfig.read(bench_root.parent) == expected
+
+
+def test_proxy_protocol_survives_an_unrelated_write(tmp_path: Path) -> None:
+    common = CommonConfig()
+    common.proxy.protocol_v2 = True
+    bench_root = _bench_with_common(tmp_path, common)
+
+    _touch_unrelated_setting(bench_root)
+
+    assert CommonConfig.read(bench_root.parent).proxy.protocol_v2 is True
+
+
+def test_a_bench_reads_back_the_proxy_setting(tmp_path: Path) -> None:
+    common = CommonConfig()
+    common.proxy.protocol_v2 = True
+    bench_root = _bench_with_common(tmp_path, common)
+
+    assert BenchConfig.read(bench_root).proxy.protocol_v2 is True

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import copy
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -10,6 +13,7 @@ from pilot.config.letsencrypt import LetsEncryptConfig
 from pilot.config.logs import LogsConfig
 from pilot.config.mariadb import MariaDBConfig
 from pilot.config.postgres import PostgresConfig
+from pilot.config.proxy import ProxyConfig
 from pilot.internal.atomic_file import exclusive_file_lock, replace_private_text_locked
 from pilot.internal.toml import ConfigDict, Toml
 
@@ -18,17 +22,13 @@ FILENAME = "common_config.toml"
 
 @dataclass
 class CommonConfig:
-    """Settings shared by every bench under one benches directory: one MariaDB
-    server, one Postgres server, one ACME account, one trusted admin JWKS
-    issuer, one Central integration, one metrics destination, one logs
-    destination. Stored once at ``common_config.toml`` next to the bench
-    folders. BenchConfig is the only reader/writer; other code reaches these
-    values through a bench's own config instead."""
+    """Settings shared by every bench in one benches directory."""
 
     mariadb: MariaDBConfig = field(default_factory=MariaDBConfig)
     postgres: PostgresConfig = field(default_factory=PostgresConfig)
     letsencrypt: LetsEncryptConfig = field(default_factory=LetsEncryptConfig)
     central: CentralConfig = field(default_factory=CentralConfig)
+    proxy: ProxyConfig = field(default_factory=ProxyConfig)
     datum: DatumConfig = field(default_factory=DatumConfig)
     logs: LogsConfig = field(default_factory=LogsConfig)
     resource_limits: ResourceLimitConfig = field(default_factory=ResourceLimitConfig)
@@ -56,6 +56,7 @@ class CommonConfig:
             postgres=PostgresConfig(**_known_fields(PostgresConfig, data.get("postgres", {}))),
             letsencrypt=LetsEncryptConfig.from_dict(data.get("letsencrypt", {})),
             central=CentralConfig.from_dict(data.get("central", {})),
+            proxy=ProxyConfig.from_dict(data.get("proxy", {})),
             datum=DatumConfig.from_dict(data.get("datum", {})),
             logs=LogsConfig.from_dict(data.get("logs", {})),
             resource_limits=ResourceLimitConfig(
@@ -69,6 +70,25 @@ class CommonConfig:
         path = self.path(benches_root)
         with exclusive_file_lock(path):
             replace_private_text_locked(path, Toml.dumps(self._to_toml_dict()))
+
+    @classmethod
+    @contextmanager
+    def open(cls, benches_root: Path) -> Iterator["CommonConfig"]:
+        """Lock common_config.toml for one read-modify-write transaction."""
+        path = cls.path(benches_root)
+        with exclusive_file_lock(path):
+            config = cls.read(benches_root)
+            original = copy.deepcopy(config)
+            yield config
+            if config != original:
+                replace_private_text_locked(path, Toml.dumps(config._to_toml_dict()))
+
+    def write_if_changed(self, benches_root: Path) -> None:
+        """Replace the shared file when this view differs from it."""
+        path = self.path(benches_root)
+        with exclusive_file_lock(path):
+            if self != self.read(benches_root):
+                replace_private_text_locked(path, Toml.dumps(self._to_toml_dict()))
 
     def _to_toml_dict(self) -> ConfigDict:
         data: ConfigDict = {
@@ -106,6 +126,8 @@ class CommonConfig:
                     for alias in self.central.hostname_aliases
                 ],
             }
+        if self.proxy != ProxyConfig():
+            data["proxy"] = {"protocol_v2": self.proxy.protocol_v2}
         if self.datum != DatumConfig():
             data["datum"] = {"endpoint": self.datum.endpoint, "token": self.datum.token}
         if self.logs != LogsConfig():

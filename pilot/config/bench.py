@@ -25,6 +25,7 @@ from pilot.config.mariadb import MariaDBConfig
 from pilot.config.nginx import NginxConfig
 from pilot.config.postgres import PostgresConfig
 from pilot.config.production import ProductionConfig
+from pilot.config.proxy import ProxyConfig
 from pilot.config.redis import RedisConfig
 from pilot.config.s3 import S3Config
 from pilot.config.waf import WafCondition, WafConfig, WafRule
@@ -98,8 +99,7 @@ _PORT_FIELDS = ("http_port", "socketio_port", "redis.cache_port", "redis.queue_p
 
 @dataclass
 class BenchConfig:
-    """A bench's full configuration: fields, validation, TOML persistence,
-    and the setup wizard's flat-key view, all in one place."""
+    """A bench's configuration, validation, persistence, and wizard view."""
 
     FILENAME: ClassVar[str] = "bench.toml"
 
@@ -128,6 +128,7 @@ class BenchConfig:
     letsencrypt: LetsEncryptConfig = field(default_factory=LetsEncryptConfig)
     admin: AdminConfig = field(default_factory=AdminConfig)
     central: CentralConfig = field(default_factory=CentralConfig)
+    proxy: ProxyConfig = field(default_factory=ProxyConfig)
     datum: DatumConfig = field(default_factory=DatumConfig)
     logs: LogsConfig = field(default_factory=LogsConfig)
     firewall: FirewallConfig = field(default_factory=FirewallConfig)
@@ -140,10 +141,7 @@ class BenchConfig:
 
     @classmethod
     def from_file(cls, path: Path) -> "BenchConfig":
-        """Read a bench.toml at an arbitrary path. Host-shared fields only
-        merge in correctly when `path` sits at the real `<benches_root>/
-        <bench>/bench.toml` depth (see `_benches_root`) - a standalone file
-        elsewhere merges with an empty CommonConfig instead."""
+        """Read and validate bench.toml from an arbitrary path."""
         with path.open("rb") as fh:
             data = tomllib.load(fh)
         config = cls._from_dict(data, common=cls._read_common(path))
@@ -152,9 +150,7 @@ class BenchConfig:
 
     @classmethod
     def default(cls, name: str = "", benches_root: Path | None = None) -> "BenchConfig":
-        """A fresh config seeded with the setup wizard's baseline values. With
-        no benches_root (nothing created on this host yet), suggests a
-        starter MariaDB password instead of leaving it blank."""
+        """Build a fresh config from the setup wizard's baseline values."""
         common = CommonConfig.read(benches_root) if benches_root else _DEFAULT_COMMON_CONFIG
         data = copy.deepcopy(_DEFAULT_DATA)
         data["bench"]["name"] = name
@@ -217,6 +213,7 @@ class BenchConfig:
             postgres=common.postgres,
             letsencrypt=common.letsencrypt,
             central=common.central,
+            proxy=common.proxy,
             datum=common.datum,
             logs=common.logs,
             resource_limits=common.resource_limits,
@@ -228,15 +225,13 @@ class BenchConfig:
 
     @staticmethod
     def _known_fields(dataclass_type: type, data: dict) -> dict:
-        """Drop keys a bench.toml table has that the dataclass no longer
-        declares, so a config written by an older Pilot version still loads."""
+        """Keep only fields declared by the dataclass."""
         known = {f.name for f in fields(dataclass_type)}
         return {k: v for k, v in data.items() if k in known}
 
     @classmethod
     def _report_unknown_fields(cls, data: dict, *, strict: bool) -> None:
-        """Unknown keys are ignored so older/foreign configs still load; strict
-        (opt-in, for validation) raises ConfigError naming them."""
+        """Optionally reject keys outside the known config schema."""
         if not strict:
             return
         paths = cls._unknown_config_paths(data)
@@ -354,16 +349,14 @@ class BenchConfig:
 
     @classmethod
     def _benches_root(cls, bench_root: Path) -> Path:
-        """The directory holding every bench folder as siblings, one level
-        above whichever bench directory (or bench.toml path) was given."""
+        """Return the parent directory containing sibling benches."""
         path = Path(bench_root)
         bench_dir = path if path.is_dir() else path.parent
         return bench_dir.parent
 
     @classmethod
     def _read_common(cls, bench_root: Path | None) -> CommonConfig | None:
-        """The host-shared config this bench merges with, or None if bench_root
-        is unknown (only _validate_serialized calls it without one)."""
+        """Read host-shared config, or return None without a bench root."""
         return CommonConfig.read(cls._benches_root(bench_root)) if bench_root else None
 
     @classmethod
@@ -399,9 +392,7 @@ class BenchConfig:
     @classmethod
     @contextmanager
     def open(cls, bench_root: Path, mode: str = "rw") -> Iterator:
-        """Lock bench.toml for one read-modify-write transaction, writing
-        back on exit if changed. mode="rw" yields a typed BenchConfig;
-        mode="raw" yields the parsed TOML as a plain dict."""
+        """Lock bench.toml for one read-modify-write transaction."""
         if mode not in ("rw", "raw"):
             raise ValueError(f"Unsupported mode: {mode!r}. Use 'rw' or 'raw'.")
         path = cls.toml_path(bench_root)
@@ -451,25 +442,20 @@ class BenchConfig:
         atomic_write_private_text(cls.toml_path(bench_root), content)
 
     def _write_common(self, bench_root: Path) -> None:
-        """Persist this config's shared subset (mariadb/postgres/letsencrypt/
-        central/datum/resource_limits/jwks) to common_config.toml, the single
-        source every bench merges.
-        A no-op when nothing shared changed, so an unrelated bench.toml write
-        never disturbs the file other benches are reading."""
+        """Persist shared settings to common_config.toml."""
         common = CommonConfig(
             mariadb=self.mariadb,
             postgres=self.postgres,
             letsencrypt=self.letsencrypt,
             central=self.central,
+            proxy=self.proxy,
             datum=self.datum,
             logs=self.logs,
             resource_limits=self.resource_limits,
             jwks_url=self.admin.jwks_url,
             jwks_audience=self.admin.jwks_audience,
         )
-        benches_root = self._benches_root(bench_root)
-        if common != CommonConfig.read(benches_root):
-            common.write(benches_root)
+        common.write_if_changed(self._benches_root(bench_root))
 
     @classmethod
     def _validate_serialized(cls, content: str, bench_root: Path | None = None) -> None:
@@ -700,8 +686,7 @@ class BenchConfig:
 
     @staticmethod
     def _unknown_config_paths(data: Mapping) -> list[str]:
-        """Dotted paths of every bench.toml key the schema does not declare, e.g.
-        ``mariadb.typo`` or an unknown top-level table ``whatever``."""
+        """Return dotted paths for keys outside the declared schema."""
         return _scan(data, _SCHEMA_ROOT, "")
 
     @staticmethod
@@ -712,15 +697,7 @@ class BenchConfig:
 
 @dataclass(frozen=True)
 class _Section:
-    """One nested bench.toml table, wired for both reading and writing.
-
-    To add a new nested section: add the field to BenchConfig (with a
-    dataclass, plus a ``from_dict`` classmethod if it needs custom parsing),
-    write its ``_xxx_section()`` method, and add one entry here. attr is both
-    the BenchConfig field name and the TOML table name. write returns None to
-    omit the section from output entirely (for config that's only written
-    when actually used, like s3 or waf).
-    """
+    """Describe one nested bench.toml table and its read/write handlers."""
 
     attr: str
     read: Callable[[dict], Any]
@@ -833,8 +810,7 @@ def _workers_to_groups(value) -> list[WorkerGroup]:
 
 @dataclass
 class _Table:
-    """Declared shape of one bench.toml table: its accepted leaf keys plus any
-    nested tables and arrays-of-tables. Drives unknown-field detection."""
+    """Describe a table's keys and nested tables for schema validation."""
 
     keys: set[str] = field(default_factory=set)
     tables: dict[str, "_Table"] = field(default_factory=dict)
