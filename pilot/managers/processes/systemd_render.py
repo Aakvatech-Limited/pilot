@@ -23,6 +23,9 @@ class SystemdRenderer(ServiceRenderer):
             f"{working_dir}{env}"
             f"ExecStart={shlex.join(pd.argv)}\n"
             f"Restart=on-failure\n"
+            # A user unit gets 1024 descriptors by default. That is too few for a
+            # long-lived process that re-execs itself, and for redis under load.
+            f"LimitNOFILE=65535\n"
             f"{stop}"
             f"StandardOutput=append:{pd.log_file}\n"
             f"StandardError=append:{pd.log_file}.error.log\n"
