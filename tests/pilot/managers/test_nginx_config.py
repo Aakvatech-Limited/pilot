@@ -529,7 +529,31 @@ def test_stage_and_copy_validates_staged_file_before_copying(tmp_path: Path) -> 
     assert cp_call[-3:] == ["cp", str(staged), str(target)]
 
 
-def test_setup_sudoers_grants_only_start_stop_reload(tmp_path: Path) -> None:
+def test_production_enables_nginx_at_boot(tmp_path: Path) -> None:
+    """The distro package is disabled at install time, so a reboot needs this."""
+    manager = NginxManager(_make_bench(tmp_path, _BASE_DATA))
+
+    with (
+        patch("pilot.managers.nginx.is_linux", return_value=True),
+        patch("pilot.managers.nginx.run_command") as mock_run,
+    ):
+        manager.enable_at_boot()
+
+    assert mock_run.call_args.args[0][-3:] == ["systemctl", "enable", "nginx"]
+
+
+def test_an_older_sudo_grant_does_not_end_the_deploy(tmp_path: Path) -> None:
+    """A host installed before the grant carried the enable verb keeps deploying."""
+    manager = NginxManager(_make_bench(tmp_path, _BASE_DATA))
+
+    with (
+        patch("pilot.managers.nginx.is_linux", return_value=True),
+        patch("pilot.managers.nginx.run_command", side_effect=CommandError("a password is required")),
+    ):
+        manager.enable_at_boot()
+
+
+def test_setup_sudoers_grants_only_the_needed_nginx_verbs(tmp_path: Path) -> None:
     bench = _make_bench(tmp_path, _BASE_DATA)
     manager = NginxManager(bench)
     sudoers_file = Path("/etc/sudoers.d/runner-pilot-nginx")
@@ -551,7 +575,8 @@ def test_setup_sudoers_grants_only_start_stop_reload(tmp_path: Path) -> None:
     assert "-T," in content
     assert "start nginx," in content
     assert "stop nginx," in content
-    assert content.rstrip().endswith("reload nginx")
+    assert "reload nginx," in content
+    assert content.rstrip().endswith("enable nginx")
     assert "ALL=(ALL) NOPASSWD: ALL" not in content
 
     mock_run.assert_called_once()
@@ -624,6 +649,7 @@ def _cloud_config(
     sites: list[tuple[SiteConfig, bool]],
     central_enabled: bool = True,
     hostname_mappings: dict[str, str] | None = None,
+    redirect: bool = True,
 ) -> str:
     data = copy.deepcopy(_BASE_DATA)
     data["admin"] = {"domain": "admin.example.com"}
@@ -636,6 +662,7 @@ def _cloud_config(
             type="admin" if pattern.startswith(CLOUD_ADMIN_PREFIX) else "site",
             pattern=pattern,
             target=target,
+            redirect=redirect,
         )
         for pattern, target in (hostname_mappings or {}).items()
     ]
@@ -711,6 +738,44 @@ def test_aliases_are_http_only(tmp_path: Path) -> None:
     alias_block = config.split(_SITE_PATTERN)[1].split("}\n\nserver")[0]
     assert "listen 443" not in alias_block
     assert "return 301 https://shop.example.com$request_uri;" in alias_block
+
+
+def _alias_block(config: str) -> str:
+    """The site alias server block, which ends at the unindented closing brace."""
+    return config.split(f"server_name {_SITE_PATTERN};")[1].split("\n}\n")[0]
+
+
+def test_a_serving_alias_serves_static_files(tmp_path: Path) -> None:
+    """An alias that serves the site needs the static locations of a site vhost.
+
+    With only the application upstream, every /assets request reaches gunicorn,
+    which does not serve them.
+    """
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False)],
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name},
+        redirect=False,
+    )
+
+    alias_block = _alias_block(config)
+    assert f"root {tmp_path}/sites;" in alias_block
+    assert "location /assets" in alias_block
+    assert "location /socket.io" in alias_block
+    assert f"root {tmp_path}/sites/{_PLACEHOLDER_SITE.name}/public;" in alias_block
+    assert "return 301" not in alias_block
+
+
+def test_a_redirecting_alias_has_no_static_locations(tmp_path: Path) -> None:
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False)],
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name},
+    )
+
+    alias_block = _alias_block(config)
+    assert "location /assets" not in alias_block
+    assert "return 301" in alias_block
 
 
 def test_self_hosted_bench_has_no_vm_hostnames(tmp_path: Path) -> None:

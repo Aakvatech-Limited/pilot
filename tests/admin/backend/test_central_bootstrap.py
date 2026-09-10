@@ -10,6 +10,7 @@ from flask import Flask
 from admin.backend.central_bootstrap import (
     CentralBootstrapWatcher,
     install_central_bootstrap_watcher,
+    main,
 )
 from pilot.config import BenchConfig
 from pilot.config.common import CommonConfig
@@ -212,3 +213,21 @@ def test_a_config_that_cannot_be_read_at_all_is_reported(tmp_path: Path, caplog)
         assert install_central_bootstrap_watcher(Flask(__name__), bench_root) is None
 
     assert "awaiting a Central credential" in caplog.text
+
+
+def test_boot_run_applies_the_credential(tmp_path: Path) -> None:
+    bench_root = _awaiting_host(tmp_path)
+
+    with _staged(json.dumps(_ATTRIBUTE)), patch("sys.argv", ["central_bootstrap", "--bench-root", str(bench_root)]):
+        main()
+
+    assert BenchConfig.read(bench_root).central.bootstrapped is True
+
+
+def test_boot_run_skips_non_central_hosts(tmp_path: Path) -> None:
+    bench = _bench(tmp_path)
+
+    with _staged(None), patch("sys.argv", ["central_bootstrap", "--bench-root", str(bench.path)]):
+        main()
+
+    assert BenchConfig.read(bench.path).central.bootstrapped is False

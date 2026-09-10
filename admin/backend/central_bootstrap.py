@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import threading
 import time
@@ -42,10 +43,13 @@ class CentralBootstrapWatcher:
             logging.exception("Central bootstrap attempt failed")
             return False
 
-    def _watch(self) -> None:
-        # Never backs off: a host waiting on its credential is a signup waiting.
+    def run_until_applied(self) -> None:
+        """Retry until the Central credential is applied."""
         while not self.check_once():
             time.sleep(self.interval)
+
+    def _watch(self) -> None:
+        self.run_until_applied()
         logging.info("Central bootstrap applied; this host is configured.")
 
 
@@ -70,3 +74,25 @@ def install_central_bootstrap_watcher(app: Flask, bench_root: Path) -> CentralBo
     app.extensions["central_bootstrap_watcher"] = watcher
     watcher.install(app)
     return watcher
+
+
+def main() -> None:
+    """Apply the Central credential at boot."""
+    parser = argparse.ArgumentParser(description="Apply this host's Central credential.")
+    parser.add_argument("--bench-root", required=True, type=Path, help="Path of the bench directory.")
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    from pilot.config import BenchConfig
+
+    config = BenchConfig.read(args.bench_root, validate=False)
+    if not config.central.is_awaiting_bootstrap:
+        logging.info("This host is not awaiting a Central credential.")
+        return
+
+    CentralBootstrapWatcher(args.bench_root).run_until_applied()
+    logging.info("Central bootstrap applied; this host is configured.")
+
+
+if __name__ == "__main__":
+    main()

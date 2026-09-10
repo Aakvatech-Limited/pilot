@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import pwd
 import re
 import shutil
@@ -20,6 +21,7 @@ from pilot.managers.platform import (
     default_nginx_config_dir,
     is_linux,
     service_command,
+    service_enable_command,
     service_running,
     which,
 )
@@ -176,6 +178,7 @@ class NginxConfigRenderer:
             redirect=f"{scheme}://{mapping.target}" if mapping.redirect else "",
             proxy_pass=f"http://bench-{self.bench.config.name}",
             site=site.name,
+            public_root=f"{self.bench.path}/sites/{site.name}/public",
         )
 
     def generate_server_config(self, error_dir: Path) -> str:
@@ -299,6 +302,7 @@ class NginxManager:
                 f"{systemctl} start nginx",
                 f"{systemctl} stop nginx",
                 f"{systemctl} reload nginx",
+                f"{systemctl} enable nginx",
             ],
         )
 
@@ -424,6 +428,21 @@ class NginxManager:
             self._ensure_modsecurity_module()
         self.install_default_server()
         self._reload_or_rollback(symlink_path)
+
+    def enable_at_boot(self) -> None:
+        """A reboot must bring nginx back, or the host serves nothing.
+
+        The distro package is disabled at install time to free port 80, so
+        production setup owns the enabled state. A host installed before the
+        grant carried the enable verb keeps its running nginx, and the failure
+        is reported rather than ending the deploy.
+        """
+        if not is_linux():
+            return
+        try:
+            run_command(service_enable_command("nginx"))
+        except CommandError as error:
+            logging.warning("Could not enable nginx at boot: %s", error)
 
     def _stage_and_copy(self, content: str, target: Path, validate: list[str] | None = None) -> None:
         """Sudo-copy content into a root-owned target via a bench-owned staging file."""
