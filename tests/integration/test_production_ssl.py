@@ -410,12 +410,19 @@ class TestProductionSSL:
         assert not _site_dir(production, SITE).exists()
 
         conf = (_nginx_conf_dir(production) / "include.conf").read_text()
+        # The old hostname stays on the renamed site so nobody already on that
+        # URL is dropped, which puts both names on one vhost rather than leaving
+        # the old one behind on its own.
+        assert f"server_name {RENAMED_SITE} {SITE};" in conf
         assert f"server_name {SITE};" not in conf, "stale site vhost not pruned"
-        assert f"server_name {RENAMED_SITE};" in conf
 
         status, body = _request(RENAMED_SITE, "/api/method/frappe.ping")
         assert status == "200", f"renamed site frappe.ping returned {status}: {body!r}"
         assert "pong" in body, f"renamed site not serving frappe: {body!r}"
+
+        # The rename restarts nothing, so the site answers on both names at once.
+        status, _ = _request(SITE, "/api/method/frappe.ping")
+        assert status == "200", f"old hostname stopped serving after the rename (got {status})"
 
     def test_setup_production_updates_admin_domain(self, production: Path, bench_bin: str) -> None:
         import tomllib
