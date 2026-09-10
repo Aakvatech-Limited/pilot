@@ -134,33 +134,6 @@ def _request(
     return code.strip(), body
 
 
-def _nginx_state(domain: str) -> str:
-    """What nginx is actually running, for when a request fails outright and the
-    generated file on disk looks right."""
-    active = _run("sudo", "nginx", "-T")
-    listeners = [
-        line.strip()
-        for line in active.stdout.splitlines()
-        if "listen" in line or "server_name" in line or "ssl_certificate " in line
-    ]
-    # If an explicit reload makes the request work, the config on disk was right
-    # all along and the reload during the operation never reached the workers.
-    reload_result = _run("sudo", "systemctl", "reload", "nginx")
-    time.sleep(1)
-    after_reload, _ = _request(domain, "/api/method/frappe.ping")
-    return "\n".join(
-        [
-            f"nginx -t: {_run('sudo', 'nginx', '-t').stderr.strip()}",
-            f"service: {_run('systemctl', 'is-active', 'nginx').stdout.strip()}",
-            f"journal: {_run('sudo', 'journalctl', '-u', 'nginx', '--no-pager', '-n', '15').stdout.strip()[-1200:]}",
-            f"explicit reload rc={reload_result.returncode} {reload_result.stderr.strip()}",
-            f"status after an explicit reload: {after_reload}",
-            "config on disk (listeners/server_names):",
-            *listeners,
-        ]
-    )
-
-
 def _request_ok(domain: str, path: str, *, tries: int = 20, delay: float = 0.5, **kwargs) -> tuple[str, str]:
     """Poll _request until it returns 200, to ride out the brief window where the
     workload is restarting (e.g. just after a process-manager migration)."""
@@ -443,15 +416,15 @@ class TestProductionSSL:
         assert f"server_name {RENAMED_SITE} {SITE};" in conf
         assert f"server_name {SITE};" not in conf, "stale site vhost not pruned"
 
-        status, body = _request(RENAMED_SITE, "/api/method/frappe.ping")
-        assert status == "200", (
-            f"renamed site frappe.ping returned {status}: {body!r}\n"
-            f"--- rename output ---\n{r.stdout}\n{r.stderr}\n"
-            f"--- nginx ---\n{_nginx_state(RENAMED_SITE)}"
-        )
+        # nginx reloads asynchronously, so the new name starts being served a
+        # moment after the command returns - until the new workers are up, the
+        # old ones answer, and they have never heard of it.
+        status, body = _request_ok(RENAMED_SITE, "/api/method/frappe.ping")
+        assert status == "200", f"renamed site frappe.ping returned {status}: {body!r}"
         assert "pong" in body, f"renamed site not serving frappe: {body!r}"
 
-        # The rename restarts nothing, so the site answers on both names at once.
+        # The old hostname is what carries traffic across that window, and it
+        # keeps working afterwards: both names are served by one vhost.
         status, _ = _request(SITE, "/api/method/frappe.ping")
         assert status == "200", f"old hostname stopped serving after the rename (got {status})"
 
