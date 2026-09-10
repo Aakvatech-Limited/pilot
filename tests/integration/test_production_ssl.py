@@ -134,6 +134,26 @@ def _request(
     return code.strip(), body
 
 
+def _nginx_state(domain: str) -> str:
+    """What nginx is actually running, for when a request fails outright and the
+    generated file on disk looks right."""
+    active = _run("sudo", "nginx", "-T")
+    listeners = [
+        line.strip()
+        for line in active.stdout.splitlines()
+        if "listen" in line or "server_name" in line or "ssl_certificate " in line
+    ]
+    return "\n".join(
+        [
+            f"nginx -t: {_run('sudo', 'nginx', '-t').stderr.strip()}",
+            f"service: {_run('systemctl', 'is-active', 'nginx').stdout.strip()}",
+            f"curl: {_run('curl', '-sv', '--resolve', f'{domain}:{HTTPS_PORT}:127.0.0.1', f'https://{domain}:{HTTPS_PORT}/api/method/frappe.ping', '-k').stderr.strip()[-800:]}",
+            "active listeners/server_names:",
+            *listeners,
+        ]
+    )
+
+
 def _request_ok(domain: str, path: str, *, tries: int = 20, delay: float = 0.5, **kwargs) -> tuple[str, str]:
     """Poll _request until it returns 200, to ride out the brief window where the
     workload is restarting (e.g. just after a process-manager migration)."""
@@ -417,7 +437,11 @@ class TestProductionSSL:
         assert f"server_name {SITE};" not in conf, "stale site vhost not pruned"
 
         status, body = _request(RENAMED_SITE, "/api/method/frappe.ping")
-        assert status == "200", f"renamed site frappe.ping returned {status}: {body!r}"
+        assert status == "200", (
+            f"renamed site frappe.ping returned {status}: {body!r}\n"
+            f"--- rename output ---\n{r.stdout}\n{r.stderr}\n"
+            f"--- nginx ---\n{_nginx_state(RENAMED_SITE)}"
+        )
         assert "pong" in body, f"renamed site not serving frappe: {body!r}"
 
         # The rename restarts nothing, so the site answers on both names at once.
