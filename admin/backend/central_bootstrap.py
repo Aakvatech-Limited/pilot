@@ -7,8 +7,6 @@ from pathlib import Path
 
 from flask import Flask
 
-from pilot.integrations.central import CentralClientError
-
 _POLL_SECONDS = 0.1
 
 
@@ -27,15 +25,21 @@ class CentralBootstrapWatcher:
         ).start()
 
     def check_once(self) -> bool:
-        """True once the credential has been written to this host's config."""
+        """True once the credential has been written to this host's config.
+
+        Nothing here is fatal: the credential, and any config it trips over, can
+        still be fixed in place, so a failure is reported and retried rather than
+        ending the watch.
+        """
+        from pilot.config import BenchConfig
         from pilot.core.bench import Bench
         from pilot.integrations.central import apply_central_config
 
         try:
-            return apply_central_config(Bench(self.bench_root))
-        except CentralClientError as exc:
-            # The cloud can still fix the attribute in place, so keep waiting.
-            logging.error("Central bootstrap rejected the instance metadata: %s", exc)
+            config = BenchConfig.read(self.bench_root, validate=False)
+            return apply_central_config(Bench(config, self.bench_root))
+        except Exception:
+            logging.exception("Central bootstrap attempt failed")
             return False
 
     def _watch(self) -> None:

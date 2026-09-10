@@ -15,9 +15,7 @@ const { loadSession } = useSession()
 const unreachable = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
-// The admin stops itself once its config lands, so a poll can hit a closed socket
-// that the same request re-activates. Bootstrap is read directly because
-// loadSession() reads an unreachable server as "not pending" and would bounce us.
+// Read bootstrap directly: loadSession() reads an unreachable server as "not pending".
 const poll = async () => {
   try {
     const bootstrap = await authApi.bootstrap()

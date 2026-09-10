@@ -187,6 +187,22 @@ def test_an_unrelated_validation_problem_does_not_stop_bootstrap(tmp_path: Path)
         assert install_central_bootstrap_watcher(Flask(__name__), bench_root) is not None
     install.assert_called_once()
 
+    # Starting the watch is not enough: the check itself has to survive the same
+    # config, or the thread dies and the host is never bootstrapped.
+    with _staged(json.dumps(_ATTRIBUTE)):
+        assert CentralBootstrapWatcher(bench_root).check_once() is True
+    assert CommonConfig.read(bench_root.parent).central.bootstrapped is True
+
+
+def test_an_unexpected_failure_keeps_the_watch_alive(tmp_path: Path) -> None:
+    """The credential, and any config it trips over, can still be fixed in place."""
+    watcher = CentralBootstrapWatcher(_awaiting_host(tmp_path))
+
+    with patch(
+        "pilot.integrations.central.apply_central_config", side_effect=RuntimeError("disk gone")
+    ):
+        assert watcher.check_once() is False
+
 
 def test_a_config_that_cannot_be_read_at_all_is_reported(tmp_path: Path, caplog) -> None:
     bench_root = _awaiting_host(tmp_path)
