@@ -1311,8 +1311,7 @@ def test_bootstrap_reports_central_when_it_is_managed(tmp_path: Path) -> None:
 
     client = _signed_in_client(tmp_path)
     with CommonConfig.open(tmp_path / "benches") as common:
-        # Enabled but not yet bootstrapped is the pending screen, which tells the
-        # caller nothing else - this is a host already configured.
+        # Enabled but not bootstrapped is the pending screen, which says nothing else.
         common.central.enabled = True
         common.central.bootstrapped = True
 
