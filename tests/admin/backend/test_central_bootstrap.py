@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from flask import Flask
 
 from admin.backend.central_bootstrap import (
@@ -12,6 +13,7 @@ from admin.backend.central_bootstrap import (
 )
 from pilot.config import BenchConfig
 from pilot.config.common import CommonConfig
+from pilot.exceptions import ConfigError
 from pilot.integrations.central import CentralClientError
 from tests.pilot.integrations.test_central_client import _bench
 from tests.pilot.integrations.test_central_metadata import _ATTRIBUTE
@@ -165,3 +167,32 @@ def test_the_watcher_stops_as_soon_as_the_credential_lands(tmp_path: Path) -> No
         watcher._watch()
 
     assert slept == []
+
+
+def test_an_unrelated_validation_problem_does_not_stop_bootstrap(tmp_path: Path) -> None:
+    """Only central.enabled decides this, so a config that is invalid elsewhere
+    must not be what leaves a Central-managed host unconfigured forever."""
+    bench_root = _awaiting_host(tmp_path)
+    # An admin domain that is not a hostname: the file parses, validation fails.
+    toml_path = bench_root / "bench.toml"
+    toml_path.write_text(
+        toml_path.read_text(encoding="utf-8").replace('domain = ""', 'domain = "not a hostname"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError):
+        BenchConfig.read(bench_root)
+
+    with patch.object(CentralBootstrapWatcher, "install") as install:
+        assert install_central_bootstrap_watcher(Flask(__name__), bench_root) is not None
+    install.assert_called_once()
+
+
+def test_a_config_that_cannot_be_read_at_all_is_reported(tmp_path: Path, caplog) -> None:
+    bench_root = _awaiting_host(tmp_path)
+    (bench_root / "bench.toml").write_text("{{{ not toml", encoding="utf-8")
+
+    with caplog.at_level("ERROR"):
+        assert install_central_bootstrap_watcher(Flask(__name__), bench_root) is None
+
+    assert "awaiting a Central credential" in caplog.text

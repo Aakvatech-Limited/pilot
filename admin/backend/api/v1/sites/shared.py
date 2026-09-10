@@ -102,10 +102,7 @@ def _claimed_in_bench(bench_root: Path, name: str) -> str | None:
     """Find a conflicting site claim within this bench."""
     from pilot.core.bench import Bench
 
-    try:
-        claimed_by = Bench(bench_root).site_claiming(name)
-    except Exception:
-        return None
+    claimed_by = Bench(bench_root).site_claiming(name)
     if not claimed_by:
         return None
     return (

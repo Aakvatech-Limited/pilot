@@ -212,3 +212,20 @@ def test_an_unexpected_queue_failure_is_logged(tmp_path: Path, caplog) -> None:
 
     assert response.status_code == 500
     assert "disk exploded" in caplog.text
+
+
+def test_a_claim_that_cannot_be_read_is_not_treated_as_a_free_name(tmp_path: Path) -> None:
+    """Answering "free" because the check itself failed is what lets two vhosts
+    claim one hostname; the caller must see the failure instead."""
+    import pytest
+
+    from admin.backend.api.v1.sites.shared import new_site_name_error
+    from pilot.core.bench import Bench
+
+    bench_root = tmp_path / "bench"
+    _client(bench_root)
+
+    with patch.object(Bench, "site_claiming", side_effect=OSError("bench.toml is unreadable")), pytest.raises(
+        OSError
+    ):
+        new_site_name_error(bench_root, "wanted.localhost")

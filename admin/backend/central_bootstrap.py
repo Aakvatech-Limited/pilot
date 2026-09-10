@@ -50,9 +50,9 @@ def install_central_bootstrap_watcher(app: Flask, bench_root: Path) -> CentralBo
     from pilot.config import BenchConfig
 
     try:
-        config = BenchConfig.read(bench_root)
-    except Exception as exc:
-        logging.debug("Could not read bench.toml to decide the Central bootstrap watcher: %s", exc)
+        config = BenchConfig.read(bench_root, validate=False)
+    except Exception:
+        logging.exception("Cannot tell whether this host is awaiting a Central credential")
         return None
 
     if not config.central.is_awaiting_bootstrap:
