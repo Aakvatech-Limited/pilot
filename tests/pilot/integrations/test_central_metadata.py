@@ -44,7 +44,17 @@ def test_an_unset_attribute_is_not_an_error() -> None:
 
 
 def _awaiting_bench(tmp_path: Path):
+    """A host Central manages but has not yet given a credential to.
+
+    `central.enabled` is host-shared, so it has to be on disk and not only on
+    this object: bootstrap re-reads it while holding the shared file's lock, so
+    that two watchers cannot both apply the credential.
+    """
+    from pilot.config.common import CommonConfig
+
     bench = _bench(tmp_path)
+    with CommonConfig.open(bench.path.parent) as common:
+        common.central.enabled = True
     bench.config.central.enabled = True
     return bench
 

@@ -104,3 +104,37 @@ def test_bootstrap_leaves_pending_once_the_credential_lands(tmp_path: Path) -> N
     body = create_app(bench_root).test_client().get("/api/v1/bootstrap").get_json()
 
     assert body["mode"] != "pending"
+
+
+def test_bootstrap_keeps_a_shared_setting_committed_while_it_waited(tmp_path: Path) -> None:
+    """Every field bootstrap writes is host-shared, so the write has to go
+    through the shared file's own lock rather than a snapshot read earlier."""
+    from pilot.config.common import CommonConfig
+    from pilot.core.bench import Bench
+    from pilot.integrations.central import apply_central_config
+
+    bench_root = _awaiting_host(tmp_path)
+    bench = Bench(bench_root)  # holds a view of the shared file from now
+
+    with CommonConfig.open(bench_root.parent) as concurrent:
+        concurrent.datum.endpoint = "https://datum.committed-later"
+
+    with _staged(json.dumps(_ATTRIBUTE)):
+        assert apply_central_config(bench) is True
+
+    saved = CommonConfig.read(bench_root.parent)
+    assert saved.central.bootstrapped is True
+    assert saved.datum.endpoint == "https://datum.committed-later"
+
+
+def test_only_one_bootstrap_takes_effect(tmp_path: Path) -> None:
+    """Two watchers racing must not both claim to have configured the host."""
+    from pilot.core.bench import Bench
+    from pilot.integrations.central import apply_central_config
+
+    bench_root = _awaiting_host(tmp_path)
+    first, second = Bench(bench_root), Bench(bench_root)
+
+    with _staged(json.dumps(_ATTRIBUTE)):
+        assert apply_central_config(first) is True
+        assert apply_central_config(second) is False

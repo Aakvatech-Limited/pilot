@@ -90,17 +90,24 @@ def apply_central_config(bench: "Bench", metadata: InstanceMetadata | None = Non
     if credentials is None:
         return False
 
-    from pilot.config.bench import BenchConfig
+    from pilot.config.common import CommonConfig
 
-    # Host-shared, so one transaction. The endpoint and token stay out.
-    with BenchConfig.open(bench.path) as saved:
-        _mark_bootstrapped(saved, credentials)
+    # Every field written here is host-shared, so the whole write goes through
+    # the shared file's own lock. Going via BenchConfig would read that file
+    # before locking it and write the snapshot back, losing a concurrent edit.
+    with CommonConfig.open(bench.path.parent) as common:
+        if not common.central.is_awaiting_bootstrap:
+            return False  # another process got there first
+        common.central.bootstrapped = True
+        common.jwks_url = credentials["jwks_url"]
+        common.jwks_audience = credentials["jwks_audience_id"]
+
     _mark_bootstrapped(bench.config, credentials)
     return True
 
 
 def _mark_bootstrapped(config: "BenchConfig", credentials: dict[str, str]) -> None:
-    """Applied to both the saved config and the one already in memory."""
+    """Bring the config already in memory up to date with what was just saved."""
     config.central.bootstrapped = True
     config.admin.jwks_url = credentials["jwks_url"]
     config.admin.jwks_audience = credentials["jwks_audience_id"]
