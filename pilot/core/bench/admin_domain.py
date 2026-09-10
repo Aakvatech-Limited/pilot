@@ -98,6 +98,7 @@ class AdminDomainChange:
             self._republish_nginx()
             if self._reissue_certificate(on_progress):
                 self._republish_nginx()
+            self._require_tls_if_requested()
         except BaseException:
             self._roll_back(restore, on_progress)
             raise
@@ -152,6 +153,25 @@ class AdminDomainChange:
             )
             return False
         return NginxManager(self.bench).has_admin_cert
+
+    def _require_tls_if_requested(self) -> None:
+        """Refuse to finish a TLS move that has no certificate to serve.
+
+        Left to stand, the admin would answer only on HTTP while `admin.tls`
+        stayed true - so session cookies keep their Secure flag and no browser
+        sends them back - and the previous hostname would already have been
+        released. Failing here rolls the move back instead, leaving the admin
+        where it still works.
+        """
+        from pilot.managers.nginx import NginxManager
+
+        if not self.bench.config.admin.tls or NginxManager(self.bench).has_admin_cert:
+            return
+        raise BenchError(
+            f"No TLS certificate for '{self.domain}', so the admin would serve HTTP while "
+            f"configured for HTTPS. The admin is unchanged; retry once its DNS resolves, or "
+            f"pass tls=false to move it to plain HTTP."
+        )
 
     def _roll_back(self, restore: tuple[str, bool], on_progress: Callable[[str], None]) -> None:
         """Undo committed config and routes after a failed switch."""

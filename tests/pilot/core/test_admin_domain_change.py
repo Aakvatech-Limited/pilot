@@ -10,6 +10,7 @@ from pilot.config.central import HostnameAlias
 from pilot.config.common import CommonConfig
 from pilot.core.bench import Bench
 from pilot.core.bench.admin_domain import AdminDomainChange
+from pilot.managers.nginx import NginxManager
 from tests.pilot.integrations.test_central_client import _bench
 
 OLD = "vm-old.zone.example"
@@ -50,6 +51,7 @@ def test_nginx_publishes_the_new_hostname_before_a_certificate_is_asked_for(tmp_
         patch.object(
             AdminDomainChange, "_reissue_certificate", lambda self, on_progress: order.append("certbot")
         ),
+        patch.object(NginxManager, "has_admin_cert", new_callable=PropertyMock, return_value=True),
     ):
         AdminDomainChange(bench, NEW).run()
 
@@ -65,6 +67,7 @@ def test_nginx_is_republished_once_a_certificate_arrives(tmp_path: Path) -> None
     with (
         patch.object(AdminDomainChange, "_republish_nginx", lambda self: publishes.append(1)),
         patch.object(AdminDomainChange, "_reissue_certificate", lambda self, on_progress: True),
+        patch.object(NginxManager, "has_admin_cert", new_callable=PropertyMock, return_value=True),
     ):
         AdminDomainChange(bench, NEW).run()
 
@@ -139,7 +142,6 @@ def test_a_successful_change_moves_the_hostname_alias(tmp_path: Path) -> None:
 def test_a_failed_renewal_does_not_republish_an_expired_certificate(tmp_path: Path) -> None:
     """A stale certificate file does not count after renewal fails."""
     from pilot.managers.letsencrypt import LetsEncryptManager
-    from pilot.managers.nginx import NginxManager
 
     bench = _admin_bench(tmp_path, tls=True)
     bench.config.letsencrypt.email = "ops@example.com"
@@ -157,7 +159,6 @@ def test_a_failed_renewal_does_not_republish_an_expired_certificate(tmp_path: Pa
 
 def test_a_successful_renewal_republishes(tmp_path: Path) -> None:
     from pilot.managers.letsencrypt import LetsEncryptManager
-    from pilot.managers.nginx import NginxManager
 
     bench = _admin_bench(tmp_path, tls=True)
     bench.config.letsencrypt.email = "ops@example.com"
@@ -176,7 +177,6 @@ def test_a_successful_renewal_republishes(tmp_path: Path) -> None:
 def test_an_existing_certificate_is_still_offered_for_renewal(tmp_path: Path) -> None:
     """An existing certificate is still checked for renewal."""
     from pilot.managers.letsencrypt import LetsEncryptManager
-    from pilot.managers.nginx import NginxManager
 
     bench = _admin_bench(tmp_path, tls=True)
     bench.config.letsencrypt.email = "ops@example.com"
@@ -189,3 +189,42 @@ def test_an_existing_certificate_is_still_offered_for_renewal(tmp_path: Path) ->
         AdminDomainChange(bench, NEW).run()
 
     obtain.assert_called_once()
+
+
+def test_a_tls_move_with_no_certificate_is_refused(tmp_path: Path) -> None:
+    """Standing, the admin would answer only on HTTP while admin.tls stayed
+    true - session cookies keep their Secure flag, so no browser sends them
+    back - and the previous hostname would already have been released."""
+    from pilot.exceptions import BenchError
+    from pilot.managers.letsencrypt import LetsEncryptManager
+
+    bench = _admin_bench(tmp_path, tls=True)
+    bench.config.letsencrypt.email = "ops@example.com"
+    released = []
+
+    with patch.object(AdminDomainChange, "_republish_nginx"), patch.object(
+        LetsEncryptManager, "obtain_admin", side_effect=RuntimeError("dns not ready")
+    ), patch.object(
+        NginxManager, "has_admin_cert", new_callable=PropertyMock, return_value=False
+    ), patch(
+        "pilot.core.adapters.domain_provider.DomainRouteProvider.release",
+        lambda self, domain: released.append(domain),
+    ), pytest.raises(BenchError, match="No TLS certificate"):
+        AdminDomainChange(bench, NEW).run()
+
+    # The admin is left where it still works, and the old hostname is still ours.
+    assert BenchConfig.read(bench.path).admin.domain == OLD
+    assert bench.config.admin.domain == OLD
+    assert OLD not in released
+
+
+def test_a_move_to_plain_http_needs_no_certificate(tmp_path: Path) -> None:
+    bench = _admin_bench(tmp_path, tls=True)
+
+    with patch.object(AdminDomainChange, "_republish_nginx"), patch.object(
+        AdminDomainChange, "_reissue_certificate", lambda self, on_progress: False
+    ):
+        AdminDomainChange(bench, NEW, tls=False).run()
+
+    assert BenchConfig.read(bench.path).admin.domain == NEW
+    assert BenchConfig.read(bench.path).admin.tls is False
