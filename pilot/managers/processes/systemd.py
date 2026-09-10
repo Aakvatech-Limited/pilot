@@ -58,6 +58,14 @@ class SystemdProcessManager(SystemdUserMixin, ManagedProcessManager):
                 (self.systemd_conf_dir / self._unit_name(pd.name)).write_text(renderer.render(pd))
                 workload_units.append(self._unit_name(pd.name))
         (self.systemd_conf_dir / self._target_name()).write_text(renderer.render_target(workload_units))
+        if self.bench.config.central.enabled:
+            (self.systemd_conf_dir / self._central_bootstrap_name()).write_text(
+                renderer.render_central_bootstrap(
+                    str(AdminEnvManager(cli_root()).python),
+                    str(self.bench.path),
+                    str(self.bench.logs_path / "central-bootstrap.log"),
+                )
+            )
         self.admin_units_changed = self._admin_unit_text() != admin_units_before
 
     def _admin_unit_text(self) -> list[str]:
@@ -72,10 +80,11 @@ class SystemdProcessManager(SystemdUserMixin, ManagedProcessManager):
 
         self.user_unit_dir.mkdir(parents=True, exist_ok=True)
         defs = self._prod_process_definitions()
-        units = set(self._unit_name(pd.name) for pd in defs) | {
-            self._target_name(),
-            self._admin_socket_name(),
-        }
+        units = (
+            set(self._unit_name(pd.name) for pd in defs)
+            | {self._target_name(), self._admin_socket_name()}
+            | self._central_bootstrap_units()
+        )
 
         # Stop dropped units so they release ports before relinking.
         self._reap_stale_units(units)
@@ -104,6 +113,7 @@ class SystemdProcessManager(SystemdUserMixin, ManagedProcessManager):
         # reset-failed clears rate-limit state so re-deploys can restart the admin socket.
         subprocess.run(self._systemctl("reset-failed", *units), capture_output=True, env=env)
         run_command(self._systemctl("enable", self._target_name()), env=env)
+        self._enable_central_bootstrap(env)
         # Re-activating admin costs a graceful gunicorn stop; a workload-only change
         # must not pay for it.
         if self.admin_units_changed or not self.are_units_running(UnitGroup.ADMIN):
@@ -202,6 +212,18 @@ class SystemdProcessManager(SystemdUserMixin, ManagedProcessManager):
 
     def _unit_name(self, service_name: str) -> str:
         return f"{self.bench.config.name}-{service_name}.service"
+
+    def _central_bootstrap_name(self) -> str:
+        return f"{self.bench.config.name}-central-bootstrap.service"
+
+    def _central_bootstrap_units(self) -> set[str]:
+        if not self.bench.config.central.enabled:
+            return set()
+        return {self._central_bootstrap_name()}
+
+    def _enable_central_bootstrap(self, env: dict) -> None:
+        for unit in self._central_bootstrap_units():
+            run_command(self._systemctl("enable", "--now", unit), env=env)
 
     def _admin_socket_name(self) -> str:
         return f"{self.bench.config.name}-admin.socket"

@@ -60,6 +60,21 @@ class SystemdRenderer(ServiceRenderer):
             f"StandardError=append:{pd.log_file}.error.log\n"
         )
 
+    def render_central_bootstrap(self, python: str, bench_root: str, log_file: str) -> str:
+        return (
+            f"[Unit]\n"
+            f"Description={self.bench_name} central bootstrap\n"
+            f"After=network-online.target\n"
+            f"Wants=network-online.target\n\n"
+            f"[Service]\n"
+            f"Type=oneshot\n"
+            f"ExecStart={python} -m admin.backend.central_bootstrap --bench-root {bench_root}\n"
+            f"StandardOutput=append:{log_file}\n"
+            f"StandardError=append:{log_file}.error.log\n\n"
+            f"[Install]\n"
+            f"WantedBy=default.target\n"
+        )
+
     def render_target(self, unit_names: list[str]) -> str:
         return (
             f"[Unit]\n"
