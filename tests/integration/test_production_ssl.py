@@ -416,10 +416,9 @@ class TestProductionSSL:
         assert f"server_name {RENAMED_SITE} {SITE};" in conf
         assert f"server_name {SITE};" not in conf, "stale site vhost not pruned"
 
-        # nginx reloads asynchronously, so the new name starts being served a
-        # moment after the command returns - until the new workers are up, the
-        # old ones answer, and they have never heard of it.
-        status, body = _request_ok(RENAMED_SITE, "/api/method/frappe.ping")
+        # No polling: the reload waits for the workers serving the new config, so
+        # the new name answers by the time the command returns.
+        status, body = _request(RENAMED_SITE, "/api/method/frappe.ping")
         assert status == "200", f"renamed site frappe.ping returned {status}: {body!r}"
         assert "pong" in body, f"renamed site not serving frappe: {body!r}"
 
