@@ -35,7 +35,7 @@ class PythonAssetBuilder:
         run_command(
             [*self.bench.frappe_call, "frappe", "build", "--force"],
             cwd=self.bench.sites_path,
-            env=self.manager._build_env(),
+            env=self.node_build_env(),
             stream_output=True,
         )
 
@@ -60,7 +60,7 @@ class PythonAssetBuilder:
         run_command(
             [*self.bench.frappe_call, "frappe", "build", "--force", "--app", app.config.name],
             cwd=self.bench.sites_path,
-            env=self.manager._build_env(),
+            env=self.node_build_env(),
             stream_output=True,
         )
 
