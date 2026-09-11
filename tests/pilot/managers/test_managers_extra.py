@@ -317,6 +317,26 @@ def test_systemd_unit_renders_working_dir(tmp_path: Path) -> None:
     assert "cd /sites" not in unit
 
 
+def test_central_bootstrap_unit_runs_once_at_boot(tmp_path: Path) -> None:
+    from pilot.managers.processes.systemd import SystemdRenderer
+
+    unit = SystemdRenderer("test-bench").render_central_bootstrap(
+        "/cli/.admin-venv/bin/python",
+        "/cli",
+        "/home/frappe/pilot/benches/test-bench",
+        str(tmp_path / "logs" / "central-bootstrap.log"),
+    )
+
+    assert "Type=simple" in unit
+    assert "WantedBy=default.target" in unit
+    assert "Environment=PYTHONPATH=/cli" in unit
+    assert "WorkingDirectory=/cli" in unit
+    assert (
+        "ExecStart=/cli/.admin-venv/bin/python -m admin.backend.central_bootstrap "
+        "--bench-root /home/frappe/pilot/benches/test-bench" in unit
+    )
+
+
 def test_systemd_unit_renders_env_vars(tmp_path: Path) -> None:
     from pilot.managers.processes.local import ProcessDefinition
     from pilot.managers.processes.systemd import SystemdRenderer
@@ -363,6 +383,18 @@ def test_systemd_unit_redis_gets_stop_timeout(tmp_path: Path) -> None:
     pd = ProcessDefinition("redis_cache", ["redis-server", "x.conf"], tmp_path / "r.log", stop_timeout=300)
     unit = SystemdRenderer("test-bench").render(pd)
     assert "TimeoutStopSec=300" in unit
+
+
+def test_systemd_unit_raises_descriptor_limit(tmp_path: Path) -> None:
+    """A workload unit gets more descriptors than the default of a user unit."""
+    from pilot.managers.processes.local import ProcessDefinition
+    from pilot.managers.processes.systemd import SystemdRenderer
+
+    pd = ProcessDefinition(
+        name="web", argv=["/env/bin/python", "serve"], log_file=tmp_path / "logs" / "web.log"
+    )
+    unit = SystemdRenderer("test-bench").render(pd)
+    assert "LimitNOFILE=65535" in unit
 
 
 def test_systemd_target_wanted_by_default(tmp_path: Path) -> None:
