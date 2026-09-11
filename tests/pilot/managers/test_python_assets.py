@@ -21,6 +21,25 @@ def make_builder() -> PythonAssetBuilder:
     return PythonAssetBuilder(manager)
 
 
+def test_build_assets_passes_node_heap_env_to_frappe_build(tmp_path: Path) -> None:
+    manager = MagicMock()
+    manager.bench.apps.return_value = []
+    manager.bench.frappe_call = ["python"]
+    manager.bench.sites_path = tmp_path / "sites"
+    manager._build_env.return_value = {"PATH": "/usr/bin"}
+    builder = PythonAssetBuilder(manager)
+
+    with (
+        patch.object(builder, "auto_node_heap_mb", return_value=4096),
+        patch("pilot.managers.python_assets.run_command") as run_command,
+    ):
+        builder.build_assets()
+
+    run_command.assert_called_once()
+    assert run_command.call_args.kwargs["env"]["NODE_OPTIONS"] == "--max-old-space-size=4096"
+    assert run_command.call_args.kwargs["env"]["PATH"] == "/usr/bin"
+
+
 def test_build_assets_for_app_installs_js_deps_before_frappe_build_runs(tmp_path: Path) -> None:
     """frappe's own `bench build` step shells into `frontend` and runs `yarn build` there,
     so node_modules must be synced before that step, not only in the standalone loop after it."""
@@ -53,7 +72,7 @@ def test_build_assets_for_app_installs_js_deps_before_frappe_build_runs(tmp_path
     assert events.index("ensure_yarn_install:frontend") < events.index("run_command")
 
 
-def test_build_assets_for_app_passes_node_heap_env_to_frontend_build(tmp_path: Path) -> None:
+def test_build_assets_for_app_passes_node_heap_env_to_all_node_builds(tmp_path: Path) -> None:
     app_path = tmp_path / "crm"
     frontend_dir = app_path / "frontend"
     frontend_dir.mkdir(parents=True)
@@ -74,11 +93,16 @@ def test_build_assets_for_app_passes_node_heap_env_to_frontend_build(tmp_path: P
     ):
         builder.build_assets_for_app(make_app(app_path, "crm"))
 
+    frappe_call = next(
+        call for call in run_command.call_args_list if "frappe" in call.args[0]
+    )
     frontend_call = next(
         call for call in run_command.call_args_list if call.args[0] == ["yarn", "build"]
     )
-    assert frontend_call.kwargs["env"]["NODE_OPTIONS"] == "--max-old-space-size=4096"
-    assert frontend_call.kwargs["env"]["PATH"] == "/usr/bin"
+
+    for build_call in [frappe_call, frontend_call]:
+        assert build_call.kwargs["env"]["NODE_OPTIONS"] == "--max-old-space-size=4096"
+        assert build_call.kwargs["env"]["PATH"] == "/usr/bin"
 
 
 def test_auto_node_heap_uses_sixty_percent_of_available_memory() -> None:
