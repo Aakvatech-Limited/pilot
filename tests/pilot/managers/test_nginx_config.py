@@ -119,6 +119,65 @@ def test_dual_stack_listeners(tmp_path: Path) -> None:
         assert line in config
 
 
+# --- public files -----------------------------------------------------------
+
+
+def test_public_files_are_served_regardless_of_extension(tmp_path: Path) -> None:
+    """An extension allowlist used to drop anything but images and documents,
+    so kernels, disk images and archives 404ed even though they were on disk."""
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert "location /files/ {" in config
+    assert f"root {tmp_path}/sites/site1.example.com/public;" in config
+    # No extension list guards the prefix location.
+    assert "jpg|jpeg|png" not in config
+
+
+def test_public_files_fall_back_to_the_app(tmp_path: Path) -> None:
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert "try_files $uri @app;" in config
+    assert "location @app {" in config
+    assert "proxy_pass         http://bench-test-bench;" in config
+    assert "proxy_set_header   X-Frappe-Site-Name site1.example.com;" in config
+
+
+def test_markup_uploads_are_forced_to_download(tmp_path: Path) -> None:
+    """nginx serves public files off disk, so it must repeat the attachment
+    header frappe would have sent. Inline user markup is stored XSS."""
+    config = _site_config(tmp_path, _BASE_SITE)
+    matcher = next(line for line in config.splitlines() if "location ~* ^/files/" in line)
+
+    assert 'add_header Content-Disposition "attachment";' in config
+    for extension in ("svg", "svgz", "html", "xhtml", "xml", "swf"):
+        assert f"{extension}|" in matcher or f"{extension})" in matcher
+
+
+def test_force_download_match_is_case_insensitive(tmp_path: Path) -> None:
+    """A case-sensitive match would let evil.SVG render inline."""
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert "location ~* ^/files/" in config
+
+
+def test_force_download_location_precedes_the_prefix_location(tmp_path: Path) -> None:
+    """nginx prefers a regex location over a prefix one, but only the first
+    regex that matches, so this block has to come before any other /files regex."""
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert config.index("location ~* ^/files/") < config.index("location /files/ {")
+
+
+def test_every_files_fallback_has_a_named_location(tmp_path: Path) -> None:
+    """try_files pointing at an undeclared @app fails nginx at startup, which a
+    template test is the only cheap place to catch."""
+    config = _site_config(tmp_path, _BASE_SITE, ssl=True)
+
+    for block in config.split("server {")[1:]:
+        if "try_files $uri @app;" in block:
+            assert "location @app {" in block
+
+
 # --- trusted proxy ----------------------------------------------------------
 
 
@@ -764,6 +823,22 @@ def test_a_serving_alias_serves_static_files(tmp_path: Path) -> None:
     assert "location /socket.io" in alias_block
     assert f"root {tmp_path}/sites/{_PLACEHOLDER_SITE.name}/public;" in alias_block
     assert "return 301" not in alias_block
+
+
+def test_a_serving_alias_serves_public_files_of_any_extension(tmp_path: Path) -> None:
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False)],
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name},
+        redirect=False,
+    )
+
+    alias_block = _alias_block(config)
+    assert "location /files/ {" in alias_block
+    assert "location ~* ^/files/" in alias_block
+    assert 'add_header Content-Disposition "attachment";' in alias_block
+    assert "location @app {" in alias_block
+    assert f"proxy_set_header   X-Frappe-Site-Name {_PLACEHOLDER_SITE.name};" in alias_block
 
 
 def test_a_redirecting_alias_has_no_static_locations(tmp_path: Path) -> None:
