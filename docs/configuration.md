@@ -204,7 +204,7 @@ email_recipients = ["ops@example.com"]
 
 Shared tables are MariaDB, Postgres, Let's Encrypt, Central, the edge proxy, Datum, logs, resource limits, and the admin JWKS issuer. A bench exposes these values through its own `BenchConfig`; the model merges shared values on read and writes them back to the common file.
 
-Central endpoint and authentication data come from instance metadata. `central.hostname_aliases` maps a VM hostname pattern to its current local target. The VM ID is assigned at runtime, so use `*` for that part. Pilot creates redirect rules only for aliases whose targets exist on the bench. Renaming a site or moving the admin domain re-points the matching alias automatically; remove one when the rule is no longer needed.
+Central endpoint and authentication data come from instance metadata. `central.hostname_aliases` maps a VM hostname pattern to its current local target. The VM ID is assigned at runtime, so use `*` for that part. Pilot creates redirect rules only for aliases whose targets exist on the bench. Renaming a site or moving the admin domain re-points the matching alias automatically; remove one when the rule is no longer needed. `pilot setup central` writes these settings - see [Setup Commands](commands.md#setup-commands).
 
 `[proxy]` describes the edge in front of the host. With `protocol_v2 = true` the HTTPS listener expects PROXY protocol v2 ahead of the TLS handshake, because the edge streams custom domains to port 443 by SNI without unwrapping them; the client address arrives in that header rather than in `X-Forwarded-For`. Leave it off when nothing fronts the host. See [Per-domain TLS](#per-domain-tls).
 

@@ -62,6 +62,13 @@ def validate_hostname(name: str, label: str = "Hostname") -> str | None:
     return None
 
 
+def validate_hostname_pattern(pattern: str, label: str = "Hostname pattern") -> str | None:
+    """A VM hostname glob, where `*` stands for the runtime-assigned VM id."""
+    if pattern.count("*") != 1:
+        return f"{label} must contain exactly one '*' for the VM id, as in 'site-*.example.com'."
+    return validate_hostname(pattern.replace("*", "vm"), label)
+
+
 def validate_site_name(name: str) -> str | None:
     return validate_hostname(name, "Site name")
 

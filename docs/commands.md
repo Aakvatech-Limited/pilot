@@ -73,7 +73,10 @@ Site behavior belongs on `Site` or a module under `pilot/core/site`.
 - `pilot setup nginx`: render nginx config.
 - `pilot setup letsencrypt`: issue or refresh TLS certificates.
 - `pilot setup production`: deploy process manager and nginx integration.
+- `pilot setup central`: hand the host to Central and alias the VM hostnames it serves.
 - `pilot remove production`: remove production deployment files and services.
+
+`pilot setup central` writes the shared `[central]` settings: it enables Central management and, given `--admin-pattern` or `--site-pattern`, aliases those VM hostname globs to this bench's admin domain and its site. Central manages a host holding one bench, so the command refuses a second one rather than guess which bench a VM hostname belongs to, and `--site-pattern` needs the bench to have exactly one site. The credential itself is never passed in - it arrives through instance metadata, and `--rebootstrap` asks for it to be applied again. Because the bootstrap unit is written only while Central is enabled, the command rebuilds the process set of a bench already in production, restarting its workload.
 
 Production setup uses the bench config and system managers. The command should not duplicate nginx, process manager, or certificate logic.
 

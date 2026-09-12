@@ -131,9 +131,7 @@ class AdminDomainChange:
             data.setdefault("admin", {}).update({"domain": admin.domain, "tls": admin.tls})
 
     def _retarget_hostname_aliases(self) -> None:
-        from pilot.core.bench.hostname_aliases import retarget
-
-        retarget(self.bench, "admin", self.previous, self.domain)
+        self.bench.hostname_aliases.retarget("admin", self.previous, self.domain)
 
     def _reissue_certificate(self, on_progress: Callable[[str], None]) -> bool:
         """Try to obtain the new certificate; pending DNS leaves HTTP active."""
@@ -180,9 +178,7 @@ class AdminDomainChange:
         with contextlib.suppress(Exception):
             self._persist()
         with contextlib.suppress(Exception):
-            from pilot.core.bench.hostname_aliases import retarget
-
-            retarget(self.bench, "admin", self.domain, self.previous)
+            self.bench.hostname_aliases.retarget("admin", self.domain, self.previous)
         # Rollback must not hide the original failure or skip nginx recovery.
         with contextlib.suppress(Exception):
             self._route.rollback()
