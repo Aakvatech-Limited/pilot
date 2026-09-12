@@ -39,6 +39,9 @@ from pilot.internal.atomic_file import (
 from pilot.internal.toml import ConfigDict, Toml
 
 _BENCH_NAME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+# Every host-wide user unit is named "pilot-<what>.service". A bench owns
+# "<name>-*", so a bench named pilot could not be told apart from them.
+_RESERVED_BENCH_NAMES = frozenset({"pilot"})
 _PORT_MIN = 1
 _PORT_MAX = 65535
 
@@ -284,6 +287,12 @@ class BenchConfig:
         if not _BENCH_NAME_PATTERN.match(self.name):
             raise ConfigError(
                 f"bench.name '{self.name}' is invalid. Must start with a letter and contain only letters, digits, underscores, or hyphens."
+            )
+        if self.name in _RESERVED_BENCH_NAMES:
+            raise ConfigError(
+                f"bench.name '{self.name}' is reserved: this host's own services are named "
+                f"'{self.name}-<service>', so a bench of this name could not be told apart "
+                f"from them."
             )
 
     def _validate_app_names_unique(self) -> None:
