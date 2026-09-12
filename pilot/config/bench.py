@@ -124,6 +124,8 @@ class BenchConfig:
     default_branch: str = ""
     # Gates whether developer mode can be toggled per site; sets nothing itself.
     allow_developer_mode: bool = False
+    # Whether `uv pip install -e` pulls an app's `dev` extra, such as frappe's watchdog.
+    install_dev_extra: bool = True
     production: ProductionConfig = field(default_factory=ProductionConfig)
     lite_mode: LiteModeConfig = field(default_factory=LiteModeConfig)
     nginx: NginxConfig = field(default_factory=NginxConfig)
@@ -215,6 +217,7 @@ class BenchConfig:
             db_type=bench_data.get("db_type", "mariadb"),
             default_branch=bench_data.get("default_branch", ""),
             allow_developer_mode=bench_data.get("allow_developer_mode", False),
+            install_dev_extra=bench_data.get("install_dev_extra", True),
             apps=apps,
             mariadb=common.mariadb,
             postgres=common.postgres,
@@ -516,6 +519,7 @@ class BenchConfig:
             "watch_admin_js": self.watch_admin_js,
             "db_type": self.db_type,
             "allow_developer_mode": self.allow_developer_mode,
+            "install_dev_extra": self.install_dev_extra,
         }
         if self.default_branch:
             bench["default_branch"] = self.default_branch
@@ -858,6 +862,7 @@ _BENCH_KEYS = {
     "db_type",
     "default_branch",
     "allow_developer_mode",
+    "install_dev_extra",
 }
 # Keys older Pilot versions wrote that the parser still tolerates.
 _PRODUCTION_LEGACY = {"lightweight", "nginx", "use_companion_manager"}

@@ -49,6 +49,7 @@ The `[bench]` table supports:
 | `default_branch` | Default branch for new apps. |
 | `allow_developer_mode` | Allows per-site developer mode changes. |
 | `watch_apps_js`, `watch_admin_js`, `reload_python` | Development reload settings. |
+| `install_dev_extra` | Install apps' `dev` extras on a non-production bench. Defaults to true; `pilot init --no-dev` sets it to false. |
 
 Applications use `[[apps]]` entries. `branches` can list branches available to the app:
 
