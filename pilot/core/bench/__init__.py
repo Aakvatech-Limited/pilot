@@ -12,6 +12,7 @@ from pilot.exceptions import BenchError
 if TYPE_CHECKING:
     from pilot.config import S3Config, SiteConfig
     from pilot.core.app import App, NewAppOptions, RevisionPin
+    from pilot.core.bench.hostname_aliases import HostnameAliases
     from pilot.core.bench.migration.store import MigrationStore
     from pilot.core.database import Database
     from pilot.core.notification import NotificationStore
@@ -100,6 +101,12 @@ class Bench:
         from pilot.core.notification import NotificationStore
 
         return NotificationStore(self.logs_path)
+
+    @cached_property
+    def hostname_aliases(self) -> "HostnameAliases":
+        from pilot.core.bench.hostname_aliases import HostnameAliases
+
+        return HostnameAliases(self)
 
     @cached_property
     def site_storage(self) -> "SiteStorageCollector":
@@ -414,6 +421,18 @@ class Bench:
         from pilot.core.bench.admin_domain import AdminDomainChange
 
         AdminDomainChange(self, domain, tls).run(on_progress)
+
+    def setup_central(
+        self,
+        admin_pattern: str = "",
+        site_pattern: str = "",
+        redirect: bool = False,
+        rebootstrap: bool = False,
+        on_progress: Callable[[str], None] = lambda message: None,
+    ) -> None:
+        from pilot.core.bench.central import CentralSetup
+
+        CentralSetup(self, admin_pattern, site_pattern, redirect, rebootstrap).run(on_progress)
 
     def setup_letsencrypt(self) -> None:
         from pilot.core.bench.production import BenchProduction

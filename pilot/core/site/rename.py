@@ -281,9 +281,7 @@ class SiteRename:
                     site["name"] = target
 
     def _retarget_hostname_aliases(self, current: str, target: str) -> None:
-        from pilot.core.bench.hostname_aliases import retarget
-
-        retarget(self.bench, "site", current, target)
+        self.bench.hostname_aliases.retarget("site", current, target)
 
     def _add_to_hosts(self) -> None:
         if self.bench.config.production.process_manager != "none":
