@@ -36,8 +36,7 @@ class JwksCache:
     def signing_key(self, kid: str) -> PyJWK | None:
         """The key for ``kid``. Fetches only when the cache does not hold it."""
         record = self._read()
-        key = self._find(record, kid)
-        if key is not None:
+        if record is not None and (key := self._find(record, kid)) is not None:
             if self._is_stale(record):
                 self.refresh_in_background()
             return key
