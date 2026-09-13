@@ -1,5 +1,3 @@
-"""Tests for ProductionSetup helpers and letsencrypt gating."""
-
 from __future__ import annotations
 
 import json
@@ -33,8 +31,7 @@ def _make_bench(
     benches_dir = tmp_path / "benches"
     bench_dir = benches_dir / name
     (bench_dir / "sites").mkdir(parents=True, exist_ok=True)
-    # mariadb/letsencrypt are host-shared state (common_config.toml), not
-    # bench.toml fields, since this change.
+    # MariaDB and Let's Encrypt remain in host-shared config.
     CommonConfig(
         mariadb=MariaDBConfig(root_password="root"),
         letsencrypt=LetsEncryptConfig(email=email),
@@ -179,7 +176,7 @@ def test_resolve_target_applies_letsencrypt_email(tmp_path: Path) -> None:
 
 
 def test_require_production_inputs_needs_admin_domain(tmp_path: Path) -> None:
-    # Fresh, undeployed bench: empty domain, no process manager yet (so it loads).
+    # Fresh bench: empty domain and no process manager.
     bench = _make_bench(tmp_path, admin_domain="", process_manager="")
     cmd = ProductionSetup(bench, process_manager="systemd")
     cmd._resolve_target()
@@ -329,7 +326,7 @@ def _enrol_with_central(bench: Bench) -> None:
     from pilot.config.common import CommonConfig
 
     common = CommonConfig.read(bench.path.parent)
-    common.central = CentralConfig(endpoint="https://central.test", auth_token="tok-9")
+    common.central = CentralConfig(enabled=True, bootstrapped=True)
     common.write(bench.path.parent)
     bench.config = BenchConfig.read(bench.path)
 
@@ -521,3 +518,29 @@ def test_apply_log_token_skips_without_central_enrolment(tmp_path: Path) -> None
         ProductionSetup(bench)._apply_log_token(lambda message: None)
 
     client_cls.assert_not_called()
+
+
+def test_letsencrypt_is_required_for_a_custom_tls_domain_with_admin_tls_off(tmp_path: Path) -> None:
+    """A cloud site's local TLS still requires an email."""
+    from pilot.managers.letsencrypt import is_letsencrypt_required, letsencrypt_email_required
+
+    bench = _make_bench(tmp_path, admin_domain="vm-1.zone.example", email="ops@example.com")
+    bench.config.admin.tls = False
+    site_path = _make_site(bench, "site-a1.zone.example")
+    (site_path / "site_config.json").write_text(
+        json.dumps({"ssl": False, "domains": [{"domain": "shop.customer.com", "tls": True}]})
+    )
+
+    assert letsencrypt_email_required(bench) is True
+    assert is_letsencrypt_required(bench) is True
+
+
+def test_letsencrypt_is_not_required_for_a_fully_proxied_bench(tmp_path: Path) -> None:
+    from pilot.managers.letsencrypt import letsencrypt_email_required
+
+    bench = _make_bench(tmp_path, admin_domain="vm-1.zone.example", email="ops@example.com")
+    bench.config.admin.tls = False
+    site_path = _make_site(bench, "site-a1.zone.example")
+    (site_path / "site_config.json").write_text(json.dumps({"ssl": False}))
+
+    assert letsencrypt_email_required(bench) is False
