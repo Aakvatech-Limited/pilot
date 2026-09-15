@@ -32,7 +32,7 @@ class PythonAssetBuilder:
         from pilot.core.build_memory import build_memory_limit_mb
 
         limit_mb = build_memory_limit_mb()
-        kwargs["env"] = {**(kwargs.get("env") or os.environ), **systemctl_env()}
+        kwargs["env"] = {**systemctl_env(), **(kwargs.get("env") or {})}
         try:
             run_command(memory_capped(argv, limit_mb), **kwargs)
         except CommandError as error:
@@ -41,7 +41,10 @@ class PythonAssetBuilder:
                 raise BenchError(
                     f"Build ran out of memory: it may use {limit_mb}MB on this machine."
                 ) from error
-            raise
+            raise CommandError(
+                error.message.replace(repr("systemd-run"), repr(argv[0]), 1),
+                returncode=error.returncode,
+            ) from error
 
     def build_assets(self) -> None:
         for app in self.bench.apps():

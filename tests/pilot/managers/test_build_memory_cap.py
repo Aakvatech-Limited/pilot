@@ -6,7 +6,8 @@ import os
 
 import psutil
 
-from pilot.core.build_memory import BUILD_MEMORY_SHARE, build_memory_limit_mb
+from pilot.core.build_memory import BUILD_MEMORY_SHARE, MIN_BUILD_MEMORY_MB, build_memory_limit_mb
+from pilot.exceptions import BenchError
 from pilot.managers.systemd_user import systemctl_env
 
 
@@ -15,9 +16,15 @@ def test_the_limit_is_a_share_of_free_memory():
     assert build_memory_limit_mb() == int(available_mb * BUILD_MEMORY_SHARE)
 
 
-def test_the_limit_never_exceeds_what_is_free():
-    """A limit above free memory is one the host cannot honour."""
-    assert build_memory_limit_mb() <= psutil.virtual_memory().available / (1024 * 1024)
+def test_a_starved_host_refuses_up_front(monkeypatch):
+    import pytest
+
+    class FakeMemory:
+        available = (MIN_BUILD_MEMORY_MB - 1) * 1024 * 1024
+
+    monkeypatch.setattr(psutil, "virtual_memory", lambda: FakeMemory())
+    with pytest.raises(BenchError, match="Not enough free memory"):
+        build_memory_limit_mb()
 
 
 def test_systemctl_env_carries_the_bus_address(monkeypatch):

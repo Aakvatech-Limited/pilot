@@ -15,7 +15,7 @@ class BuildTask(Task):
 
     @step("build", lambda self: f"Build assets for {self.app}" if self.app else "Build assets")
     def build(self) -> None:
-        self.bench.rebuild_assets(apps=[self.app] if self.app else None)
+        self.bench.rebuild_assets(apps=[self.app] if self.app else None, force=True)
 
 
 if __name__ == "__main__":
