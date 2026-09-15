@@ -11,7 +11,9 @@ MIN_BUILD_MEMORY_MB = 512
 def build_memory_limit_mb() -> int:
     """Memory one asset build may use before the kernel kills it. A share of what
     is free rather than of total, so the limit is one the host can honour and a
-    runaway build dies instead of freezing the machine."""
+    runaway build dies instead of freezing the machine. Sized from free memory at
+    call time with no cross-build coordination, so concurrent builds are not
+    accounted for - a deliberate scope cut, not an oversight."""
     limit_mb = int(psutil.virtual_memory().available / (1024 * 1024) * BUILD_MEMORY_SHARE)
     if limit_mb < MIN_BUILD_MEMORY_MB:
         raise BenchError(
