@@ -62,7 +62,7 @@ class SetupLogsCommand(Command):
         """Central mints the JWT and names the region's Datum to present it to."""
         from pilot.integrations.central import CentralClient
 
-        if not self.bench.config.central.auth_token:
+        if not self.bench.config.central.enabled:
             return None, None
-        credentials = CentralClient(self.bench).log_token()
+        credentials = CentralClient().log_token()
         return credentials.get("endpoint") or None, credentials.get("token") or None

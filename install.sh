@@ -263,8 +263,8 @@ install_node() {
 }
 
 # The distro packages auto-start services on their default ports. Benches run
-# their own instances, so free the ports and the memory right away. nginx is
-# started by `pilot setup production`, which a sudoers grant already allows.
+# their own instances, so free the ports and the memory right away. `pilot setup
+# production` starts nginx and enables it at boot, which a sudoers grant allows.
 disable_system_services() {
     case "$DISTRO" in
         macos|unknown) return 0 ;;
@@ -465,7 +465,7 @@ install_sudoers_grants() {
 
     echo "Granting '$1' passwordless sudo for nginx and certbot..."
     write_sudoers_file "$1-pilot-nginx" \
-"$1 ALL=(ALL) NOPASSWD: $nginx_bin -t,$nginx_bin -T,$systemctl_bin start nginx,$systemctl_bin stop nginx,$systemctl_bin reload nginx"
+"$1 ALL=(ALL) NOPASSWD: $nginx_bin -t,$nginx_bin -T,$systemctl_bin start nginx,$systemctl_bin stop nginx,$systemctl_bin reload nginx,$systemctl_bin enable nginx"
     # Domain and email tokens stay wildcarded (sites arrive long after this is
     # written), but each wildcard is anchored between fixed literal text, so no
     # extra flag can be smuggled in before or after the match.

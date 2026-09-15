@@ -165,11 +165,11 @@ class ProductionSetup:
         from pilot.integrations.central.client import CentralClientError
 
         datum = self.bench.config.datum
-        if (datum.token and datum.endpoint) or not self.bench.config.central.auth_token:
+        if (datum.token and datum.endpoint) or not self.bench.config.central.enabled:
             return
 
         try:
-            token_info = CentralClient(self.bench).metrics_token()
+            token_info = CentralClient().metrics_token()
             token, endpoint = token_info.get("token"), token_info.get("endpoint")
         except CentralClientError as exc:
             on_progress(f"Could not fetch a metrics token from Central: {exc}")
@@ -188,11 +188,11 @@ class ProductionSetup:
         from pilot.integrations.central.client import CentralClientError
 
         logs = self.bench.config.logs
-        if (logs.token and logs.endpoint) or not self.bench.config.central.auth_token:
+        if (logs.token and logs.endpoint) or not self.bench.config.central.enabled:
             return
 
         try:
-            token_info = CentralClient(self.bench).log_token()
+            token_info = CentralClient().log_token()
             token, endpoint = token_info.get("token"), token_info.get("endpoint")
         except CentralClientError as exc:
             on_progress(f"Could not fetch a logs token from Central: {exc}")
