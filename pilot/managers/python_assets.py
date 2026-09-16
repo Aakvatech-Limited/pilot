@@ -87,11 +87,23 @@ class PythonAssetBuilder:
         app_name = path.name
         print(f"  Installing JS dependencies for {app_name}...")
         sys.stdout.flush()
-        run_command(
-            [get_yarn_bin(), "install", "--frozen-lockfile"],
-            cwd=path,
-            stream_output=True,
-        )
+        try:
+            run_command(
+                [get_yarn_bin(), "install", "--frozen-lockfile"],
+                cwd=path,
+                stream_output=True,
+            )
+        except Exception:
+            print(
+                f"  Frozen lockfile install failed for {app_name}; "
+                "retrying without modifying yarn.lock..."
+            )
+            sys.stdout.flush()
+            run_command(
+                [get_yarn_bin(), "install", "--pure-lockfile"],
+                cwd=path,
+                stream_output=True,
+            )
 
     def try_download_prebuilt_assets(
         self,
