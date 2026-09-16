@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ErrorMessage, Select, Skeleton } from 'frappe-ui'
-import { AreaChart } from 'frappe-ui/charts'
+import { AreaChart, useChartTokens } from 'frappe-ui/charts'
 
 import ChartCard from '@/components/common/ChartCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -43,15 +43,8 @@ const TIME_GRAIN = {
   '24h': 'hour',
   '1w': 'day',
 }
-const PALETTE = [
-  'var(--ink-blue-5)',
-  'var(--ink-amber-5)',
-  'var(--ink-green-5)',
-  'var(--ink-purple-5)',
-  'var(--ink-red-5)',
-  'var(--ink-cyan-5)',
-  'var(--ink-pink-5)',
-]
+
+const PALETTE = [1, 7, 3, 5, 9, 2, 10]
 const LIVE_WINDOW_MS = 1800 * 1000
 
 // Series names and colors
@@ -62,17 +55,17 @@ const DISK_IO_SERIES = ['Read', 'Write']
 const DISK_SERIES = 'Root Disk'
 
 const CPU_COLORS = {
-  'Busy User': 'var(--ink-blue-5)',
-  'Busy System': 'var(--ink-amber-5)',
-  'Busy IOWait': 'var(--ink-red-5)',
-  'Busy IRQ': 'var(--ink-purple-5)',
-  'Busy Other': 'var(--ink-pink-5)',
+  'Busy User': 1,
+  'Busy System': 7,
+  'Busy IOWait': 9,
+  'Busy IRQ': 5,
+  'Busy Other': 10,
 }
 const MEMORY_COLORS = {
-  Used: 'var(--ink-amber-5)',
-  'Cached + Buffers': 'var(--ink-blue-5)',
-  Free: 'var(--ink-green-5)',
-  'Swap Used': 'var(--ink-red-5)',
+  Used: 7,
+  'Cached + Buffers': 1,
+  Free: 3,
+  'Swap Used': 9,
 }
 
 // State
@@ -381,8 +374,10 @@ const liveXAxis = computed(() => ({
 const currentPoints = computed(() => (isHistorical.value ? system.value.points : liveHistory.value))
 const currentXAxis = computed(() => (isHistorical.value ? fixedXAxis.value : liveXAxis.value))
 
-const lineSeries = (color) => ({
-  color,
+const { tokens } = useChartTokens(ref())
+
+const lineSeries = (slot) => ({
+  color: tokens.value.categorical[slot - 1],
   smooth: true,
   lineWidth: 1.5,
   showDataPoints: false,
@@ -442,9 +437,9 @@ const loadChartConfig = computed(() => ({
     x: 'time',
     y: ['Load Average 1', 'Load Average 5', 'Load Average 15'],
     seriesConfig: {
-      'Load Average 1': lineSeries('var(--ink-green-5)'),
-      'Load Average 5': lineSeries('var(--ink-yellow-5)'),
-      'Load Average 15': lineSeries('var(--ink-red-5)'),
+      'Load Average 1': lineSeries(3),
+      'Load Average 5': lineSeries(7),
+      'Load Average 15': lineSeries(9),
     },
   },
 }))
