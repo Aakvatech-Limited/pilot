@@ -79,17 +79,9 @@ Firewall and WAF config are bench settings. Settings apply code should delegate 
 
 ## Build Memory Cap
 
-Asset builds (`pilot build`, and rebuilds triggered from app updates) run capped
-at 85% of the host's free memory via a transient systemd scope, so a runaway
-build fails instead of the kernel picking a victim process, usually the
-database. A full asset build peaks near 1.6GB while an idle bench is around
-300MB. Hosts with less free memory than that are refused up front with a
-clear message rather than started and killed mid-build.
+Asset builds (`pilot build`, and rebuilds triggered from app updates) run capped at 85% of the host's free memory via a transient systemd scope, so a runaway build fails instead of the kernel picking a victim process, usually the database. A full asset build peaks near 1.6GB while an idle bench is around 300MB. Hosts with less free memory than that are refused up front with a clear message rather than started and killed mid-build.
 
-The cap applies only to hosts with `systemd-run` and cgroup memory delegation
-available; where neither is available the build runs uncapped with a warning.
-Concurrent builds are not coordinated - each sizes its cap independently from
-memory free at the time it starts.
+The cap applies only to hosts with `systemd-run` and cgroup memory delegation available; where neither is available the build runs uncapped with a warning. Concurrent builds are not coordinated - each sizes its cap independently from memory free at the time it starts.
 
 ## Operational Notes
 
