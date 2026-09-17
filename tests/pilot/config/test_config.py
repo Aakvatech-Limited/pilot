@@ -282,6 +282,15 @@ def test_invalid_build_memory_limit_rejected() -> None:
     assert "build.memory_limit_mb" in str(exc_info.value)
 
 
+def test_boolean_build_memory_limit_rejected() -> None:
+    data = copy.deepcopy(MINIMAL_VALID_DATA)
+    data["build"] = {"memory_limit_mb": True}
+    config = BenchConfig._from_dict(data)
+    with pytest.raises(ConfigError) as exc_info:
+        config.validate()
+    assert "build.memory_limit_mb" in str(exc_info.value)
+
+
 def test_branches_defaults_to_empty_list() -> None:
     config = BenchConfig.from_file(FIXTURES_DIR / "minimal.toml")
     assert config.apps[0].branches == []
