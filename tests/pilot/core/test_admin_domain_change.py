@@ -306,3 +306,30 @@ def test_a_failure_after_repointing_rolls_the_endpoints_back(tmp_path: Path) -> 
 
     assert calls == [f"http://{NEW}", f"http://{OLD}"]
     assert json.loads(site.read_text()) == {"pilot_endpoint": f"http://{OLD}"}
+
+
+def test_a_wildcard_admin_domain_repoints_endpoints_over_https(tmp_path: Path) -> None:
+    bench = _admin_bench(tmp_path)
+    site = _write_site_config(bench, "site1.local", {"pilot_endpoint": f"http://{OLD}"})
+
+    with (
+        patch.object(AdminDomainChange, "_republish_nginx"),
+        patch.object(AdminDomainChange, "_reissue_certificate", lambda self, on_progress: False),
+        patch(
+            "pilot.core.adapters.domain_provider.DomainRouteProvider.wildcard_domains",
+            return_value=["*.zone.example"],
+        ),
+    ):
+        AdminDomainChange(bench, NEW).run()
+
+    assert json.loads(site.read_text()) == {"pilot_endpoint": f"https://{NEW}"}
+
+
+def test_an_admin_domain_outside_the_wildcard_set_keeps_http(tmp_path: Path) -> None:
+    bench = _admin_bench(tmp_path)
+
+    with patch(
+        "pilot.core.adapters.domain_provider.DomainRouteProvider.wildcard_domains",
+        return_value=["*.other.example"],
+    ):
+        assert bench.admin_endpoint == f"http://{OLD}"

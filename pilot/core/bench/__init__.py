@@ -412,6 +412,19 @@ class Bench:
             return site.name
         return pinned
 
+    @property
+    def admin_endpoint(self) -> str:
+        """The admin URL a site stores as `pilot_endpoint`."""
+        from pilot.core.adapters.domain_provider import DomainRouteProvider
+        from pilot.utils import admin_url, matches_wildcard
+
+        admin = self.config.admin
+        url = admin_url(self.config)
+        if admin.route or not self.config.production.enabled or not admin.domain:
+            return url
+        patterns = DomainRouteProvider.wildcard_domains()
+        return f"https://{admin.domain}" if matches_wildcard(admin.domain, patterns) else url
+
     def change_admin_domain(
         self,
         domain: str,

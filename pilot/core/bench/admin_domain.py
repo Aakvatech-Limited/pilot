@@ -154,9 +154,7 @@ class AdminDomainChange:
 
     def repoint_pilot_endpoints(self) -> None:
         """Point every existing `pilot_endpoint` in the bench's site configs at the admin URL."""
-        from pilot.utils import admin_url
-
-        endpoint = admin_url(self.bench.config)
+        endpoint = self.bench.admin_endpoint
         common_config_path = self.bench.sites_path / "common_site_config.json"
         self._repoint_pilot_endpoint(common_config_path, endpoint, indent=2)
         for config_path in sorted(self.bench.sites_path.glob("*/site_config.json")):

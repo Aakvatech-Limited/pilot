@@ -84,13 +84,13 @@ class SiteProvisioner:
 
     def write_pilot_communication_config(self, site: "Site") -> None:
         from admin.backend.internal.session import Session
-        from pilot.utils import admin_url, write_private_text
+        from pilot.utils import write_private_text
 
         config_path = site.path / "site_config.json"
         if not config_path.exists():
             return
         config = json.loads(config_path.read_text())
-        config["pilot_endpoint"] = admin_url(self.bench.config)
+        config["pilot_endpoint"] = self.bench.admin_endpoint
         config["pilot_auth_token"] = Session(self.bench).issue_site_token(
             site.config.name,
             ttl=365 * 24 * 3600,
