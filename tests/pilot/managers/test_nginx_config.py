@@ -947,6 +947,23 @@ def test_provider_passthrough_route_enables_proxy_protocol(tmp_path: Path) -> No
     assert "proxy_set_header   X-Forwarded-Proto  https;" in config
 
 
+def test_proxy_route_with_no_servers_defines_a_fail_closed_gate(tmp_path: Path) -> None:
+    from pilot.config import RoutePolicy
+
+    site = SiteConfig(
+        name="site-a1b2c3.zone.example",
+        apps=["frappe"],
+        route=RoutePolicy("https", "http", "x_forwarded_for"),
+    )
+    config = _renderer(tmp_path, proxy_servers=[]).generate_bench_config(
+        [(site, site.tls_domains)], admin_ssl=False
+    )
+
+    assert "geo $realip_remote_addr $bench_test_bench_from_proxy {" in config
+    assert "default 0;" in config
+    assert "set $bench_from_proxy $bench_test_bench_from_proxy;" in config
+
+
 def test_edge_terminated_domains_are_served_plain_and_never_redirected(tmp_path: Path) -> None:
     site = _mixed_site()
     config = _renderer(tmp_path).generate_bench_config([(site, site.tls_domains)], admin_ssl=False)
