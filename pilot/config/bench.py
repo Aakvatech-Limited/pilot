@@ -582,6 +582,8 @@ class BenchConfig:
             "tls": self.admin.tls,
             "allow_bench_management": self.admin.allow_bench_management,
         }
+        if self.admin.route:
+            admin["route"] = self.admin.route.to_dict()
         # jwks_url/jwks_audience are host-shared (common_config.toml), not written here.
         optional_admin = {
             "jwt_secret": self.admin.jwt_secret,
