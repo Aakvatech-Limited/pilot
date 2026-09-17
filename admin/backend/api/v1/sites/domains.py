@@ -115,7 +115,21 @@ def list_domains(name: str):
         return site_not_found()
     try:
         domains = _site_domains(bench_root, name)
-        return jsonify({"domains": domains.names(), "primary": domains.primary()})
+        domain_names = domains.names()
+        site = next(item.config for item in Bench(bench_root).sites() if item.config.name == name)
+        primary = domains.primary() or name
+        rows = []
+        for domain in [name, *domain_names]:
+            rows.append(
+                {
+                    "domain": domain,
+                    "is_site": domain == name,
+                    "is_primary": domain == primary,
+                    "public_scheme": site.route_for(domain).public_scheme,
+                    "tls": site.uses_tls(domain),
+                }
+            )
+        return jsonify({"domains": rows, "primary": primary})
     except BenchError as error:
         return _domain_failure(error, "Could not read site domains.")
     except Exception:
@@ -181,7 +195,16 @@ def get_domain(name: str, domain: str):
         return internal_error("Could not read the domain.")
     if not attached:
         return error_response("domain_not_found", "Domain not found.", 404)
-    return jsonify({"domain": domain, "is_primary": is_primary})
+    site = next(item.config for item in Bench(bench_root).sites() if item.config.name == name)
+    route = site.route_for(domain)
+    return jsonify(
+        {
+            "domain": domain,
+            "is_primary": is_primary,
+            "public_scheme": route.public_scheme,
+            "tls": route.public_tls,
+        }
+    )
 
 
 @sites_bp.patch("/<name>/domains/<domain>")
