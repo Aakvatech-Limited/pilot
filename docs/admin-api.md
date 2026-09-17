@@ -72,7 +72,9 @@ Two app operations answer inline instead of returning a task id, because both ar
 
 ### Site Detail And Login
 
-`GET /sites/<name>` includes `url`, the origin the site is served on (scheme, primary host, and port derived from the bench config), which the UI uses for "Open site".
+`GET /sites/<name>` includes `url` and `tls`. The route policy supplies the public scheme for both values.
+
+`GET /sites/<name>/domains` returns one row for each hostname. Each row has `domain`, `is_site`, `is_primary`, `public_scheme`, and `tls`.
 
 `POST /sites/<name>/login` returns `{"url": ...}` plus an optional `hint` when the URL's host does not resolve on the server - the UI surfaces it so the user knows to add a hosts entry or use a `*.localhost` name.
 
