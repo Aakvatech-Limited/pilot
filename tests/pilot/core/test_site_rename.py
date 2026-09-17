@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from pilot.config import RoutePolicy
 from pilot.core.bench import Bench
 from pilot.core.site.rename import SiteRename
 from pilot.exceptions import BenchError
@@ -170,6 +171,22 @@ def test_the_old_hostname_can_be_released_instead(tmp_path: Path) -> None:
     _rename(bench, keep_old_hostname=False)
 
     assert _config(bench, NEW).get("domains") in (None, [])
+
+
+def test_edge_tls_route_is_persisted_after_rename(tmp_path: Path) -> None:
+    bench = _bench(tmp_path)
+    _site(bench, OLD)
+    route = RoutePolicy("https", "http", "x_forwarded_for")
+
+    with patch(
+        "pilot.core.adapters.domain_provider.DomainRouteProvider.register",
+        return_value=route,
+    ):
+        _rename(bench)
+
+    saved = _config(bench, NEW)
+    assert saved["ssl"] is True
+    assert saved["route"]["origin_scheme"] == "http"
 
 
 def test_a_canonical_host_naming_the_old_site_moves_with_it(tmp_path: Path) -> None:

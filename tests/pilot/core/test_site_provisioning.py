@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from pilot.config import BenchConfig, RoutePolicy, SiteConfig
 from pilot.core.bench import Bench
+from pilot.core.site import Site
 from pilot.core.site.provisioning import SiteProvisioner
 
 _BASE_DATA: dict = {
@@ -44,18 +46,15 @@ def test_obtain_cert_never_regenerates_without_ssl(tmp_path: Path) -> None:
 def test_edge_tls_site_sets_ssl_without_obtaining_a_certificate(tmp_path: Path) -> None:
     provisioner = _provisioner(tmp_path)
     route = RoutePolicy("https", "http", "x_forwarded_for")
-    site = MagicMock()
 
-    def make_site(config, bench):
-        site.config = config
-        site.bench = bench
-        return site
+    def create_site(site: Site, db_type: str | None = None) -> None:
+        site.path.mkdir(parents=True)
+        (site.path / "site_config.json").write_text(json.dumps({"db_name": "site1"}))
 
     with (
         patch("pilot.core.site.provisioning.validate_new_site", return_value=True),
         patch("pilot.core.site.provisioning.register_with_provider", return_value=route),
-        patch("pilot.core.site.Site", side_effect=make_site),
-        patch.object(provisioner, "write_route_policy"),
+        patch.object(Site, "create", create_site),
         patch.object(provisioner, "install_apps"),
         patch.object(provisioner, "write_pilot_communication_config"),
         patch.object(provisioner, "build_missing_assets"),
@@ -64,8 +63,11 @@ def test_edge_tls_site_sets_ssl_without_obtaining_a_certificate(tmp_path: Path) 
         patch.object(provisioner, "obtain_cert") as obtain_cert,
         patch.object(provisioner.bench, "write_common_site_config"),
     ):
-        provisioner.provision(lambda _: None)
+        site = provisioner.provision(lambda _: None)
 
     assert site.config.ssl is True
     assert site.config.route == route
+    persisted = json.loads((site.path / "site_config.json").read_text())
+    assert persisted["ssl"] is True
+    assert persisted["route"]["origin_scheme"] == "http"
     obtain_cert.assert_not_called()
