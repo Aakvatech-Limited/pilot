@@ -33,6 +33,8 @@ elif verb == "wildcard-domains":
     print(json.dumps(["*.example.com"]))
 elif verb == "proxy-servers":
     print(json.dumps(["203.0.113.10", "203.0.113.11"]))
+elif verb == "register":
+    print(json.dumps({"public_scheme": "https", "origin_scheme": "https", "client_ip_source": "proxy_protocol_v2"}))
 sys.exit(0)
 """
 
@@ -105,9 +107,31 @@ def test_register_passes_domain_only_and_persists(tmp_path: Path, monkeypatch) -
 
     DomainRouteProvider(bench).register("mysite", "app.example.com")
 
-    assert _calls(log) == ["register app.example.com"]
+    assert _calls(log) == ["register app.example.com", "proxy-servers"]
     saved = json.loads((bench.sites_path / "mysite" / "site_config.json").read_text())
-    assert saved["domains"] == ["app.example.com"]
+    assert saved["domains"] == [{
+        "domain": "app.example.com",
+        "route": {
+            "public_scheme": "https",
+            "origin_scheme": "https",
+            "client_ip_source": "proxy_protocol_v2",
+        },
+    }]
+
+
+def test_register_rejects_missing_policy_and_rolls_back(tmp_path: Path, monkeypatch) -> None:
+    provider = _DUMMY_PROVIDER.replace(
+        'elif verb == "register":\n    print(json.dumps({"public_scheme": "https", "origin_scheme": "https", "client_ip_source": "proxy_protocol_v2"}))',
+        'elif verb == "register":\n    pass',
+    )
+    log = _install_provider(tmp_path, monkeypatch, body=provider)
+    bench = _make_bench(tmp_path)
+    _write_site(bench, "mysite")
+
+    with pytest.raises(DomainProviderError, match="route policy"):
+        DomainRouteProvider(bench).register("mysite", "app.example.com")
+
+    assert _calls(log) == ["register app.example.com", "deregister app.example.com"]
 
 
 def test_deregister_passes_domain_only_and_persists(tmp_path: Path, monkeypatch) -> None:
