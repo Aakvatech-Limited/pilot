@@ -18,6 +18,7 @@ class RoutePolicy:
 
     @classmethod
     def from_dict(cls, data: object) -> "RoutePolicy":
+        """Parse and validate a provider route policy."""
         if not isinstance(data, dict):
             raise ConfigError("The domain provider route policy must be a JSON object.")
         expected = {"public_scheme", "origin_scheme", "client_ip_source"}
@@ -34,10 +35,12 @@ class RoutePolicy:
 
     @classmethod
     def direct(cls, tls: bool) -> "RoutePolicy":
+        """Build a route with no proxy between the client and Pilot."""
         scheme = "https" if tls else "http"
         return cls(scheme, scheme, "direct")
 
     def validate(self) -> None:
+        """Reject unsupported schemes and client-address sources."""
         if self.public_scheme not in PUBLIC_SCHEMES:
             raise ConfigError("The route public_scheme must be 'http' or 'https'.")
         if self.origin_scheme not in PUBLIC_SCHEMES:
@@ -50,17 +53,21 @@ class RoutePolicy:
 
     @property
     def public_tls(self) -> bool:
+        """Whether clients reach this route over HTTPS."""
         return self.public_scheme == "https"
 
     @property
     def origin_tls(self) -> bool:
+        """Whether the provider reaches Pilot over HTTPS."""
         return self.origin_scheme == "https"
 
     @property
     def uses_proxy_protocol(self) -> bool:
+        """Whether the origin connection uses PROXY protocol v2."""
         return self.client_ip_source == "proxy_protocol_v2"
 
     def to_dict(self) -> dict[str, str]:
+        """Serialize this policy for site or bench configuration."""
         return {
             "public_scheme": self.public_scheme,
             "origin_scheme": self.origin_scheme,

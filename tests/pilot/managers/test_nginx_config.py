@@ -185,6 +185,7 @@ def test_direct_exposure_keeps_default_xff(tmp_path: Path) -> None:
     config = _site_config(tmp_path, _BASE_SITE, proxy_servers=[])
 
     assert "set_real_ip_from" not in config
+    assert "realip_remote_addr" not in config
     assert "set $bench_from_proxy" not in config
     assert "if ($bench_from_proxy = 0)" not in config
     assert "X-Forwarded-For    $proxy_add_x_forwarded_for" in config

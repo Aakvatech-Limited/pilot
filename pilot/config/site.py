@@ -93,9 +93,11 @@ class SiteConfig:
         return self.route.origin_tls if self.route else self.ssl
 
     def route_for(self, domain: str) -> RoutePolicy:
+        """Return the configured route or the site's direct-route default."""
         return self.configured_route_for(domain) or RoutePolicy.direct(self.terminates_tls(domain))
 
     def configured_route_for(self, domain: str) -> RoutePolicy | None:
+        """Return explicit route metadata for a site domain, if present."""
         for entry in self.domains:
             if entry.name == domain and entry.route:
                 return entry.route
@@ -104,6 +106,7 @@ class SiteConfig:
         return None
 
     def uses_tls(self, domain: str) -> bool:
+        """Whether clients reach a site domain over HTTPS."""
         return self.route_for(domain).public_tls
 
     @property

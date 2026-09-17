@@ -3,12 +3,14 @@ upstream bench-{{ upstream_name }} {
     keepalive 32;
 }
 
+{% if proxy_gate_enabled %}
 geo $realip_remote_addr {{ proxy_gate_variable }} {
     default 0;
     {% for ip in proxy_servers %}
     {{ ip }} 1;
     {% endfor %}
 }
+{% endif %}
 
 {% for alias in aliases %}
 server {

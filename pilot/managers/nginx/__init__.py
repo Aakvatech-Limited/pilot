@@ -309,6 +309,7 @@ class NginxConfigRenderer:
             "proxy_gate_variable": "$bench_"
             + re.sub(r"[^a-zA-Z0-9_]", "_", config.name)
             + "_from_proxy",
+            "proxy_gate_enabled": any(vhost.trusted_proxy for vhost in vhosts),
             "firewall": config.firewall,
             "waf_active": self._is_waf_active(),
             "waf_rules_file": self.bench.config_path / "modsecurity" / "main.conf",
