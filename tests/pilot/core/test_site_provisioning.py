@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from pilot.config import BenchConfig, SiteConfig
+from pilot.config import BenchConfig, RoutePolicy, SiteConfig
 from pilot.core.bench import Bench
 from pilot.core.site.provisioning import SiteProvisioner
 
@@ -39,3 +39,33 @@ def test_obtain_cert_never_regenerates_without_ssl(tmp_path: Path) -> None:
     assert ssl_ready_flags == [True]
     mock_letsencrypt.return_value.obtain.assert_called_once_with(site.config)
     manager.reload.assert_called_once()
+
+
+def test_edge_tls_site_sets_ssl_without_obtaining_a_certificate(tmp_path: Path) -> None:
+    provisioner = _provisioner(tmp_path)
+    route = RoutePolicy("https", "http", "x_forwarded_for")
+    site = MagicMock()
+
+    def make_site(config, bench):
+        site.config = config
+        site.bench = bench
+        return site
+
+    with (
+        patch("pilot.core.site.provisioning.validate_new_site", return_value=True),
+        patch("pilot.core.site.provisioning.register_with_provider", return_value=route),
+        patch("pilot.core.site.Site", side_effect=make_site),
+        patch.object(provisioner, "write_route_policy"),
+        patch.object(provisioner, "install_apps"),
+        patch.object(provisioner, "write_pilot_communication_config"),
+        patch.object(provisioner, "build_missing_assets"),
+        patch.object(provisioner, "add_to_hosts"),
+        patch.object(provisioner, "reload_nginx"),
+        patch.object(provisioner, "obtain_cert") as obtain_cert,
+        patch.object(provisioner.bench, "write_common_site_config"),
+    ):
+        provisioner.provision(lambda _: None)
+
+    assert site.config.ssl is True
+    assert site.config.route == route
+    obtain_cert.assert_not_called()

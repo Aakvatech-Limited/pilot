@@ -27,7 +27,10 @@ def _nginx_reload_hook() -> str:
 
 def is_public_domain(domain: str) -> bool:
     """Whether certbot can validate the domain publicly."""
-    return bool(domain) and not domain.endswith(".localhost")
+    domain = domain.strip().lower().rstrip(".")
+    return bool(domain) and domain not in {"local", "localhost"} and not domain.endswith(
+        (".local", ".localhost")
+    )
 
 
 def public_domains(site: "SiteConfig") -> list[str]:
