@@ -412,6 +412,19 @@ class Bench:
             return site.name
         return pinned
 
+    def clear_cache(self) -> None:
+        """Drop Frappe's cached config and assets for every site in this bench."""
+        from pilot.utils import run_command
+
+        if not self.sites():
+            return
+
+        run_command(
+            [*self.frappe_call, "frappe", "--site", "all", "clear-cache"],
+            cwd=self.sites_path,
+            timeout=120,
+        )
+
     @property
     def admin_endpoint(self) -> str:
         """The admin URL a site stores as `pilot_endpoint`."""

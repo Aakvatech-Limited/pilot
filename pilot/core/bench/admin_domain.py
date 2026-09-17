@@ -101,7 +101,6 @@ class AdminDomainChange:
         try:
             self._persist()
             self._retarget_hostname_aliases()
-            # Publish the vhost before HTTP-01 certificate validation.
             self._republish_nginx()
             if self._reissue_certificate(on_progress):
                 self._republish_nginx()
@@ -112,7 +111,15 @@ class AdminDomainChange:
             raise
 
         self._route.release_previous()
+        self._clear_site_cache(on_progress)
         on_progress(f"\nAdmin is now at {self._served_scheme()}://{self.domain}")
+
+    def _clear_site_cache(self, on_progress: Callable[[str], None]) -> None:
+        """Drop cached site configs so sites read the new pilot_endpoint."""
+        try:
+            self.bench.clear_cache()
+        except (BenchError, OSError) as exc:
+            on_progress(f"Warning: could not clear the site cache: {exc}")
 
     def _served_scheme(self) -> str:
         admin = self.bench.config.admin
