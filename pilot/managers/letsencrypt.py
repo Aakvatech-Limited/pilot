@@ -198,7 +198,8 @@ class LetsEncryptManager:
                 else:
                     self.obtain(site.config)
             except CommandError as exc:
-                print(f"Could not obtain a certificate for '{site.config.name}', skipping: {exc}")
+                domains = ", ".join(f"'{domain}'" for domain in certificate_domains(site.config))
+                print(f"Could not obtain a certificate for {domains} (site '{site.config.name}'), skipping: {exc}")
                 failed.append(site.config.name)
         if self.bench.config.admin.tls and is_public_domain(self.bench.config.admin.domain):
             try:
