@@ -58,7 +58,17 @@ class SiteDomains:
     def describe_domain(self, domain: str) -> dict[str, str | bool] | None:
         """Return one attached domain with its primary and public route state."""
         attached, is_primary = self.status(domain)
-        return self._description(self._site_config(), domain, is_primary) if attached else None
+        if not attached:
+            return None
+
+        from pilot.utils import normalize_host
+
+        config = self._site_config()
+        normalized = normalize_host(domain)
+        attached_domain = next(
+            candidate for candidate in config.all_domains if normalize_host(candidate) == normalized
+        )
+        return self._description(config, attached_domain, is_primary)
 
     def apply_task(self, idempotency_key: str | None = None) -> str:
         from pilot.tasks.setup_letsencrypt import SetupLetsEncryptTask
