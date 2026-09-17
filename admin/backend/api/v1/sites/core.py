@@ -73,21 +73,26 @@ def detail(name: str):
         installable = []
 
     try:
-        bench_config = Bench(bench_root).config
+        bench = Bench(bench_root)
+        bench_config = bench.config
+        pilot_site = next(item.config for item in bench.sites() if item.config.name == name)
         http_port = bench_config.http_port
         nginx_enabled = bench_config.production.enabled
-        admin_tls = bench_config.admin.tls
+        admin_tls = bench_config.admin.route_policy.public_tls
         url = site_url(name, site.site_config, bench_config)
+        site_tls = pilot_site.uses_tls(pilot_site.primary)
     except Exception:
         http_port = 8000
         nginx_enabled = False
         admin_tls = False
         url = f"http://{name}:8000"
+        site_tls = False
 
     return jsonify(
         {
             **_site_resource(site),
             "ssl": bool(site.site_config.get("ssl")),
+            "tls": site_tls,
             "installable_apps": installable,
             "http_port": http_port,
             "nginx_enabled": nginx_enabled,
@@ -280,8 +285,7 @@ def create_login_link(name: str):
         return site_not_found()
     try:
         bench = Bench(bench_root)
-        proxy_tls = current_app.config["SESSION_COOKIE_SECURE"] and not bench.config.admin.tls
-        url = bench.site(name).admin_login_url(proxy_tls=proxy_tls)
+        url = bench.site(name).admin_login_url()
     except Exception:
         return error_response(
             "configuration_unavailable",
