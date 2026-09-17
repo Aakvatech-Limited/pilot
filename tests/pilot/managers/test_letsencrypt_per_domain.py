@@ -93,3 +93,22 @@ def test_the_admin_certificate_still_follows_the_admin_flag(tmp_path: Path) -> N
 
     bench.config.admin.tls = True
     assert "ADMIN" in _obtained(bench)
+
+
+def test_a_failure_names_the_certificate_domain_not_only_the_site(tmp_path: Path, capsys) -> None:
+    """Certbot ran for the custom domain, so the report must name that domain."""
+    from pilot.exceptions import CommandError
+
+    bench = _bench(tmp_path)
+    bench.config.admin.tls = False
+    _site(bench, "site-a1.zone.example", ssl=False, domains=[{"domain": "shop.customer.com", "tls": True}])
+
+    def _fail(self, site) -> None:
+        raise CommandError("certbot failed")
+
+    with patch.object(LetsEncryptManager, "obtain", _fail):
+        LetsEncryptManager(bench).obtain_all()
+
+    output = capsys.readouterr().out
+    assert "'shop.customer.com'" in output
+    assert "site 'site-a1.zone.example'" in output
