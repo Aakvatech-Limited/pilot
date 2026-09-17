@@ -8,6 +8,7 @@ from pilot.config import SiteConfig
 from pilot.exceptions import BenchError
 
 if TYPE_CHECKING:
+    from pilot.config import RoutePolicy
     from pilot.core.bench import Bench
     from pilot.core.site import Site
 
@@ -61,6 +62,7 @@ class SiteProvisioner:
         return site
 
     def write_route_policy(self, site: "Site") -> None:
+        """Persist provider route metadata after site creation."""
         if not site.config.route:
             return
         from pilot.utils import write_private_text
@@ -193,5 +195,6 @@ def should_enable_ssl(bench: "Bench", name: str) -> bool:
     return letsencrypt_active(bench) and is_public_domain(name)
 
 
-def register_with_provider(bench: "Bench", name: str):
+def register_with_provider(bench: "Bench", name: str) -> "RoutePolicy | None":
+    """Register a site hostname and return its provider route policy."""
     return bench.site(name).domains.register(name)

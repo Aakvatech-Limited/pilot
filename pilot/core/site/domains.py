@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from pilot.core.adapters.domain_provider import DomainRouteProvider
 
 if TYPE_CHECKING:
+    from pilot.config import RoutePolicy
     from pilot.core.site import Site
 
 
@@ -17,7 +18,8 @@ class SiteDomains:
     def generate_dns_records(self, domain: str) -> dict:
         return self._provider.generate_dns_records(self.site.config.name, domain)
 
-    def register(self, domain: str):
+    def register(self, domain: str) -> "RoutePolicy | None":
+        """Register a domain and return its provider route policy."""
         return self._provider.register(self.site.config.name, domain)
 
     def deregister(self, domain: str) -> None:
