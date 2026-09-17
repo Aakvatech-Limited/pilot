@@ -83,6 +83,8 @@ Asset builds (`pilot build`, and rebuilds triggered from app updates) run capped
 
 The cap applies only to hosts with `systemd-run` and cgroup memory delegation available; where neither is available the build runs uncapped with a warning. Concurrent builds are not coordinated - each sizes its cap independently from memory free at the time it starts.
 
+Set `[build] memory_limit_mb` in `bench.toml` to use a fixed cap instead of the automatic 85%-of-free-memory sizing.
+
 ## Operational Notes
 
 - Production changes may need non-interactive sudo.
