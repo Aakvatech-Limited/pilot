@@ -50,6 +50,25 @@ def _mocked_site_domains(bench_root: Path, site: str, domains=(), primary=None):
         return attached, bool(primary) and normalize_host(primary) == normalized
 
     site_domains.status.side_effect = status
+
+    def description(domain: str):
+        attached, is_primary = status(domain)
+        if not attached:
+            return None
+        return {
+            "domain": domain,
+            "is_site": domain == site,
+            "is_primary": is_primary,
+            "public_scheme": "http",
+            "tls": False,
+        }
+
+    site_domains.describe_domain.side_effect = description
+    effective_primary = primary or site
+    site_domains.describe.return_value = (
+        [description(domain) for domain in [site, *domain_names]],
+        effective_primary,
+    )
     return site_domains
 
 
@@ -75,6 +94,7 @@ def test_get_domain_reports_the_site_itself_as_attached_and_primary(tmp_path: Pa
     assert response.status_code == 200
     assert response.get_json() == {
         "domain": "site.localhost",
+        "is_site": True,
         "is_primary": True,
         "public_scheme": "http",
         "tls": False,
@@ -126,6 +146,7 @@ def test_get_domain_reports_a_custom_domain(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.get_json() == {
         "domain": "custom.example.com",
+        "is_site": False,
         "is_primary": True,
         "public_scheme": "http",
         "tls": False,

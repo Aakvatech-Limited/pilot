@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from pilot.core.adapters.domain_provider import DomainRouteProvider
 
 if TYPE_CHECKING:
-    from pilot.config import RoutePolicy
+    from pilot.config import RoutePolicy, SiteConfig
     from pilot.core.site import Site
 
 
@@ -44,6 +44,22 @@ class SiteDomains:
         attached = normalized in {normalize_host(name) for name in self.names()}
         return attached, primary is not None and normalize_host(primary) == normalized
 
+    def describe(self) -> tuple[list[dict[str, str | bool]], str]:
+        """Return all domains with their primary and public route state."""
+        config = self._site_config()
+        site_name = config.name
+        primary = self.primary() or site_name
+        rows = [
+            self._description(config, domain, domain == primary)
+            for domain in [site_name, *self.names()]
+        ]
+        return rows, primary
+
+    def describe_domain(self, domain: str) -> dict[str, str | bool] | None:
+        """Return one attached domain with its primary and public route state."""
+        attached, is_primary = self.status(domain)
+        return self._description(self._site_config(), domain, is_primary) if attached else None
+
     def apply_task(self, idempotency_key: str | None = None) -> str:
         from pilot.tasks.setup_letsencrypt import SetupLetsEncryptTask
         from pilot.tasks.setup_nginx import SetupNginxTask
@@ -69,3 +85,25 @@ class SiteDomains:
             route=RoutePolicy.from_dict(config["route"]) if config.get("route") else None,
         )
         return bool(site.tls_domains)
+
+    def _site_config(self) -> "SiteConfig":
+        return next(
+            site.config
+            for site in self.site.bench.sites()
+            if site.config.name == self.site.config.name
+        )
+
+    def _description(
+        self,
+        config: "SiteConfig",
+        domain: str,
+        is_primary: bool,
+    ) -> dict[str, str | bool]:
+        route = config.route_for(domain)
+        return {
+            "domain": domain,
+            "is_site": domain == config.name,
+            "is_primary": is_primary,
+            "public_scheme": route.public_scheme,
+            "tls": route.public_tls,
+        }
