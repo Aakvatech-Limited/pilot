@@ -11,6 +11,7 @@ from pilot.config.central import HostnameAlias
 from pilot.config.common import CommonConfig
 from pilot.core.bench import Bench
 from pilot.core.bench.admin_domain import AdminDomainChange
+from pilot.exceptions import BenchError
 from pilot.managers.nginx import NginxManager
 from tests.pilot.integrations.test_central_client import _bench
 
@@ -333,3 +334,32 @@ def test_an_admin_domain_outside_the_wildcard_set_keeps_http(tmp_path: Path) -> 
         return_value=["*.other.example"],
     ):
         assert bench.admin_endpoint == f"http://{OLD}"
+
+
+def test_a_successful_change_clears_the_bench_cache(tmp_path: Path) -> None:
+    bench = _admin_bench(tmp_path)
+    _write_site_config(bench, "site1.local", {"pilot_endpoint": f"http://{OLD}"})
+
+    with (
+        patch.object(AdminDomainChange, "_republish_nginx"),
+        patch.object(AdminDomainChange, "_reissue_certificate", lambda self, on_progress: False),
+        patch.object(Bench, "clear_cache") as clear_cache,
+    ):
+        AdminDomainChange(bench, NEW).run()
+
+    clear_cache.assert_called_once_with()
+
+
+def test_a_cache_clear_failure_does_not_undo_the_change(tmp_path: Path) -> None:
+    bench = _admin_bench(tmp_path)
+    messages = []
+
+    with (
+        patch.object(AdminDomainChange, "_republish_nginx"),
+        patch.object(AdminDomainChange, "_reissue_certificate", lambda self, on_progress: False),
+        patch.object(Bench, "clear_cache", side_effect=BenchError("redis is down")),
+    ):
+        AdminDomainChange(bench, NEW).run(messages.append)
+
+    assert BenchConfig.read(bench.path).admin.domain == NEW
+    assert any("could not clear the site cache" in message for message in messages)
