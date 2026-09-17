@@ -228,7 +228,7 @@ class SiteRename:
         config["domains"] = domains
         if self._new_route:
             config["route"] = self._new_route.to_dict()
-            config["ssl"] = self._new_route.origin_tls
+            config["ssl"] = self._new_route.public_tls
 
         # A canonical host naming the old site has to move with it, or nginx
         # redirects every request to a hostname this site no longer answers to.

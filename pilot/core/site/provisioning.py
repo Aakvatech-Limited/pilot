@@ -35,7 +35,8 @@ class SiteProvisioner:
         route = None
         if via_wildcard:
             route = register_with_provider(self.bench, self.name)
-        ssl = route.origin_tls if route else should_enable_ssl(self.bench, self.name)
+        ssl = route.public_tls if route else should_enable_ssl(self.bench, self.name)
+        origin_tls = route.origin_tls if route else ssl
 
         site = Site(
             SiteConfig(
@@ -57,7 +58,7 @@ class SiteProvisioner:
         self.build_missing_assets()
         self.add_to_hosts(site)
         self.reload_nginx()
-        if ssl:
+        if origin_tls:
             self.obtain_cert(site, on_progress)
         return site
 
@@ -69,7 +70,7 @@ class SiteProvisioner:
 
         path = site.path / "site_config.json"
         config = json.loads(path.read_text())
-        config["ssl"] = site.config.route.origin_tls
+        config["ssl"] = site.config.route.public_tls
         config["route"] = site.config.route.to_dict()
         write_private_text(path, json.dumps(config, indent=1))
 

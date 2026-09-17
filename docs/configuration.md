@@ -106,7 +106,7 @@ Site-specific settings, including developer mode, live in each site's `site_conf
 
 ### Per-domain TLS
 
-A site answers on its own name plus every entry in its `site_config.json` `domains` list. Each entry is either a bare hostname, which follows the site's `ssl` flag, or a mapping that decides for itself:
+A site answers on its own name plus every entry in its `site_config.json` `domains` list. The `ssl` flag records whether clients use HTTPS for the site. A bare hostname follows that flag for both public and origin TLS. A route mapping decides public and origin TLS separately:
 
 ```json
 {
@@ -127,7 +127,7 @@ A site answers on its own name plus every entry in its `site_config.json` `domai
 
 Pilot creates one virtual host for each origin mode. A provider route can use HTTPS for clients and HTTP for its Pilot origin.
 
-Pilot shows this route as TLS, but it does not get a certificate. A passthrough route uses HTTPS for both connections.
+Pilot stores `ssl: true` and shows this route as TLS, but it does not get a certificate. A passthrough route uses HTTPS for both connections.
 
 Pilot gets the passthrough certificate. Pilot also accepts the client IP source from the provider policy.
 
