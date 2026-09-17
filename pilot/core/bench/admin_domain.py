@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pilot.exceptions import BenchError
+from pilot.internal.atomic_file import exclusive_file_lock, replace_private_text_locked
 from pilot.utils import host_owner, matches_wildcard, normalize_host
 
 if TYPE_CHECKING:
@@ -99,6 +102,7 @@ class AdminDomainChange:
             if self._reissue_certificate(on_progress):
                 self._republish_nginx()
             self._require_tls_if_requested()
+            self.repoint_pilot_endpoints()
         except BaseException:
             self._roll_back(restore, on_progress)
             raise
@@ -129,6 +133,27 @@ class AdminDomainChange:
         admin = self.bench.config.admin
         with BenchConfig.open(self.bench.path, mode="raw") as data:
             data.setdefault("admin", {}).update({"domain": admin.domain, "tls": admin.tls})
+
+    def repoint_pilot_endpoints(self) -> None:
+        """Point every existing `pilot_endpoint` in the bench's site configs at the admin URL."""
+        from pilot.utils import admin_url
+
+        endpoint = admin_url(self.bench.config)
+        common_config_path = self.bench.sites_path / "common_site_config.json"
+        self._repoint_pilot_endpoint(common_config_path, endpoint, indent=2)
+        for config_path in sorted(self.bench.sites_path.glob("*/site_config.json")):
+            if not config_path.parent.is_symlink():
+                self._repoint_pilot_endpoint(config_path, endpoint, indent=1)
+
+    def _repoint_pilot_endpoint(self, config_path: Path, endpoint: str, indent: int) -> None:
+        if not config_path.is_file() or config_path.is_symlink():
+            return
+        with exclusive_file_lock(config_path):
+            config = json.loads(config_path.read_text())
+            if "pilot_endpoint" not in config or config["pilot_endpoint"] == endpoint:
+                return
+            config["pilot_endpoint"] = endpoint
+            replace_private_text_locked(config_path, json.dumps(config, indent=indent))
 
     def _retarget_hostname_aliases(self) -> None:
         self.bench.hostname_aliases.retarget("admin", self.previous, self.domain)
@@ -179,6 +204,8 @@ class AdminDomainChange:
             self._persist()
         with contextlib.suppress(Exception):
             self.bench.hostname_aliases.retarget("admin", self.domain, self.previous)
+        with contextlib.suppress(Exception):
+            self.repoint_pilot_endpoints()
         # Rollback must not hide the original failure or skip nginx recovery.
         with contextlib.suppress(Exception):
             self._route.rollback()
