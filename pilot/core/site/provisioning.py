@@ -31,9 +31,10 @@ class SiteProvisioner:
         from pilot.core.site import Site
 
         via_wildcard = validate_new_site(self.bench, self.name, self.apps)
-        ssl = should_enable_ssl(self.bench, self.name)
+        route = None
         if via_wildcard:
-            register_with_provider(self.bench, self.name)
+            route = register_with_provider(self.bench, self.name)
+        ssl = route.origin_tls if route else should_enable_ssl(self.bench, self.name)
 
         site = Site(
             SiteConfig(
@@ -41,11 +42,13 @@ class SiteProvisioner:
                 apps=self.apps,
                 admin_password=self.admin_password,
                 ssl=ssl,
+                route=route,
             ),
             self.bench,
         )
         on_progress(f"Creating site '{self.name}'...")
         site.create(db_type=self.db_type)
+        self.write_route_policy(site)
         self.install_apps(site, on_progress)
         self.write_pilot_communication_config(site)
         self.bench.write_common_site_config()
@@ -56,6 +59,17 @@ class SiteProvisioner:
         if ssl:
             self.obtain_cert(site, on_progress)
         return site
+
+    def write_route_policy(self, site: "Site") -> None:
+        if not site.config.route:
+            return
+        from pilot.utils import write_private_text
+
+        path = site.path / "site_config.json"
+        config = json.loads(path.read_text())
+        config["ssl"] = site.config.route.origin_tls
+        config["route"] = site.config.route.to_dict()
+        write_private_text(path, json.dumps(config, indent=1))
 
     def install_apps(self, site: "Site", on_progress: Callable[[str], None]) -> None:
         framework = self.bench.config.framework_app.name
@@ -179,5 +193,5 @@ def should_enable_ssl(bench: "Bench", name: str) -> bool:
     return letsencrypt_active(bench) and is_public_domain(name)
 
 
-def register_with_provider(bench: "Bench", name: str) -> None:
-    bench.site(name).domains.register(name)
+def register_with_provider(bench: "Bench", name: str):
+    return bench.site(name).domains.register(name)

@@ -17,8 +17,8 @@ class SiteDomains:
     def generate_dns_records(self, domain: str) -> dict:
         return self._provider.generate_dns_records(self.site.config.name, domain)
 
-    def register(self, domain: str) -> None:
-        self._provider.register(self.site.config.name, domain)
+    def register(self, domain: str):
+        return self._provider.register(self.site.config.name, domain)
 
     def deregister(self, domain: str) -> None:
         self._provider.deregister(self.site.config.name, domain)
@@ -55,4 +55,15 @@ class SiteDomains:
             config = json.loads((self.site.path / "site_config.json").read_text())
         except Exception:
             return False
-        return bool(config.get("ssl")) if isinstance(config, dict) else False
+        if not isinstance(config, dict):
+            return False
+        from pilot.config import RoutePolicy, SiteConfig
+
+        site = SiteConfig(
+            name=self.site.config.name,
+            apps=[],
+            ssl=bool(config.get("ssl")),
+            domains=config.get("domains") or [],
+            route=RoutePolicy.from_dict(config["route"]) if config.get("route") else None,
+        )
+        return bool(site.tls_domains)
