@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from pilot.core.bench.admin_domain import ProductionAdminDomain
+from pilot.core.bench.telemetry import apply_credential as apply_telemetry_credential
 from pilot.exceptions import BenchError
 from pilot.utils import write_private_text
 
@@ -60,8 +61,11 @@ class ProductionSetup:
 
             self._build_admin_for_production()
 
-            self._setup_monitoring(on_progress)
-            self._setup_log_shipping(on_progress)
+            # Both shippers present the same credential, so it is fetched once here
+            # rather than by whichever of them happens to run first.
+            apply_telemetry_credential(self.bench, on_progress=on_progress)
+            self._setup_monitoring()
+            self._setup_log_shipping()
             self._persist_production_state()
         except BaseException:
             # A later step failed but the new admin route is already live at the
@@ -141,12 +145,10 @@ class ProductionSetup:
 
             SystemdProcessManager(self.bench).remove_units()
 
-    def _setup_monitoring(self, on_progress: Callable[[str], None] = lambda message: None):
+    def _setup_monitoring(self) -> None:
         from pilot.core.server.monitoring_config import MonitorConfigurator
         from pilot.core.site.storage.systemd import SiteStorageConfigurator
         from pilot.core.site.uptime_monitoring_config import UptimeMonitorConfigurator
-
-        self._apply_telemetry_config(on_progress)
 
         monitor = MonitorConfigurator(self.bench)
         monitor.install()
@@ -158,38 +160,9 @@ class ProductionSetup:
 
         SiteStorageConfigurator().install()
 
-    def _apply_telemetry_config(self, on_progress: Callable[[str], None]) -> None:
-        """Fetch the one Datum credential from Central and write it over whatever is there.
-
-        Metrics and logs present the same token to the same region, so there is one to
-        fetch and one place to keep it. Central is the authority on both, and the token
-        expires, so a setup run takes what Central says rather than keeping a stale copy."""
-        from pilot.config import BenchConfig
-        from pilot.integrations.central import CentralClient
-        from pilot.integrations.central.client import CentralClientError
-
-        telemetry = self.bench.config.telemetry
-        if not self.bench.config.central.enabled:
-            return
-
-        try:
-            token_info = CentralClient().datum_token()
-            token, endpoint = token_info.get("token"), token_info.get("endpoint")
-        except CentralClientError as exc:
-            on_progress(f"Could not fetch a Datum token from Central: {exc}")
-            return
-        if not token or not endpoint:
-            return
-
-        telemetry.token, telemetry.endpoint = token, endpoint
-        with BenchConfig.open(self.bench.path) as config:
-            config.telemetry.token, config.telemetry.endpoint = token, endpoint
-
-    def _setup_log_shipping(self, on_progress: Callable[[str], None] = lambda message: None) -> None:
+    def _setup_log_shipping(self) -> None:
         """Install Fluent Bit as a systemd service, if this bench has a Datum credential."""
         from pilot.managers.fluentbit import LogsConfigurator
-
-        self._apply_telemetry_config(on_progress)
 
         telemetry = self.bench.config.telemetry
         if not telemetry.is_shipping_logs:

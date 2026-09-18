@@ -33,9 +33,12 @@ class SetupTelemetryCommand(Command):
 
         Only logs need installing: the monitor builds its shipper from this same config on
         every tick, so writing it is all metrics take."""
+        from pilot.core.bench.telemetry import apply_credential
         from pilot.managers.fluentbit import LogsConfigurator
 
-        self._apply_credential()
+        apply_credential(
+            self.bench, endpoint=self.endpoint, token=self.token, on_progress=self.report
+        )
         telemetry = self.bench.config.telemetry
 
         if not (telemetry.endpoint and telemetry.token):
@@ -56,37 +59,3 @@ class SetupTelemetryCommand(Command):
         configurator.setup()
         configurator.install(telemetry)
         self.report("Fluent Bit installed. Logs will ship to " + telemetry.endpoint)
-
-    def _apply_credential(self) -> None:
-        """What was passed, or what Central hands out, written to the bench and the file."""
-        endpoint, token = self.endpoint, self.token
-        if not (endpoint and token):
-            fetched_endpoint, fetched_token = self._fetch_credential()
-            endpoint = endpoint or fetched_endpoint
-            token = token or fetched_token
-
-        if not (endpoint or token):
-            return
-
-        from pilot.config import BenchConfig
-
-        with BenchConfig.open(self.bench.path) as config:
-            if endpoint:
-                config.telemetry.endpoint = endpoint
-            if token:
-                config.telemetry.token = token
-
-        if endpoint:
-            self.bench.config.telemetry.endpoint = endpoint
-        if token:
-            self.bench.config.telemetry.token = token
-
-    def _fetch_credential(self) -> tuple[str | None, str | None]:
-        """Central mints the JWT and names the region's Datum to present it to."""
-        from pilot.integrations.central import CentralClient
-
-        if not self.bench.config.central.enabled:
-            return None, None
-        credentials = CentralClient().datum_token()
-
-        return credentials.get("endpoint") or None, credentials.get("token") or None
