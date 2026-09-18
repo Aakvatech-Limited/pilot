@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import secrets
 import time
 from pathlib import Path
@@ -435,21 +436,32 @@ def test_setup_endpoint_fails_closed_when_config_is_corrupt(tmp_path: Path) -> N
     assert response.status_code == 503
 
 
-def test_has_scope_bench_token_allows_any_site() -> None:
-    assert Session.has_scope({"scope": "bench"}, "example.com")
-    assert Session.has_scope({"scope": "bench"}, "other.com")
+def test_has_scope_bench_token_allows_any_site(tmp_path: Path) -> None:
+    session = Session(_bench(tmp_path))
+    assert session.has_scope({"scope": "bench"}, "example.com")
+    assert session.has_scope({"scope": "bench"}, "other.com")
 
 
-def test_has_scope_site_token_allows_matching_site() -> None:
-    assert Session.has_scope({"scope": "site", "site": "example.com"}, "example.com")
+def test_has_scope_site_token_allows_matching_site(tmp_path: Path) -> None:
+    assert Session(_bench(tmp_path)).has_scope({"scope": "site", "site": "example.com"}, "example.com")
 
 
-def test_has_scope_site_token_rejects_different_site() -> None:
-    assert not Session.has_scope({"scope": "site", "site": "example.com"}, "other.com")
+def test_has_scope_site_token_rejects_different_site(tmp_path: Path) -> None:
+    assert not Session(_bench(tmp_path)).has_scope({"scope": "site", "site": "example.com"}, "other.com")
 
 
-def test_has_scope_none_claims_rejected() -> None:
-    assert not Session.has_scope(None, "example.com")
+def test_has_scope_site_token_allows_the_site_under_its_new_name(tmp_path: Path) -> None:
+    """A rename leaves the old hostname on the site; its long-lived token still names it."""
+    bench = _bench(tmp_path)
+    site_path = tmp_path / "sites" / "new.localhost"
+    site_path.mkdir(parents=True)
+    (site_path / "site_config.json").write_text(json.dumps({"domains": ["old.localhost"]}))
+
+    assert Session(bench).has_scope({"scope": "site", "site": "old.localhost"}, "new.localhost")
+
+
+def test_has_scope_none_claims_rejected(tmp_path: Path) -> None:
+    assert not Session(_bench(tmp_path)).has_scope(None, "example.com")
 
 
 @pytest.mark.parametrize(

@@ -221,14 +221,16 @@ class Session:
                 ActiveTokens(self.bench).add(jti, exp, ip=ip, last_seen=int(time.time()))
         return claims
 
-    @staticmethod
-    def has_scope(claims: dict | None, site: str) -> bool:
+    def has_scope(self, claims: dict | None, site: str) -> bool:
         if not claims:
             return False
         scope = claims.get("scope")
         if scope == "bench":
             return True
-        return scope == "site" and claims.get("site") == site
+        if scope != "site":
+            return False
+        claimed = claims.get("site") or ""
+        return claimed == site or self.bench.resolve_site_name(claimed) == site
 
     def revoke_jti(self, jti: str) -> bool:
         """Revoke an active session by its jti, using its tracked expiry.
