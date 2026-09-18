@@ -244,7 +244,14 @@ class Session:
         exp = claims.get("exp") if claims else None
         if not isinstance(exp, int) or exp <= int(time.time()):
             return False
-        RevokedTokens(self.bench).add(self._token_key(token), exp)
+        key = self._token_key(token)
+        revoked = RevokedTokens(self.bench)
+        try:
+            revoked.add(key, exp)
+        except OSError:
+            # The replace can commit before its directory durability sync fails.
+            if key not in revoked:
+                raise
         return True
 
     def has_scope(self, claims: dict | None, site: str, token: str = "") -> bool:

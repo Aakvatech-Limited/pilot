@@ -99,6 +99,24 @@ def test_revoke_token_rejects_a_site_token_until_expiry(tmp_path: Path) -> None:
     assert session.verify_token(token) is None
 
 
+def test_revoke_token_accepts_a_post_commit_sync_failure(tmp_path: Path) -> None:
+    from admin.backend.internal.session import RevokedTokens
+
+    session = Session(_bench(tmp_path))
+    token = session.issue_site_token("a.com")
+    add = RevokedTokens.add
+
+    def commit_then_fail(store, key, exp):
+        add(store, key, exp)
+        raise OSError("directory sync failed")
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(RevokedTokens, "add", commit_then_fail)
+        assert session.revoke_token(token)
+
+    assert session.verify_token(token) is None
+
+
 def test_issue_login_token_carries_jti(tmp_path: Path) -> None:
     session = Session(_bench(tmp_path))
     assert session.verify_token(session.issue_login_token())["jti"]

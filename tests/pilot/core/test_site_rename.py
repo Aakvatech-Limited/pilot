@@ -223,6 +223,33 @@ def test_a_revocation_sync_failure_does_not_roll_back_the_rename(tmp_path: Path)
     assert not (bench.sites_path / OLD).exists()
 
 
+def test_a_committed_revocation_sync_failure_still_releases_the_old_route(
+    tmp_path: Path,
+) -> None:
+    from admin.backend.internal.session import RevokedTokens, Session
+
+    bench = _bench(tmp_path)
+    token = Session(bench).issue_pilot_token(OLD)
+    _site(bench, OLD, pilot_auth_token=token)
+    released = []
+    add = RevokedTokens.add
+
+    def commit_then_fail(store, key, exp):
+        add(store, key, exp)
+        raise OSError("directory sync failed")
+
+    with (
+        patch.object(RevokedTokens, "add", commit_then_fail),
+        patch(
+            "pilot.core.adapters.domain_provider.DomainRouteProvider.release",
+            lambda self, domain: released.append(domain),
+        ),
+    ):
+        _rename(bench, keep_old_hostname=False)
+
+    assert released == [OLD]
+
+
 def test_the_old_hostname_can_be_released_instead(tmp_path: Path) -> None:
     bench = _bench(tmp_path)
     _site(bench, OLD)
