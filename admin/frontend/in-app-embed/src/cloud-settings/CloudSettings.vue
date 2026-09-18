@@ -109,7 +109,7 @@ const needsBilling = computed(() =>
       >
         <template #title>{{ __("Cloud settings") }}</template>
 
-        <SettingsSidebar>
+        <SettingsSidebar class="dark:border-outline-gray-2">
           <SettingsNavGroup :label="__('Cloud settings')">
             <SettingsNavItem
               v-for="item in TABS"
