@@ -14,7 +14,7 @@ if typing.TYPE_CHECKING:
 
 
 class SyntaxCheck:
-    """AST-parses every Python file in the app using the bench's Python environment."""
+    """AST-parses every Python file in the app using the bench's Python environment, rejecting it on any SyntaxError."""
 
     def run(self, app: "App") -> None:
         files = [str(p) for p in python_files(app)]
