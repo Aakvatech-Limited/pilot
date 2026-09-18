@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import SettingsHeader from "frappe-ui/src/components/SettingsDialog/SettingsHeader.vue";
-import SettingsBody from "frappe-ui/src/components/SettingsDialog/SettingsBody.vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import Badge from "frappe-ui/src/components/Badge/Badge.vue";
-import FormControl from "frappe-ui/src/components/FormControl/FormControl.vue";
-import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
-import Tooltip from "frappe-ui/src/components/Tooltip/Tooltip.vue";
+import {
+  SettingsHeader,
+  SettingsBody,
+  Button,
+  Badge,
+  TextInput,
+  ErrorMessage,
+  Tooltip,
+} from "frappe-ui";
 import PanelState from "../components/PanelState.vue";
 
 const props = defineProps({
@@ -36,7 +38,7 @@ const canAdd = computed(() => Boolean(input.value.trim()) && !working.value);
 
 // Show the DNS records the customer must add before we attach the domain. Some
 // domains need none, in which case attach immediately.
-async function previewDomain() {
+const previewDomain = async () => {
   const domain = input.value.trim();
   if (!domain) return;
   await run(async () => {
@@ -45,9 +47,9 @@ async function previewDomain() {
     pendingDomain.value = domain;
     if (!dnsRecords.value.length) await confirmAdd();
   });
-}
+};
 
-async function confirmAdd() {
+const confirmAdd = async () => {
   const domain = pendingDomain.value || input.value.trim();
   if (!domain) return;
   await run(async () => {
@@ -55,7 +57,7 @@ async function confirmAdd() {
     clearPreview();
     await store.loadDomains(true);
   });
-}
+};
 
 const makePrimary = (domain) =>
   run(async () => {
@@ -69,7 +71,7 @@ const remove = (domain) =>
     await store.loadDomains(true);
   });
 
-async function run(action) {
+const run = async (action) => {
   working.value = true;
   store.state.domainsError = "";
   try {
@@ -79,13 +81,13 @@ async function run(action) {
   } finally {
     working.value = false;
   }
-}
+};
 
-function clearPreview() {
+const clearPreview = () => {
   dnsRecords.value = [];
   pendingDomain.value = "";
   input.value = "";
-}
+};
 </script>
 
 <template>
@@ -103,9 +105,8 @@ function clearPreview() {
     >
       <div class="space-y-4">
         <div class="flex items-center gap-2">
-          <FormControl
+          <TextInput
             v-model="input"
-            type="text"
             class="flex-1"
             :placeholder="__('shop.mycompany.in')"
             :disabled="working"
@@ -118,7 +119,7 @@ function clearPreview() {
 
         <ErrorMessage :message="error" />
 
-        <section v-if="dnsRecords.length" class="rounded-xl border border-outline-gray-2 p-4">
+        <section v-if="dnsRecords.length" class="rounded-7 border border-outline-gray-2 p-4">
           <p class="text-base font-medium text-ink-gray-9">{{ pendingDomain }}</p>
           <p class="mt-1 text-p-sm text-ink-gray-6">
             {{ __("Add these DNS records at your provider, then continue.") }}
@@ -127,7 +128,7 @@ function clearPreview() {
             <div
               v-for="(record, index) in dnsRecords"
               :key="index"
-              class="grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-3 rounded-lg bg-surface-gray-1 px-3 py-2.5 text-p-sm text-ink-gray-7"
+              class="grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-3 rounded-6 bg-surface-gray-1 px-3 py-2.5 text-p-sm text-ink-gray-7"
             >
               <span>{{ record.type }}</span>
               <code class="truncate text-ink-gray-9">{{ record.host }}</code>
@@ -145,7 +146,7 @@ function clearPreview() {
         <div
           v-for="domain in domains"
           :key="domain.domain"
-          class="flex items-center justify-between gap-2 rounded-lg border border-outline-gray-2 p-3"
+          class="flex items-center justify-between gap-2 rounded-6 border border-outline-gray-2 p-3"
         >
           <div>
             <p class="flex items-center gap-1.5 text-base font-semibold text-ink-gray-9">

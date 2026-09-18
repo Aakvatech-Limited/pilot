@@ -1,15 +1,17 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
-import SettingsHeader from "frappe-ui/src/components/SettingsDialog/SettingsHeader.vue";
-import SettingsBody from "frappe-ui/src/components/SettingsDialog/SettingsBody.vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import FormControl from "frappe-ui/src/components/FormControl/FormControl.vue";
-import Select from "frappe-ui/src/components/Select/Select.vue";
+import {
+  SettingsHeader,
+  SettingsBody,
+  Button,
+  TextInput,
+  Select,
+  ErrorMessage,
+} from "frappe-ui";
 import PanelState from "../components/PanelState.vue";
 import AppRow from "../components/AppRow.vue";
 import UpdateAppsDialog from "../components/UpdateAppsDialog.vue";
 import ActionableError from "../components/ActionableError.vue";
-import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
 import { waitForTask } from "../store";
 
 const props = defineProps({
@@ -79,10 +81,10 @@ const filteredApps = computed(() => {
   });
 });
 
-function clearFilters() {
+const clearFilters = () => {
   query.value = "";
   category.value = "";
-}
+};
 
 const install = (app) =>
   runAction(app, "install", () => store.api.installApp(app.name));
@@ -93,7 +95,7 @@ const updateOne = (app) =>
 
 // An unresolved update operation blocks every update: link to the page that clears it
 // rather than invite a retry that cannot succeed.
-function asBlocker(exception) {
+const asBlocker = (exception) => {
   if (!store.api.isMigrationConflict(exception)) return null;
   const server = store.state.context.server_url;
   return {
@@ -101,9 +103,9 @@ function asBlocker(exception) {
     actionLabel: server ? __("Open updates") : "",
     actionUrl: server ? `${server.replace(/\/$/, "")}/updates` : "",
   };
-}
+};
 
-async function updateAll({ apps }) {
+const updateAll = async ({ apps }) => {
   updatingAll.value = true;
   updateAllError.value = "";
   blocker.value = null;
@@ -124,10 +126,10 @@ async function updateAll({ apps }) {
   } finally {
     updatingAll.value = false;
   }
-}
+};
 
 // Track the bench task to completion, keeping the row pending throughout.
-async function runAction(app, verb, action) {
+const runAction = async (app, verb, action) => {
   errors[app.name] = "";
   blocker.value = null;
   pending[app.name] = verb;
@@ -145,11 +147,11 @@ async function runAction(app, verb, action) {
   } finally {
     delete pending[app.name];
   }
-}
+};
 
 // Throws on failure so the caller records a row error; a lost task is only a
 // warning, because it may still be running.
-async function settle(taskId, action, label) {
+const settle = async (taskId, action, label) => {
   if (!taskId) return;
   const outcome = await waitForTask(taskId, () => gone);
   if (outcome === "cancelled") return;
@@ -166,11 +168,11 @@ async function settle(taskId, action, label) {
       "orange",
     );
   }
-}
+};
 
-function notify(message, indicator = "green") {
+const notify = (message, indicator = "green") => {
   frappe.show_alert({ message, indicator });
-}
+};
 </script>
 
 <template>
@@ -200,9 +202,8 @@ function notify(message, indicator = "green") {
     </div>
 
     <div v-if="marketplace" class="mt-8 flex items-center gap-2">
-      <FormControl
+      <TextInput
         v-model="query"
-        type="text"
         class="flex-1"
         :placeholder="__('Search apps')"
       />

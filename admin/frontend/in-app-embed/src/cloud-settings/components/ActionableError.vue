@@ -1,6 +1,6 @@
 <!-- An error the user can act on: the reason, plus the one link that resolves it. -->
 <script setup>
-import Button from "frappe-ui/src/components/Button/Button.vue";
+import { Button } from "frappe-ui";
 import { openExternal } from "../external";
 
 defineProps({
@@ -13,7 +13,7 @@ defineProps({
 <template>
   <div
     v-if="message"
-    class="flex items-start gap-2 rounded-lg border border-outline-red-2 bg-surface-red-1 p-3"
+    class="flex items-start gap-2 rounded-6 border border-outline-red-2 bg-surface-red-1 p-3"
     role="alert"
   >
     <!-- red-8 not the low tints: those are fill colours and unreadable as text. -->

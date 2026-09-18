@@ -1,9 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
-import SettingsHeader from "frappe-ui/src/components/SettingsDialog/SettingsHeader.vue";
-import SettingsBody from "frappe-ui/src/components/SettingsDialog/SettingsBody.vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
+import { SettingsHeader, SettingsBody, Button, ErrorMessage } from "frappe-ui";
 import { openExternal } from "../external";
 
 const props = defineProps({ store: { type: Object, required: true } });
@@ -25,7 +22,7 @@ const links = computed(() => [
   },
 ]);
 
-async function openBilling() {
+const openBilling = async () => {
   if (openingBilling.value) return;
   openingBilling.value = true;
   billingError.value = "";
@@ -40,7 +37,7 @@ async function openBilling() {
   } finally {
     openingBilling.value = false;
   }
-}
+};
 </script>
 
 <template>

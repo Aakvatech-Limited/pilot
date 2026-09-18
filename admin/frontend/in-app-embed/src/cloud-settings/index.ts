@@ -22,10 +22,10 @@ const CloudSettingsElement = defineCustomElement({
   props: { context: Object, open: Boolean },
   emits: ["close"],
   shadowRoot: true,
-  configureApp(app) {
+  configureApp: (app) => {
     app.config.globalProperties.__ = window.__;
   },
-  setup(props, { emit }) {
+  setup: (props, { emit }) => {
     return () =>
       h(CloudSettings, {
         context: props.context,
@@ -67,7 +67,7 @@ class CloudSettingsHost extends CloudSettingsElement {
 if (!customElements.get(TAG)) customElements.define(TAG, CloudSettingsHost);
 
 frappe.cloudSettings = {
-  show(context) {
+  show: (context) => {
     let host = document.querySelector<CloudSettingsHost>(TAG);
     if (!host) {
       host = document.createElement(TAG) as CloudSettingsHost;

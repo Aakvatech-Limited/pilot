@@ -1,8 +1,6 @@
 <script setup>
 import { computed, inject, ref } from "vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import Dropdown from "frappe-ui/src/components/Dropdown/Dropdown.vue";
-import Tooltip from "frappe-ui/src/components/Tooltip/Tooltip.vue";
+import { Button, Dropdown, Tooltip } from "frappe-ui";
 
 const props = defineProps({
   app: { type: Object, required: true },
@@ -131,7 +129,7 @@ const incompatibleReason = computed(() =>
               { label: __('Uninstall'), onClick: () => emit('uninstall', app) },
             ]"
             :portal-to="overlayTarget"
-            placement="right"
+            align="end"
           >
             <Button
               variant="ghost"

@@ -1,10 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import Badge from "frappe-ui/src/components/Badge/Badge.vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import Dialog from "frappe-ui/src/components/Dialog/Dialog.vue";
-import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
-import Select from "frappe-ui/src/components/Select/Select.vue";
+import { Badge, Button, Dialog, ErrorMessage, Select } from "frappe-ui";
 import { openExternal } from "../external";
 
 const props = defineProps({ store: { type: Object, required: true } });
@@ -42,15 +38,15 @@ const compareUrl = computed(
     options.value?.compare_url || props.store.state.context?.account_url || "",
 );
 
-function isSelected(plan) {
+const isSelected = (plan) => {
   return selected.value === plan.name;
-}
+};
 
-function isCustom(plan) {
+const isCustom = (plan) => {
   return Boolean(plan.is_custom) || /custom/i.test(plan.title || plan.name || "");
-}
+};
 
-function normalizeChoices(list, fallback) {
+const normalizeChoices = (list, fallback) => {
   if (Array.isArray(list) && list.length) {
     return list.map((item) => ({
       label: item.label || item.name || item.value,
@@ -70,12 +66,12 @@ function normalizeChoices(list, fallback) {
       is_current: true,
     },
   ];
-}
+};
 
-function choiceIsCurrent(choices, value) {
+const choiceIsCurrent = (choices, value) => {
   const match = choices.find((item) => item.value === value);
   return Boolean(match?.is_current || (choices.length === 1 && match));
-}
+};
 
 watch(open, (isOpen) => {
   if (isOpen) {
@@ -85,7 +81,7 @@ watch(open, (isOpen) => {
   }
 });
 
-async function load() {
+const load = async () => {
   loading.value = true;
   error.value = "";
   selected.value = "";
@@ -112,14 +108,14 @@ async function load() {
   } finally {
     loading.value = false;
   }
-}
+};
 
-async function onPlacementChange() {
+const onPlacementChange = async () => {
   if (loading.value || submitting.value) return;
   await load();
-}
+};
 
-async function submit() {
+const submit = async () => {
   if (!canChange.value || submitting.value) return;
   submitting.value = true;
   error.value = "";
@@ -136,25 +132,26 @@ async function submit() {
   } finally {
     submitting.value = false;
   }
-}
+};
 
-function openBilling() {
+const openBilling = () => {
   open.value = false;
   emit("open-billing");
-}
+};
 
-function comparePlans() {
+const comparePlans = () => {
   openExternal(compareUrl.value);
-}
+};
 </script>
 
 <template>
   <Dialog
     v-model="open"
-    :options="{ title: __('Change plan'), size: 'xl' }"
+    :title="__('Change plan')"
+    size="xl"
     :dismissible="!submitting"
   >
-    <template #body-content>
+    <template #default>
       <div v-if="loading" class="py-10 text-center text-p-sm text-ink-gray-6">
         {{ __("Loading plans") }}
       </div>
@@ -266,7 +263,7 @@ function comparePlans() {
             type="button"
             role="radio"
             :aria-checked="isSelected(plan)"
-            class="flex min-h-12 w-full items-center gap-3 rounded-lg border border-outline-gray-2 px-3.5 py-3 text-left hover:bg-surface-gray-1"
+            class="flex min-h-12 w-full items-center gap-3 rounded-6 border border-outline-gray-2 px-3.5 py-3 text-left hover:bg-surface-gray-1"
             :disabled="submitting"
             @click="selected = plan.name"
           >
@@ -309,7 +306,7 @@ function comparePlans() {
 
         <div
           v-if="plans.length && !options?.sufficient"
-          class="mt-4 flex items-center gap-2 rounded-lg bg-surface-red-1 px-3 py-2.5 text-p-sm text-ink-red-8"
+          class="mt-4 flex items-center gap-2 rounded-6 bg-surface-red-1 px-3 py-2.5 text-p-sm text-ink-red-8"
           role="alert"
         >
           <span

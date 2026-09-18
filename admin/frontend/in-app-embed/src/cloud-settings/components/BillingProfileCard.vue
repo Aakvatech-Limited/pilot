@@ -2,9 +2,7 @@
      Central's validation, so Save gates locally instead of round-tripping. -->
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import FormControl from "frappe-ui/src/components/FormControl/FormControl.vue";
-import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
+import { Button, TextInput, Select, ErrorMessage } from "frappe-ui";
 
 const props = defineProps({ store: { type: Object, required: true } });
 const emit = defineEmits(["close", "saved"]);
@@ -59,8 +57,6 @@ const loaded = ref(false);
 const working = ref(false);
 const error = ref("");
 
-onMounted(load);
-
 const canSave = computed(
   () =>
     !working.value && REQUIRED.every((key) => String(form[key] || "").trim()),
@@ -68,7 +64,7 @@ const canSave = computed(
 // Without a currency list the form can never satisfy `canSave`; say so.
 const noCurrencies = computed(() => loaded.value && !currencies.value.length);
 
-async function load() {
+const load = async () => {
   error.value = "";
   try {
     const profile = await store.api.getBillingProfile();
@@ -80,9 +76,11 @@ async function load() {
   } catch (exception) {
     error.value = store.api.getErrorMessage(exception);
   }
-}
+};
 
-async function save() {
+onMounted(load);
+
+const save = async () => {
   if (!canSave.value) return;
   working.value = true;
   error.value = "";
@@ -95,11 +93,11 @@ async function save() {
   } finally {
     working.value = false;
   }
-}
+};
 </script>
 
 <template>
-  <section class="space-y-4 rounded-xl border border-outline-gray-2 p-4">
+  <section class="space-y-4 rounded-7 border border-outline-gray-2 p-4">
     <div>
       <p class="text-base font-semibold text-ink-gray-9">
         {{ __("Add billing details") }}
@@ -115,7 +113,7 @@ async function save() {
 
     <ErrorMessage :message="error" />
 
-    <div v-if="!loaded && !error" class="h-20 rounded-lg bg-surface-gray-2" />
+    <div v-if="!loaded && !error" class="h-20 rounded-6 bg-surface-gray-2" />
 
     <!-- Without this the load-failure state has neither a retry nor a way out. -->
     <div v-else-if="!loaded" class="flex gap-2">
@@ -125,7 +123,7 @@ async function save() {
 
     <template v-else>
       <div class="grid grid-cols-2 gap-3.5">
-        <FormControl
+        <TextInput
           v-for="field in FIELDS"
           :key="field.key"
           v-model="form[field.key]"
@@ -137,9 +135,8 @@ async function save() {
           :disabled="working"
           :class="field.full ? 'col-span-2' : ''"
         />
-        <FormControl
+        <Select
           v-model="form.currency"
-          type="select"
           :label="`${__('Currency')} *`"
           :options="currencies"
           :disabled="working"

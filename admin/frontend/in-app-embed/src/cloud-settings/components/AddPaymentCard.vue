@@ -2,9 +2,7 @@
      Razorpay authorises a mandate in its own modal. No card data touches the site. -->
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import FormControl from "frappe-ui/src/components/FormControl/FormControl.vue";
-import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
+import { Button, TextInput, ErrorMessage } from "frappe-ui";
 import { openExternal } from "../external";
 import RazorpayLogo from "../assets/Razorpay-1.svg?inline";
 import StripeLogo from "../assets/Stripe.svg?inline";
@@ -43,8 +41,6 @@ const message = ref("");
 const working = ref(false);
 const error = ref("");
 
-onMounted(load);
-
 // UPI is Razorpay-only; Card can use any gateway serving the currency.
 const visibleGateways = computed(() =>
   (gateways.value || []).filter(
@@ -75,23 +71,25 @@ watch(
   { immediate: true },
 );
 
-async function load() {
+const load = async () => {
   error.value = "";
   try {
     gateways.value = await store.api.getPaymentGateways();
   } catch (exception) {
     error.value = store.api.getErrorMessage(exception);
   }
-}
+};
 
-function start() {
+onMounted(load);
+
+const start = () => {
   if (!canContinue.value) return;
   return gateway.value.adapter_key === "Razorpay"
     ? startRazorpay()
     : startStripe();
-}
+};
 
-async function startStripe() {
+const startStripe = async () => {
   await run(async () => {
     checkout.value = await store.api.createPaymentMethodCheckout(
       window.location.href,
@@ -102,9 +100,9 @@ async function startStripe() {
     );
     openExternal(checkout.value.checkout_url);
   });
-}
+};
 
-async function startRazorpay() {
+const startRazorpay = async () => {
   working.value = true;
   error.value = "";
   message.value = "";
@@ -121,9 +119,9 @@ async function startRazorpay() {
     error.value = store.api.getErrorMessage(exception);
     working.value = false;
   }
-}
+};
 
-function openRazorpayCheckout(handles) {
+const openRazorpayCheckout = (handles) => {
   const rzp = new window.Razorpay({
     key: handles.key_id,
     order_id: handles.order_id,
@@ -148,9 +146,9 @@ function openRazorpayCheckout(handles) {
     working.value = false;
   });
   rzp.open();
-}
+};
 
-async function confirmRazorpay(paymentMethod, response) {
+const confirmRazorpay = async (paymentMethod, response) => {
   await run(async () => {
     const result = await store.api.confirmPaymentMethod({
       payment_method: paymentMethod,
@@ -165,9 +163,9 @@ async function confirmRazorpay(paymentMethod, response) {
     }
     error.value = __("Saved but not active ({0}).", [result.status]);
   });
-}
+};
 
-function loadRazorpay() {
+const loadRazorpay = () => {
   return new Promise((resolve, reject) => {
     if (window.Razorpay) return resolve();
     const script = document.createElement("script");
@@ -177,9 +175,9 @@ function loadRazorpay() {
       reject(new Error(__("Could not load Razorpay Checkout.")));
     document.body.appendChild(script);
   });
-}
+};
 
-async function check() {
+const check = async () => {
   await run(async () => {
     const result = await store.api.confirmPaymentMethodCheckout(
       checkout.value.reference,
@@ -193,9 +191,9 @@ async function check() {
       result.message ||
       __("Not confirmed yet — finish adding the card, then check again.");
   });
-}
+};
 
-async function run(action) {
+const run = async (action) => {
   working.value = true;
   error.value = "";
   message.value = "";
@@ -206,10 +204,10 @@ async function run(action) {
   } finally {
     working.value = false;
   }
-}
+};
 
 const tileClass = (isSelected) => [
-  "flex w-full items-start gap-3 rounded-lg border p-3.5 text-left disabled:opacity-60",
+  "flex w-full items-start gap-3 rounded-6 border p-3.5 text-left disabled:opacity-60",
   isSelected
     ? "border-outline-gray-4"
     : "border-outline-gray-2 hover:border-outline-gray-3",
@@ -217,7 +215,7 @@ const tileClass = (isSelected) => [
 </script>
 
 <template>
-  <section class="space-y-4 rounded-xl border border-outline-gray-2 p-4">
+  <section class="space-y-4 rounded-7 border border-outline-gray-2 p-4">
     <p class="text-base font-semibold text-ink-gray-9">
       {{ __("Add payment method") }}
     </p>
@@ -265,7 +263,7 @@ const tileClass = (isSelected) => [
       <p class="mb-2 text-p-sm text-ink-gray-5">{{ __("Pay through") }}</p>
       <div
         v-if="!gateways && !error"
-        class="h-16 rounded-lg bg-surface-gray-2"
+        class="h-16 rounded-6 bg-surface-gray-2"
       />
       <!-- A failed request is not the same as "your payment type is unsupported". -->
       <Button v-else-if="!gateways" @click="load">{{ __("Try again") }}</Button>
@@ -306,12 +304,12 @@ const tileClass = (isSelected) => [
               :src="GATEWAY_LOGO[option.adapter_key]"
               :alt="option.label"
               class="max-h-full max-w-full object-contain"
-              :class="{ rounded: option.adapter_key === 'Stripe' }"
+              :class="{ 'rounded-4': option.adapter_key === 'Stripe' }"
             />
           </span>
           <span
             v-else
-            class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-gray-3 text-p-sm font-bold text-ink-gray-8"
+            class="flex size-8 shrink-0 items-center justify-center rounded-6 bg-surface-gray-3 text-p-sm font-bold text-ink-gray-8"
           >
             {{ (option.label || "?").charAt(0) }}
           </span>
@@ -327,7 +325,7 @@ const tileClass = (isSelected) => [
       </div>
     </div>
 
-    <FormControl
+    <TextInput
       v-if="needsContact"
       v-model="contact"
       :label="__('Phone')"

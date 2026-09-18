@@ -1,9 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import SettingsHeader from "frappe-ui/src/components/SettingsDialog/SettingsHeader.vue";
-import SettingsBody from "frappe-ui/src/components/SettingsDialog/SettingsBody.vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
-import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
+import { SettingsHeader, SettingsBody, Button, ErrorMessage } from "frappe-ui";
 import PanelState from "../components/PanelState.vue";
 import BillingProfileCard from "../components/BillingProfileCard.vue";
 import AddPaymentCard from "../components/AddPaymentCard.vue";
@@ -22,15 +19,7 @@ const removeError = ref("");
 const openingChangePlan = ref(false);
 const changePlanError = ref("");
 
-watch(
-  () => props.active,
-  (active) => {
-    if (active) load();
-  },
-  { immediate: true },
-);
-
-async function load() {
+const load = async () => {
   // A card added on a gateway's hosted page activates on return; no webhook.
   try {
     await store.api.reconcilePaymentSetup();
@@ -38,7 +27,15 @@ async function load() {
     // ignore — the summary below still loads and reports its own errors
   }
   await store.loadBilling(true);
-}
+};
+
+watch(
+  () => props.active,
+  (active) => {
+    if (active) load();
+  },
+  { immediate: true },
+);
 
 const billing = computed(() => store.state.billing);
 const error = computed(() => store.state.billingError);
@@ -76,17 +73,17 @@ const meters = computed(() => {
   ];
 });
 
-function clamp(percent) {
+const clamp = (percent) => {
   return Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
-}
+};
 
 // Billing details must exist before a payment method; route the button accordingly.
-function startPayment() {
+const startPayment = () => {
   removeError.value = "";
   flow.value = billing.value?.profile_complete ? "payment" : "profile";
-}
+};
 
-async function removeCard() {
+const removeCard = async () => {
   if (removing.value) return;
   removing.value = true;
   removeError.value = "";
@@ -98,10 +95,10 @@ async function removeCard() {
   } finally {
     removing.value = false;
   }
-}
+};
 
 // Temporary: in-embed change plan is not ready; send users to Central.
-async function openChangePlan() {
+const openChangePlan = async () => {
   if (openingChangePlan.value) return;
   openingChangePlan.value = true;
   changePlanError.value = "";
@@ -116,7 +113,7 @@ async function openChangePlan() {
   } finally {
     openingChangePlan.value = false;
   }
-}
+};
 </script>
 
 <template>
@@ -135,7 +132,7 @@ async function openChangePlan() {
       <!-- Site with no billing account attached: explain, don't show empty cards. -->
       <div
         v-if="!plan"
-        class="flex items-start gap-3 rounded-xl border border-dashed border-outline-gray-3 p-4"
+        class="flex items-start gap-3 rounded-7 border border-dashed border-outline-gray-3 p-4"
       >
         <span
           class="lucide-wallet mt-0.5 size-4 shrink-0 text-ink-gray-5"
@@ -166,7 +163,7 @@ async function openChangePlan() {
 
       <div v-else class="space-y-4">
         <ErrorMessage :message="loadFailed ? '' : error" />
-        <section class="rounded-xl border border-outline-gray-2 p-4">
+        <section class="rounded-7 border border-outline-gray-2 p-4">
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="text-p-sm text-ink-gray-5">{{ __("Plan") }}</p>
@@ -212,7 +209,7 @@ async function openChangePlan() {
         </section>
 
         <div class="grid grid-cols-2 gap-3">
-          <section class="rounded-xl border border-outline-gray-2 p-4">
+          <section class="rounded-7 border border-outline-gray-2 p-4">
             <p class="text-p-sm text-ink-gray-5">
               {{ __("Estimated this cycle") }}
             </p>
@@ -223,7 +220,7 @@ async function openChangePlan() {
               {{ billing.estimate?.note }}
             </p>
           </section>
-          <section class="rounded-xl border border-outline-gray-2 p-4">
+          <section class="rounded-7 border border-outline-gray-2 p-4">
             <p class="text-p-sm text-ink-gray-5">{{ __("Trial credit") }}</p>
             <p class="mt-1 text-2xl font-semibold text-ink-gray-9">
               {{ billing.credit?.amount ?? "—" }}
@@ -258,7 +255,7 @@ async function openChangePlan() {
 
         <section
           v-else
-          class="rounded-xl border border-dashed border-outline-gray-3 p-4"
+          class="rounded-7 border border-dashed border-outline-gray-3 p-4"
           :class="
             billing.payment_method
               ? 'flex items-center justify-between gap-4'

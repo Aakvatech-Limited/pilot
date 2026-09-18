@@ -1,7 +1,7 @@
 <!-- Loading/error gate for the data-backed panels: a failed load must stay
      recoverable, so it shows the server's message plus a Retry. -->
 <script setup>
-import Button from "frappe-ui/src/components/Button/Button.vue";
+import { Button } from "frappe-ui";
 
 defineProps({
   loading: { type: Boolean, default: false },
@@ -17,7 +17,7 @@ defineEmits(["retry"]);
   <div>
     <div
       v-if="error"
-      class="flex flex-col items-center gap-2 rounded-lg border border-outline-gray-2 px-6 py-10 text-center"
+      class="flex flex-col items-center gap-2 rounded-6 border border-outline-gray-2 px-6 py-10 text-center"
     >
       <span
         class="lucide-triangle-alert size-5 text-ink-amber-8"
@@ -38,7 +38,7 @@ defineEmits(["retry"]);
       role="status"
       :aria-label="__('Loading')"
     >
-      <div v-for="n in 3" :key="n" class="h-16 rounded-lg bg-surface-gray-2" />
+      <div v-for="n in 3" :key="n" class="h-16 rounded-6 bg-surface-gray-2" />
     </div>
 
     <slot v-else />

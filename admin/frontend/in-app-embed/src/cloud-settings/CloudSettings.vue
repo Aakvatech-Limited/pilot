@@ -4,14 +4,16 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { ConfigProvider } from "reka-ui";
-import SettingsDialog from "frappe-ui/src/components/SettingsDialog/SettingsDialog.vue";
-import SettingsSidebar from "frappe-ui/src/components/SettingsDialog/SettingsSidebar.vue";
-import SettingsNavGroup from "frappe-ui/src/components/SettingsDialog/SettingsNavGroup.vue";
-import SettingsNavItem from "frappe-ui/src/components/SettingsDialog/SettingsNavItem.vue";
-import SettingsContent from "frappe-ui/src/components/SettingsDialog/SettingsContent.vue";
-import SettingsPanel from "frappe-ui/src/components/SettingsDialog/SettingsPanel.vue";
-import Badge from "frappe-ui/src/components/Badge/Badge.vue";
-import Button from "frappe-ui/src/components/Button/Button.vue";
+import {
+  SettingsDialog,
+  SettingsSidebar,
+  SettingsNavGroup,
+  SettingsNavItem,
+  SettingsContent,
+  SettingsPanel,
+  Badge,
+  Button,
+} from "frappe-ui";
 import { createStore } from "./store";
 import BillingPanel from "./panels/BillingPanel.vue";
 import MarketplacePanel from "./panels/MarketplacePanel.vue";
@@ -99,10 +101,10 @@ const needsBilling = computed(() =>
            unmount-on-hide=false keeps a panel's in-flight task alive across tab
            switches; unmounting it silently abandons the poller. -->
       <SettingsDialog
-        v-model="isOpen"
+        v-model:open="isOpen"
         v-model:tab="tab"
         size="5xl"
-        :shortcut="false"
+        :keyboard-shortcut="false"
         :unmount-on-hide="false"
       >
         <template #title>{{ __("Cloud settings") }}</template>
