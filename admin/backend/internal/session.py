@@ -258,7 +258,7 @@ class Session:
     def _decode(self, token: str) -> dict | None:
         """Signature/expiry-checked claims: local HS256, then JWKS if configured."""
         claims = self._decode_local(token)
-        if claims is None and self.admin_config.jwks_url:
+        if claims is None:
             claims = self._decode_jwks(token)
         return claims
 
@@ -285,7 +285,7 @@ class Session:
     def _decode_jwks(self, token: str) -> dict | None:
         import jwt
 
-        url, audience = self.admin_config.jwks_url, self.admin_config.jwks_audience
+        url, audience = self._jwks_config()
         if not token or not url or not audience:
             return None
         try:
@@ -304,3 +304,26 @@ class Session:
             )
         except jwt.PyJWTError:
             return None
+
+    def _jwks_config(self) -> tuple[str, str]:
+        """Use the staged issuer only during the Central bootstrap window."""
+        url = getattr(self.admin_config, "jwks_url", "")
+        audience = getattr(self.admin_config, "jwks_audience", "")
+        central = getattr(self.bench.config, "central", None)
+        if not getattr(central, "is_awaiting_bootstrap", False):
+            return url, audience
+
+        from pilot.integrations.central import CentralClientError, InstanceMetadata
+
+        try:
+            credentials = InstanceMetadata().get_credentials()
+        except CentralClientError as error:
+            logging.warning("Cannot use the staged Central JWKS issuer: %s", error)
+            return url, audience
+        if credentials is None:
+            return url, audience
+
+        url = credentials["jwks_url"]
+        if initial_cache := credentials.get("initial_jwks_cache"):
+            JwksCache(self.bench.path.parent, url).seed(initial_cache)
+        return url, credentials["jwks_audience_id"]

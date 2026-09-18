@@ -134,6 +134,50 @@ def test_no_audience_config_rejects_remote_token() -> None:
     assert _verify(_mint(aud="anything"), JWKS_URL, "") is None
 
 
+def test_awaiting_central_host_uses_the_staged_imds_issuer(tmp_path: Path, monkeypatch) -> None:
+    bench = SimpleNamespace(
+        path=_Bench.path,
+        config=SimpleNamespace(
+            admin=SimpleNamespace(jwt_secret="", jwks_url="", jwks_audience=""),
+            central=SimpleNamespace(is_awaiting_bootstrap=True),
+        ),
+    )
+    credentials = {
+        "jwks_url": JWKS_URL,
+        "jwks_audience_id": "vm-boot-1",
+        "initial_jwks_cache": _jwks_document(),
+    }
+    monkeypatch.setattr(
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
+        lambda self: credentials,
+    )
+
+    claims = Session(bench).verify_token(_mint(aud="vm-boot-1"))
+
+    assert claims and claims["sub"] == "admin"
+    assert JwksCache(tmp_path / "benches", JWKS_URL).signing_key("rsa-key") is not None
+
+
+def test_bootstrapped_central_host_uses_the_saved_issuer(monkeypatch) -> None:
+    bench = SimpleNamespace(
+        path=_Bench.path,
+        config=SimpleNamespace(
+            admin=SimpleNamespace(jwt_secret="", jwks_url=JWKS_URL, jwks_audience=AUDIENCE),
+            central=SimpleNamespace(is_awaiting_bootstrap=False),
+        ),
+    )
+
+    def fail_if_called(self):
+        raise AssertionError("IMDS must not be read after bootstrap")
+
+    monkeypatch.setattr(
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
+        fail_if_called,
+    )
+
+    assert Session(bench).verify_token(_mint())
+
+
 class _Bench:
     class config:
         class admin:
