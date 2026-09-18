@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from pilot.config import BenchConfig
 
@@ -64,10 +65,44 @@ def test_site_configuration_accepts_an_old_hostname(tmp_path: Path) -> None:
 
 def test_a_site_token_issued_before_a_rename_still_reaches_its_site(tmp_path: Path) -> None:
     bench_root = _make_bench(tmp_path)
-    _make_site(bench_root, "new.localhost", domains=["old.localhost"])
-    client = _client(bench_root, token=_site_token(bench_root, "old.localhost"))
+    token = _site_token(bench_root, "old.localhost")
+    _make_site(
+        bench_root,
+        "new.localhost",
+        domains=["old.localhost"],
+        pilot_auth_token=token,
+    )
+    client = _client(bench_root, token=token)
 
     assert client.get("/api/v1/sites/new.localhost/configuration").status_code == 200
+
+
+def test_a_stale_site_token_does_not_follow_a_reassigned_hostname(tmp_path: Path) -> None:
+    bench_root = _make_bench(tmp_path)
+    old_token = _site_token(bench_root, "old.localhost")
+    new_token = _site_token(bench_root, "new.localhost")
+    _make_site(
+        bench_root,
+        "new.localhost",
+        domains=["old.localhost"],
+        pilot_auth_token=new_token,
+    )
+    client = _client(bench_root, token=old_token)
+
+    assert client.get("/api/v1/sites/old.localhost/configuration").status_code == 403
+
+
+def test_a_revoked_site_token_cannot_reach_a_recreated_site(tmp_path: Path) -> None:
+    bench_root = _make_bench(tmp_path)
+    token = _site_token(bench_root, "old.localhost")
+    _make_site(bench_root, "old.localhost")
+    from admin.backend.internal.session import Session
+    from pilot.core.bench import Bench
+
+    Session(Bench(bench_root)).revoke_token(token)
+    client = _client(bench_root, token=token)
+
+    assert client.get("/api/v1/sites/old.localhost/configuration").status_code == 401
 
 
 def test_a_site_token_reaches_its_site_through_a_custom_domain(tmp_path: Path) -> None:
@@ -92,3 +127,28 @@ def test_an_unknown_hostname_is_still_not_found(tmp_path: Path) -> None:
     _make_site(bench_root, "new.localhost")
 
     assert _client(bench_root).get("/api/v1/sites/missing.localhost/configuration").status_code == 404
+
+
+def test_aliases_are_not_scanned_before_authentication(tmp_path: Path) -> None:
+    from admin.backend.app import create_app
+    from pilot.core.bench import Bench
+
+    bench_root = _make_bench(tmp_path)
+    app = create_app(bench_root)
+    app.config["TESTING"] = True
+    with patch.object(Bench, "resolve_site_name") as resolve:
+        response = app.test_client().get("/api/v1/sites/shop.example.com/configuration")
+
+    assert response.status_code == 401
+    resolve.assert_not_called()
+
+
+def test_alias_resolution_failure_reports_unavailable_configuration(tmp_path: Path) -> None:
+    from pilot.core.bench import Bench
+
+    bench_root = _make_bench(tmp_path)
+    with patch.object(Bench, "resolve_site_name", side_effect=ValueError("broken config")):
+        response = _client(bench_root).get("/api/v1/sites/shop.example.com/configuration")
+
+    assert response.status_code == 503
+    assert response.get_json()["error"]["code"] == "configuration_unavailable"

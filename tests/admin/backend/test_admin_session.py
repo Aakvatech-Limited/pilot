@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import secrets
 import time
 from pathlib import Path
@@ -443,21 +442,25 @@ def test_has_scope_bench_token_allows_any_site(tmp_path: Path) -> None:
 
 
 def test_has_scope_site_token_allows_matching_site(tmp_path: Path) -> None:
-    assert Session(_bench(tmp_path)).has_scope({"scope": "site", "site": "example.com"}, "example.com")
+    assert Session(_bench(tmp_path)).has_scope(
+        {"scope": "site", "site": "example.com"},
+        "example.com",
+    )
 
 
 def test_has_scope_site_token_rejects_different_site(tmp_path: Path) -> None:
-    assert not Session(_bench(tmp_path)).has_scope({"scope": "site", "site": "example.com"}, "other.com")
+    assert not Session(_bench(tmp_path)).has_scope(
+        {"scope": "site", "site": "example.com"},
+        "other.com",
+    )
 
 
-def test_has_scope_site_token_allows_the_site_under_its_new_name(tmp_path: Path) -> None:
-    """A rename leaves the old hostname on the site; its long-lived token still names it."""
-    bench = _bench(tmp_path)
-    site_path = tmp_path / "sites" / "new.localhost"
-    site_path.mkdir(parents=True)
-    (site_path / "site_config.json").write_text(json.dumps({"domains": ["old.localhost"]}))
-
-    assert Session(bench).has_scope({"scope": "site", "site": "old.localhost"}, "new.localhost")
+@pytest.mark.parametrize("claimed", [1, ["example.com"], {"site": "example.com"}])
+def test_has_scope_rejects_a_non_string_site_claim(tmp_path: Path, claimed) -> None:
+    assert not Session(_bench(tmp_path)).has_scope(
+        {"scope": "site", "site": claimed},
+        "example.com",
+    )
 
 
 def test_has_scope_none_claims_rejected(tmp_path: Path) -> None:

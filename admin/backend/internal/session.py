@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -129,7 +131,7 @@ class ActiveTokens(_JtiStore):
 
 
 class RevokedTokens(_JtiStore):
-    """Token jtis revoked before their expiry; checked on every verification."""
+    """Token identifiers revoked before their expiry."""
 
     FILENAME = ".revoked-jtis.json"
 
@@ -143,6 +145,7 @@ class Session:
 
     DEFAULT_TTL = 24 * 3600
     LOGIN_TTL = 5 * 60
+    PILOT_TOKEN_TTL = 365 * 24 * 3600
     # The setup link, and so the session redeeming it, live 3h - shorter than a password
     # login because the link travels in a URL, over plain http.
     SETUP_SESSION_TTL = 3 * 3600
@@ -203,6 +206,10 @@ class Session:
             raise ValueError("Site name is required.")
         return self._encode(ttl=ttl, scope="site", site=site)
 
+    def issue_pilot_token(self, site: str) -> str:
+        """Mint the long-lived site token stored in site_config.json."""
+        return self.issue_site_token(site, ttl=self.PILOT_TOKEN_TTL)
+
     def verify_token(self, token: str, ip: str = "unknown") -> dict | None:
         """Verify a token: local HS256 first, then the bench's JWKS keys if configured.
 
@@ -213,6 +220,8 @@ class Session:
         if claims is None:
             logging.warning("Rejected unknown or invalid session token from %s", ip)
             return None
+        if claims.get("scope") == "site" and self._token_key(token) in RevokedTokens(self.bench):
+            return None
         jti, exp = claims.get("jti"), claims.get("exp")
         if jti:
             if jti in RevokedTokens(self.bench):
@@ -221,7 +230,16 @@ class Session:
                 ActiveTokens(self.bench).add(jti, exp, ip=ip, last_seen=int(time.time()))
         return claims
 
-    def has_scope(self, claims: dict | None, site: str) -> bool:
+    def revoke_token(self, token: str) -> bool:
+        """Revoke one encoded token until its signed expiry."""
+        claims = self._decode(token)
+        exp = claims.get("exp") if claims else None
+        if not isinstance(exp, int) or exp <= int(time.time()):
+            return False
+        RevokedTokens(self.bench).add(self._token_key(token), exp)
+        return True
+
+    def has_scope(self, claims: dict | None, site: str, token: str = "") -> bool:
         if not claims:
             return False
         scope = claims.get("scope")
@@ -229,8 +247,9 @@ class Session:
             return True
         if scope != "site":
             return False
-        claimed = claims.get("site") or ""
-        return claimed == site or self.bench.resolve_site_name(claimed) == site
+        if claims.get("site") == site:
+            return True
+        return self._is_current_site_token(site, token)
 
     def revoke_jti(self, jti: str) -> bool:
         """Revoke an active session by its jti, using its tracked expiry.
@@ -267,6 +286,22 @@ class Session:
         if claims is None:
             claims = self._decode_jwks(token)
         return claims
+
+    def _is_current_site_token(self, site: str, token: str) -> bool:
+        if not token:
+            return False
+        from pilot.internal.site_paths import site_config_path
+
+        path = site_config_path(self.bench.path, site)
+        if path is None:
+            return False
+        config = json.loads(path.read_text())
+        configured = config.get("pilot_auth_token") if isinstance(config, dict) else None
+        return isinstance(configured, str) and hmac.compare_digest(configured, token)
+
+    @staticmethod
+    def _token_key(token: str) -> str:
+        return f"token:{hashlib.sha256(token.encode()).hexdigest()}"
 
     def _encode(self, ttl: int, scope: str, jti: str | None = None, site: str | None = None) -> str:
         now = int(time.time())
