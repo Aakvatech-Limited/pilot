@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import threading
 import time
+from concurrent.futures import Future
 from typing import TYPE_CHECKING, ClassVar
 
 from admin.backend.internal.jwks_cache import JwksCache
@@ -158,6 +160,8 @@ class Session:
         "PS512",
         "EdDSA",
     ]
+    _staged_jwks_configs: ClassVar[dict[Path, tuple[int | None, Future[tuple[str, str]]]]] = {}
+    _staged_jwks_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def __init__(self, bench: Bench) -> None:
         self.bench = bench
@@ -258,7 +262,7 @@ class Session:
     def _decode(self, token: str) -> dict | None:
         """Signature/expiry-checked claims: local HS256, then JWKS if configured."""
         claims = self._decode_local(token)
-        if claims is None and self.admin_config.jwks_url:
+        if claims is None:
             claims = self._decode_jwks(token)
         return claims
 
@@ -285,7 +289,7 @@ class Session:
     def _decode_jwks(self, token: str) -> dict | None:
         import jwt
 
-        url, audience = self.admin_config.jwks_url, self.admin_config.jwks_audience
+        url, audience = self._jwks_config()
         if not token or not url or not audience:
             return None
         try:
@@ -303,4 +307,79 @@ class Session:
                 options={"require": ["exp", "aud"], "verify_aud": True},
             )
         except jwt.PyJWTError:
+            return None
+
+    def _jwks_config(self) -> tuple[str, str]:
+        """Use the staged issuer only during the Central bootstrap window."""
+        url = getattr(self.admin_config, "jwks_url", "")
+        audience = getattr(self.admin_config, "jwks_audience", "")
+        central = getattr(self.bench.config, "central", None)
+        if not getattr(central, "is_awaiting_bootstrap", False):
+            if path := getattr(self.bench, "path", None):
+                with self._staged_jwks_lock:
+                    self._staged_jwks_configs.pop(path.parent, None)
+            return url, audience
+
+        directory = self.bench.path.parent
+        generation = self._common_config_generation(directory)
+        return self._staged_jwks_config(directory, generation)
+
+    @classmethod
+    def _staged_jwks_config(cls, directory: Path, generation: int | None) -> tuple[str, str]:
+        with cls._staged_jwks_lock:
+            cached = cls._staged_jwks_configs.get(directory)
+            if cached is not None and cached[0] == generation:
+                future = cached[1]
+                loads_metadata = False
+            else:
+                future = Future()
+                cls._staged_jwks_configs[directory] = (generation, future)
+                loads_metadata = True
+
+        if not loads_metadata:
+            return future.result()
+
+        try:
+            config = cls._load_staged_jwks_config(directory)
+        except Exception as error:
+            future.set_exception(error)
+            cls._discard_staged_jwks_config(directory, future)
+            raise
+
+        future.set_result(config)
+        if config == ("", ""):
+            cls._discard_staged_jwks_config(directory, future)
+        return config
+
+    @classmethod
+    def _discard_staged_jwks_config(cls, directory: Path, future: Future[tuple[str, str]]) -> None:
+        with cls._staged_jwks_lock:
+            cached = cls._staged_jwks_configs.get(directory)
+            if cached is not None and cached[1] is future:
+                cls._staged_jwks_configs.pop(directory, None)
+
+    @staticmethod
+    def _load_staged_jwks_config(directory: Path) -> tuple[str, str]:
+        from pilot.integrations.central import CentralClientError, InstanceMetadata
+
+        try:
+            credentials = InstanceMetadata().get_credentials()
+        except CentralClientError as error:
+            logging.warning("Cannot use the staged Central JWKS issuer: %s", error)
+            return "", ""
+        if credentials is None:
+            return "", ""
+
+        url = credentials["jwks_url"]
+        if initial_cache := credentials.get("initial_jwks_cache"):
+            JwksCache(directory, url).seed(initial_cache)
+        return url, credentials["jwks_audience_id"]
+
+    @staticmethod
+    def _common_config_generation(directory: Path) -> int | None:
+        from pilot.config.common import CommonConfig
+
+        try:
+            return CommonConfig.path(directory).stat().st_mtime_ns
+        except FileNotFoundError:
             return None
