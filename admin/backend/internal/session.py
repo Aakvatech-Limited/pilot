@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from admin.backend.internal.jwks_cache import JwksCache
 from pilot.config import BenchConfig
+from pilot.exceptions import ConfigError
 from pilot.internal import hs256_jwt
 from pilot.internal.atomic_file import exclusive_file_lock, replace_private_text_locked
 
@@ -302,7 +303,10 @@ class Session:
         path = site_config_path(self.bench.path, site)
         if path is None:
             return False
-        config = json.loads(path.read_text())
+        try:
+            config = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ConfigError("Site configuration is unavailable.") from exc
         configured = config.get("pilot_auth_token") if isinstance(config, dict) else None
         return isinstance(configured, str) and hmac.compare_digest(configured, token)
 

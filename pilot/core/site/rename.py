@@ -53,11 +53,13 @@ class SiteRename:
             # Reload only after both names resolve on disk.
             self._reload_nginx()
             self._drop_compatibility_link()
-            self._revoke_old_pilot_auth_token()
         except BaseException:
             # nginx still names the old site, so restore that state.
             self._roll_back(on_progress)
             raise
+        # Revocation can commit before its durability sync reports failure. The rename
+        # must stay committed once this starts, or rollback could restore a dead token.
+        self._revoke_old_pilot_auth_token()
         # Release the old route only after nginx has switched.
         if not self.keep_old_hostname:
             self._release_route(self.old_name)

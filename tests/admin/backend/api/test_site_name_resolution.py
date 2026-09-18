@@ -152,3 +152,18 @@ def test_alias_resolution_failure_reports_unavailable_configuration(tmp_path: Pa
 
     assert response.status_code == 503
     assert response.get_json()["error"]["code"] == "configuration_unavailable"
+
+
+def test_legacy_token_check_reports_corrupt_site_configuration(tmp_path: Path) -> None:
+    bench_root = _make_bench(tmp_path)
+    token = _site_token(bench_root, "old.localhost")
+    site_dir = bench_root / "sites" / "new.localhost"
+    site_dir.mkdir(parents=True)
+    (site_dir / "site_config.json").write_text("not json")
+
+    response = _client(bench_root, token=token).get(
+        "/api/v1/sites/new.localhost/configuration"
+    )
+
+    assert response.status_code == 503
+    assert response.get_json()["error"]["code"] == "configuration_unavailable"

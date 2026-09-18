@@ -201,6 +201,28 @@ def test_a_failed_rename_restores_and_does_not_revoke_the_old_token(tmp_path: Pa
     revoke_token.assert_not_called()
 
 
+def test_a_revocation_sync_failure_does_not_roll_back_the_rename(tmp_path: Path) -> None:
+    bench = _bench(tmp_path)
+    _site(bench, OLD, pilot_auth_token="old-token")
+
+    with (
+        patch(
+            "admin.backend.internal.session.Session.issue_pilot_token",
+            return_value="new-token",
+        ),
+        patch(
+            "admin.backend.internal.session.Session.revoke_token",
+            side_effect=OSError("directory sync failed"),
+        ),
+        patch.object(SiteRename, "_reload_nginx"),
+        pytest.raises(OSError, match="directory sync failed"),
+    ):
+        SiteRename(bench.site(OLD), NEW).run(lambda message: None)
+
+    assert _config(bench, NEW)["pilot_auth_token"] == "new-token"
+    assert not (bench.sites_path / OLD).exists()
+
+
 def test_the_old_hostname_can_be_released_instead(tmp_path: Path) -> None:
     bench = _bench(tmp_path)
     _site(bench, OLD)
