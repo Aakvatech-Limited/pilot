@@ -72,10 +72,7 @@ Two app operations answer inline instead of returning a task id, because both ar
 
 ### Site Detail And Login
 
-Every `/sites/<name>/...` route accepts the site's directory name or any hostname
-the site currently answers to, including custom domains and an old hostname kept
-through a rename. Pilot resolves the hostname to the directory name after the
-request is authenticated and before checking its site scope.
+Every `/sites/<name>/...` route accepts the site's directory name or any hostname the site currently answers to, including custom domains and an old hostname kept through a rename. Pilot resolves the hostname to the directory name after the request is authenticated and before checking its site scope.
 
 `GET /sites/<name>` includes `url` and `tls`. The route policy supplies the public scheme for both values.
 
