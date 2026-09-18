@@ -20,6 +20,19 @@ export default defineConfig({
     }),
     // `customElement` keeps SFC styles out of <head> so they land in the shadow root.
     vue({ customElement: true }),
+    {
+      name: "cloud-settings-dev-loader",
+      apply: "serve",
+      configureServer(server) {
+        server.middlewares.use("/embed/cloud-settings/cloud-settings.js", (request, response) => {
+          const entry = `http://${request.headers.host}/src/cloud-settings/index.js`;
+          response.setHeader("Content-Type", "text/javascript");
+          response.end(
+            `frappe.cloudSettings = { show: async (context) => { await import(${JSON.stringify(entry)}); frappe.cloudSettings.show(context); } };`,
+          );
+        });
+      },
+    },
     // Every style is already inlined into the JS (Tailwind via `?inline`, SFC
     // styles via customElement mode), so the stylesheet Vite extracts alongside
     // it is dead weight nothing loads. Drop it so the shipped bundle is one file.

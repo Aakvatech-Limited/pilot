@@ -6,9 +6,9 @@ import Button from "frappe-ui/src/components/Button/Button.vue";
 import FormControl from "frappe-ui/src/components/FormControl/FormControl.vue";
 import ErrorMessage from "frappe-ui/src/components/ErrorMessage/ErrorMessage.vue";
 import { openExternal } from "../external";
-import RazorpayLogo from "../assets/Razorpay-1.svg";
-import StripeLogo from "../assets/Stripe.svg";
-import UpiLogo from "../assets/UPI-1.svg";
+import RazorpayLogo from "../assets/Razorpay-1.svg?inline";
+import StripeLogo from "../assets/Stripe.svg?inline";
+import UpiLogo from "../assets/UPI-1.svg?inline";
 
 const props = defineProps({ store: { type: Object, required: true } });
 const emit = defineEmits(["close"]);

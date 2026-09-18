@@ -15,13 +15,20 @@ const TAG = "fc-cloud-settings";
 // neither selector matches — `:root` is the document, not the host — so the
 // embed would inherit whatever tokens Desk happens to expose and silently drop
 // the rest (radius has none on older Desk).
-const scopedStyleText = styleText
-  .replace(/:root\b/g, ":host")
-  .replace(/\[data-theme=(["']?)dark\1\]/g, ":host([data-theme=dark])");
+const scopeTokens = (text) =>
+  text
+    .replace(/:root\b/g, ":host")
+    .replace(/\[data-theme=(["']?)dark\1\]/g, ":host([data-theme=dark])");
 
 // One sheet shared by every instance; adopting it costs nothing per element.
 const sheet = new CSSStyleSheet();
-sheet.replaceSync(scopedStyleText);
+sheet.replaceSync(scopeTokens(styleText));
+
+if (import.meta.hot) {
+  import.meta.hot.accept("./tailwind.css?inline", (module) => {
+    sheet.replaceSync(scopeTokens(module.default));
+  });
+}
 
 const CloudSettingsElement = defineCustomElement({
   props: { context: Object, open: Boolean },
