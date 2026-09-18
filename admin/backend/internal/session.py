@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import threading
 import time
 from typing import TYPE_CHECKING, ClassVar
 
@@ -158,6 +159,8 @@ class Session:
         "PS512",
         "EdDSA",
     ]
+    _staged_jwks_configs: ClassVar[dict[Path, tuple[int | None, str, str]]] = {}
+    _staged_jwks_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def __init__(self, bench: Bench) -> None:
         self.bench = bench
@@ -311,8 +314,24 @@ class Session:
         audience = getattr(self.admin_config, "jwks_audience", "")
         central = getattr(self.bench.config, "central", None)
         if not getattr(central, "is_awaiting_bootstrap", False):
+            if path := getattr(self.bench, "path", None):
+                with self._staged_jwks_lock:
+                    self._staged_jwks_configs.pop(path.parent, None)
             return url, audience
 
+        directory = self.bench.path.parent
+        generation = self._common_config_generation(directory)
+        with self._staged_jwks_lock:
+            cached = self._staged_jwks_configs.get(directory)
+            if cached is not None and cached[0] == generation:
+                return cached[1], cached[2]
+            config = self._load_staged_jwks_config(directory)
+            if config != ("", ""):
+                self._staged_jwks_configs[directory] = (generation, *config)
+            return config
+
+    @staticmethod
+    def _load_staged_jwks_config(directory: Path) -> tuple[str, str]:
         from pilot.integrations.central import CentralClientError, InstanceMetadata
 
         try:
@@ -325,5 +344,14 @@ class Session:
 
         url = credentials["jwks_url"]
         if initial_cache := credentials.get("initial_jwks_cache"):
-            JwksCache(self.bench.path.parent, url).seed(initial_cache)
+            JwksCache(directory, url).seed(initial_cache)
         return url, credentials["jwks_audience_id"]
+
+    @staticmethod
+    def _common_config_generation(directory: Path) -> int | None:
+        from pilot.config.common import CommonConfig
+
+        try:
+            return CommonConfig.path(directory).stat().st_mtime_ns
+        except FileNotFoundError:
+            return None

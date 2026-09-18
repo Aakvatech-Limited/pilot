@@ -64,6 +64,7 @@ def _stub_fetch(monkeypatch, tmp_path):
     monkeypatch.setattr(_Bench, "path", tmp_path / "benches" / "current", raising=False)
     JwksCache._refreshing.clear()
     JwksCache._last_forced_fetch.clear()
+    Session._staged_jwks_configs.clear()
 
 
 def test_rsa_token_verifies() -> None:
@@ -147,9 +148,14 @@ def test_awaiting_central_host_uses_the_staged_imds_issuer(tmp_path: Path, monke
         "jwks_audience_id": "vm-boot-1",
         "initial_jwks_cache": _jwks_document(),
     }
+    calls = []
+
+    def get_credentials(self):
+        calls.append(True)
+        return credentials
+
     monkeypatch.setattr(
-        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
-        lambda self: credentials,
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials", get_credentials
     )
     monkeypatch.setattr(
         PyJWKClient,
@@ -158,9 +164,40 @@ def test_awaiting_central_host_uses_the_staged_imds_issuer(tmp_path: Path, monke
     )
 
     claims = Session(bench).verify_token(_mint(aud="vm-boot-1"))
+    repeated = Session(bench).verify_token(_mint(aud="vm-boot-1"))
 
     assert claims and claims["sub"] == "admin"
+    assert repeated and repeated["sub"] == "admin"
+    assert calls == [True]
     assert JwksCache(tmp_path / "benches", JWKS_URL).signing_key("rsa-key") is not None
+
+
+def test_pending_issuer_cache_is_invalidated_by_shared_config_change(tmp_path: Path, monkeypatch) -> None:
+    bench = SimpleNamespace(
+        path=_Bench.path,
+        config=SimpleNamespace(
+            admin=SimpleNamespace(jwt_secret="", jwks_url="", jwks_audience=""),
+            central=SimpleNamespace(is_awaiting_bootstrap=True),
+        ),
+    )
+    common_config = tmp_path / "benches" / "common_config.toml"
+    common_config.write_text("generation = 1")
+    audiences = iter(("vm-boot-1", "vm-boot-2"))
+
+    def get_credentials(self):
+        return {
+            "jwks_url": JWKS_URL,
+            "jwks_audience_id": next(audiences),
+            "initial_jwks_cache": _jwks_document(),
+        }
+
+    monkeypatch.setattr(
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials", get_credentials
+    )
+
+    assert Session(bench).verify_token(_mint(aud="vm-boot-1"))
+    common_config.write_text("generation = 2")
+    assert Session(bench).verify_token(_mint(aud="vm-boot-2"))
 
 
 def test_awaiting_central_host_does_not_use_the_saved_issuer(monkeypatch) -> None:
@@ -195,8 +232,10 @@ def test_bootstrapped_central_host_uses_the_saved_issuer(monkeypatch) -> None:
         "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
         fail_if_called,
     )
+    Session._staged_jwks_configs[_Bench.path.parent] = (None, "staged-url", "staged-audience")
 
     assert Session(bench).verify_token(_mint())
+    assert _Bench.path.parent not in Session._staged_jwks_configs
 
 
 class _Bench:
