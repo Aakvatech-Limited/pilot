@@ -27,7 +27,9 @@ pilot setup production --admin-domain admin.example.com
 pilot setup letsencrypt
 ```
 
-`pilot setup production` writes process manager config and nginx integration. `pilot remove production` removes production deployment files and services while keeping logs, certificates, and admin domain config.
+`pilot setup production` writes process manager config and nginx integration, and configures telemetry: it fetches this region's Datum credential from Central once, then sets up the metrics monitor and the log shipper from it. `pilot setup telemetry` does the credential and the log shipper on their own. See [Telemetry](configuration.md#telemetry).
+
+`pilot remove production` removes production deployment files and services while keeping logs, certificates, and admin domain config.
 
 ## Process Managers
 
