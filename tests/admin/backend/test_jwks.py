@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -200,6 +202,70 @@ def test_pending_issuer_cache_is_invalidated_by_shared_config_change(tmp_path: P
     assert Session(bench).verify_token(_mint(aud="vm-boot-2"))
 
 
+def test_concurrent_pending_authentication_shares_one_metadata_lookup(monkeypatch) -> None:
+    bench = SimpleNamespace(
+        path=_Bench.path,
+        config=SimpleNamespace(
+            admin=SimpleNamespace(jwt_secret="", jwks_url="", jwks_audience=""),
+            central=SimpleNamespace(is_awaiting_bootstrap=True),
+        ),
+    )
+    lookup_started = threading.Event()
+    release_lookup = threading.Event()
+    calls = []
+
+    def get_credentials(self):
+        calls.append(True)
+        lookup_started.set()
+        release_lookup.wait(timeout=1)
+        return {
+            "jwks_url": JWKS_URL,
+            "jwks_audience_id": "vm-boot-1",
+            "initial_jwks_cache": _jwks_document(),
+        }
+
+    monkeypatch.setattr(
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials", get_credentials
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(Session(bench).verify_token, _mint(aud="vm-boot-1"))
+        assert lookup_started.wait(timeout=1)
+        second = pool.submit(Session(bench).verify_token, _mint(aud="vm-boot-1"))
+        release_lookup.set()
+
+    assert first.result()
+    assert second.result()
+    assert calls == [True]
+
+
+def test_empty_metadata_result_is_retried(monkeypatch) -> None:
+    bench = SimpleNamespace(
+        path=_Bench.path,
+        config=SimpleNamespace(
+            admin=SimpleNamespace(jwt_secret="", jwks_url="", jwks_audience=""),
+            central=SimpleNamespace(is_awaiting_bootstrap=True),
+        ),
+    )
+    results = iter(
+        (
+            None,
+            {
+                "jwks_url": JWKS_URL,
+                "jwks_audience_id": "vm-boot-1",
+                "initial_jwks_cache": _jwks_document(),
+            },
+        )
+    )
+    monkeypatch.setattr(
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
+        lambda self: next(results),
+    )
+
+    assert Session(bench).verify_token(_mint(aud="vm-boot-1")) is None
+    assert Session(bench).verify_token(_mint(aud="vm-boot-1"))
+
+
 def test_awaiting_central_host_does_not_use_the_saved_issuer(monkeypatch) -> None:
     bench = SimpleNamespace(
         path=_Bench.path,
@@ -232,7 +298,9 @@ def test_bootstrapped_central_host_uses_the_saved_issuer(monkeypatch) -> None:
         "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
         fail_if_called,
     )
-    Session._staged_jwks_configs[_Bench.path.parent] = (None, "staged-url", "staged-audience")
+    staged = Future()
+    staged.set_result(("staged-url", "staged-audience"))
+    Session._staged_jwks_configs[_Bench.path.parent] = (None, staged)
 
     assert Session(bench).verify_token(_mint())
     assert _Bench.path.parent not in Session._staged_jwks_configs

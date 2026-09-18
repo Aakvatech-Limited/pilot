@@ -5,6 +5,7 @@ import logging
 import secrets
 import threading
 import time
+from concurrent.futures import Future
 from typing import TYPE_CHECKING, ClassVar
 
 from admin.backend.internal.jwks_cache import JwksCache
@@ -159,7 +160,7 @@ class Session:
         "PS512",
         "EdDSA",
     ]
-    _staged_jwks_configs: ClassVar[dict[Path, tuple[int | None, str, str]]] = {}
+    _staged_jwks_configs: ClassVar[dict[Path, tuple[int | None, Future[tuple[str, str]]]]] = {}
     _staged_jwks_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def __init__(self, bench: Bench) -> None:
@@ -321,14 +322,41 @@ class Session:
 
         directory = self.bench.path.parent
         generation = self._common_config_generation(directory)
-        with self._staged_jwks_lock:
-            cached = self._staged_jwks_configs.get(directory)
+        return self._staged_jwks_config(directory, generation)
+
+    @classmethod
+    def _staged_jwks_config(cls, directory: Path, generation: int | None) -> tuple[str, str]:
+        with cls._staged_jwks_lock:
+            cached = cls._staged_jwks_configs.get(directory)
             if cached is not None and cached[0] == generation:
-                return cached[1], cached[2]
-            config = self._load_staged_jwks_config(directory)
-            if config != ("", ""):
-                self._staged_jwks_configs[directory] = (generation, *config)
-            return config
+                future = cached[1]
+                loads_metadata = False
+            else:
+                future = Future()
+                cls._staged_jwks_configs[directory] = (generation, future)
+                loads_metadata = True
+
+        if not loads_metadata:
+            return future.result()
+
+        try:
+            config = cls._load_staged_jwks_config(directory)
+        except Exception as error:
+            future.set_exception(error)
+            cls._discard_staged_jwks_config(directory, future)
+            raise
+
+        future.set_result(config)
+        if config == ("", ""):
+            cls._discard_staged_jwks_config(directory, future)
+        return config
+
+    @classmethod
+    def _discard_staged_jwks_config(cls, directory: Path, future: Future[tuple[str, str]]) -> None:
+        with cls._staged_jwks_lock:
+            cached = cls._staged_jwks_configs.get(directory)
+            if cached is not None and cached[1] is future:
+                cls._staged_jwks_configs.pop(directory, None)
 
     @staticmethod
     def _load_staged_jwks_config(directory: Path) -> tuple[str, str]:
