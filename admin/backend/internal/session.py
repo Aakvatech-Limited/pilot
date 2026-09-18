@@ -216,11 +216,18 @@ class Session:
         A token whose jti has been revoked is rejected. Otherwise its entry in the active
         tracker is refreshed with this request's IP and time.
         """
-        claims = self._decode(token)
+        claims = self._decode_local(token)
+        is_local = claims is not None
+        if claims is None:
+            claims = self._decode_jwks(token)
         if claims is None:
             logging.warning("Rejected unknown or invalid session token from %s", ip)
             return None
-        if claims.get("scope") == "site" and self._token_key(token) in RevokedTokens(self.bench):
+        if (
+            is_local
+            and claims.get("scope") == "site"
+            and self._token_key(token) in RevokedTokens(self.bench)
+        ):
             return None
         jti, exp = claims.get("jti"), claims.get("exp")
         if jti:
