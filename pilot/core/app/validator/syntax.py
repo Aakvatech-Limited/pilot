@@ -14,21 +14,28 @@ if typing.TYPE_CHECKING:
 
 
 class SyntaxCheck:
-    """Ast-parses every Python file in the app, rejecting it on any SyntaxError."""
+    """AST-parses every Python file in the app using the bench's Python environment."""
 
     def run(self, app: "App") -> None:
+        files = [str(p) for p in python_files(app)]
+        if not files:
+            return
+
+        syntax_errors = self._syntax_errors(app, files)
+
         broken = [
-            f"{path.relative_to(app.path)}: {error}"
-            for path in python_files(app)
-            for error in self._syntax_errors(path)
+            f"{Path(path).relative_to(app.path)}: {error}"
+            for path, error in syntax_errors.items()
         ]
+
         if broken:
             raise AppValidationError(
-                f"'{app.config.name}' has Python syntax errors:\n" + "\n".join(f"  {b}" for b in broken)
+                f"'{app.config.name}' has Python syntax errors:\n"
+                + "\n".join(f"  {b}" for b in broken)
             )
 
-    @staticmethod
-    def _get_python_bin(app: "App") -> str:
+    @classmethod
+    def _get_python_bin(cls, app: "App") -> str:
         """Returns the path to the bench's Python binary, falling back to the current Pilot Python executable."""
         bench = getattr(app, "bench", None)
         if bench and hasattr(bench, "env_path") and bench.env_path:
@@ -37,9 +44,10 @@ class SyntaxCheck:
                 return str(bench_python)
         return sys.executable
 
-    @staticmethod
-    def _check_syntax_in_env(files: list[str], python_bin: str) -> dict[str, str]:
-        """Runs ast.parse across all files in a single subprocess using the target bench Python runner."""
+    @classmethod
+    def _syntax_errors(cls, app: "App", files: list[str]) -> dict[str, str]:
+        """Runs ast.parse across all files in a single batch subprocess using the bench Python runner."""
+        python_bin = cls._get_python_bin(app)
         script = """
 import ast
 import json
@@ -65,9 +73,26 @@ print(json.dumps(errors))
 """
         cmd = [python_bin, "-c", script]
         try:
-            ast.parse(path.read_text(), filename=str(path))
-        except SyntaxError as exc:
-            return [f"line {exc.lineno}: {exc.msg}"]
-        except OSError:
-            return []
-        return []
+            res = subprocess.run(
+                cmd,
+                input=json.dumps(files),
+                capture_output=True,
+                text=True,
+            )
+        except Exception as exc:
+            raise AppValidationError(
+                f"Failed to execute syntax validator with '{python_bin}': {exc}"
+            ) from exc
+
+        if res.returncode != 0:
+            error_msg = res.stderr.strip() or f"Process exited with code {res.returncode}"
+            raise AppValidationError(
+                f"Syntax validator failed under '{python_bin}': {error_msg}"
+            )
+
+        try:
+            return json.loads(res.stdout)
+        except json.JSONDecodeError as exc:
+            raise AppValidationError(
+                f"Syntax validator returned malformed output under '{python_bin}': {res.stdout.strip()}"
+            ) from exc

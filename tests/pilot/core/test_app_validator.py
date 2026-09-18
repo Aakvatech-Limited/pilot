@@ -1120,6 +1120,15 @@ def test_syntax_check_reports_broken_file_and_line(tmp_path: Path) -> None:
     assert "myapp/bad.py" in err_msg
     assert "line 1" in err_msg
 
+    # Also test the _syntax_errors method directly
+    bad_file = app.path / "myapp" / "bad.py"
+    single_errors = SyntaxCheck._syntax_errors(app, [str(bad_file)])
+    assert str(bad_file) in single_errors
+    assert "line 1" in single_errors[str(bad_file)]
+
+    good_file = app.path / "myapp" / "hooks.py"
+    assert SyntaxCheck._syntax_errors(app, [str(good_file)]) == {}
+
 
 def test_syntax_check_raises_on_process_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies AppValidationError is raised if the python runner subprocess exits non-zero."""
