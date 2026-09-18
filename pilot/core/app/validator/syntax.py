@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import ast
+import json
+import subprocess
+import sys
 import typing
 from pathlib import Path
 
@@ -26,7 +28,42 @@ class SyntaxCheck:
             )
 
     @staticmethod
-    def _syntax_errors(path: Path) -> list[str]:
+    def _get_python_bin(app: "App") -> str:
+        """Returns the path to the bench's Python binary, falling back to the current Pilot Python executable."""
+        bench = getattr(app, "bench", None)
+        if bench and hasattr(bench, "env_path") and bench.env_path:
+            bench_python = Path(bench.env_path) / "bin" / "python"
+            if bench_python.exists():
+                return str(bench_python)
+        return sys.executable
+
+    @staticmethod
+    def _check_syntax_in_env(files: list[str], python_bin: str) -> dict[str, str]:
+        """Runs ast.parse across all files in a single subprocess using the target bench Python runner."""
+        script = """
+import ast
+import json
+import sys
+
+try:
+    files = json.load(sys.stdin)
+except Exception as e:
+    sys.stderr.write(f"Failed to read input files: {e}")
+    sys.exit(1)
+
+errors = {}
+for file_path in files:
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            ast.parse(f.read(), filename=file_path)
+    except SyntaxError as exc:
+        errors[file_path] = f"line {exc.lineno}: {exc.msg}"
+    except OSError:
+        pass
+
+print(json.dumps(errors))
+"""
+        cmd = [python_bin, "-c", script]
         try:
             ast.parse(path.read_text(), filename=str(path))
         except SyntaxError as exc:
