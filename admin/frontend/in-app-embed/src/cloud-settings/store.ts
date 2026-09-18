@@ -2,49 +2,54 @@ import { reactive } from "vue";
 import * as api from "./api";
 
 const POLL_INTERVAL = 2500;
-const MAX_WAIT = 3 * 60 * 1000; // give up watching a task after 3 minutes
+const MAX_WAIT = 3 * 60 * 1000;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Poll a bench task: "success" | "failed" | "timeout" | "gone" | "error" |
-// "cancelled". "timeout"/"gone" may still be running, so don't claim an outcome.
-export async function waitForTask(taskId, isCancelled = () => false) {
+type TaskOutcome =
+  "success" | "failed" | "timeout" | "gone" | "error" | "cancelled";
+
+type Payload = Record<string, any> | null;
+
+export const waitForTask = async (
+  taskId: string,
+  isCancelled = () => false,
+): Promise<TaskOutcome> => {
   const deadline = Date.now() + MAX_WAIT;
   while (!isCancelled()) {
-    let task;
+    let task: { status?: string; exit_code?: number | null } | undefined;
     try {
       task = await api.getTask(taskId);
     } catch {
       return "error";
     }
-    const status = task && task.status;
+    const status = task?.status;
     if (!status) return "gone";
-    // Only these are terminal; queued/pending states are still in flight.
     if (!["success", "failed", "killed"].includes(status)) {
       if (Date.now() > deadline) return "timeout";
       await sleep(POLL_INTERVAL);
       continue;
     }
     const succeeded =
-      status === "success" && (task.exit_code === 0 || task.exit_code == null);
+      status === "success" &&
+      (task?.exit_code === 0 || task?.exit_code == null);
     return succeeded ? "success" : "failed";
   }
   return "cancelled";
-}
+};
 
-// Shared across panels; each section loads lazily and refreshes itself.
-export function createStore(context) {
+export const createStore = (context?: CloudContext) => {
   const state = reactive({
     context: context || {},
-    billing: null,
+    billing: null as Payload,
     billingError: "",
-    marketplace: null,
+    marketplace: null as Payload,
     marketplaceError: "",
-    domains: null,
+    domains: null as Payload,
     domainsError: "",
   });
 
-  async function loadBilling(force = false) {
+  const loadBilling = async (force = false) => {
     state.billingError = "";
     if (state.billing && !force) return;
     try {
@@ -52,9 +57,9 @@ export function createStore(context) {
     } catch (exception) {
       state.billingError = api.getErrorMessage(exception);
     }
-  }
+  };
 
-  async function loadMarketplace(force = false) {
+  const loadMarketplace = async (force = false) => {
     state.marketplaceError = "";
     if (state.marketplace && !force) return;
     try {
@@ -62,9 +67,9 @@ export function createStore(context) {
     } catch (exception) {
       state.marketplaceError = api.getErrorMessage(exception);
     }
-  }
+  };
 
-  async function loadDomains(force = false) {
+  const loadDomains = async (force = false) => {
     state.domainsError = "";
     if (state.domains && !force) return;
     try {
@@ -72,7 +77,7 @@ export function createStore(context) {
     } catch (exception) {
       state.domainsError = api.getErrorMessage(exception);
     }
-  }
+  };
 
   return {
     state,
@@ -81,4 +86,4 @@ export function createStore(context) {
     loadMarketplace,
     loadDomains,
   };
-}
+};
