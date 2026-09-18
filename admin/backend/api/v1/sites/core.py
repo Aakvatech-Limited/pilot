@@ -280,12 +280,12 @@ def migrate_site(name: str):
 @rate_limit(10, 60, user_ip=True)
 def create_login_link(name: str):
     bench_root = Path(current_app.config["BENCH_ROOT"])
-    config_path = site_config_path(bench_root, name)
-    if config_path is None:
-        return site_not_found()
     try:
         bench = Bench(bench_root)
-        url = bench.site(name).admin_login_url()
+        resolved_site_name = name if site_config_path(bench_root, name) else bench.site_claiming(name)
+        if resolved_site_name is None:
+            return site_not_found()
+        url = bench.site(resolved_site_name).admin_login_url()
     except Exception:
         return error_response(
             "configuration_unavailable",
