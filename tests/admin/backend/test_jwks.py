@@ -64,6 +64,7 @@ def _stub_fetch(monkeypatch, tmp_path):
     monkeypatch.setattr(_Bench, "path", tmp_path / "benches" / "current", raising=False)
     JwksCache._refreshing.clear()
     JwksCache._last_forced_fetch.clear()
+    Session._staged_jwks_configs.clear()
 
 
 def test_rsa_token_verifies() -> None:
@@ -134,7 +135,7 @@ def test_no_audience_config_rejects_remote_token() -> None:
     assert _verify(_mint(aud="anything"), JWKS_URL, "") is None
 
 
-def test_awaiting_central_host_uses_the_staged_imds_issuer(tmp_path: Path, monkeypatch) -> None:
+def test_awaiting_central_host_caches_the_staged_imds_issuer(tmp_path: Path, monkeypatch) -> None:
     bench = SimpleNamespace(
         path=_Bench.path,
         config=SimpleNamespace(
@@ -147,15 +148,39 @@ def test_awaiting_central_host_uses_the_staged_imds_issuer(tmp_path: Path, monke
         "jwks_audience_id": "vm-boot-1",
         "initial_jwks_cache": _jwks_document(),
     }
+    calls = []
+
+    def get_credentials(self):
+        calls.append(True)
+        return credentials
+
     monkeypatch.setattr(
-        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
-        lambda self: credentials,
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials", get_credentials
     )
 
     claims = Session(bench).verify_token(_mint(aud="vm-boot-1"))
+    repeated = Session(bench).verify_token(_mint(aud="vm-boot-1"))
 
     assert claims and claims["sub"] == "admin"
+    assert repeated and repeated["sub"] == "admin"
+    assert calls == [True]
     assert JwksCache(tmp_path / "benches", JWKS_URL).signing_key("rsa-key") is not None
+
+
+def test_awaiting_central_host_does_not_use_the_saved_issuer(monkeypatch) -> None:
+    bench = SimpleNamespace(
+        path=_Bench.path,
+        config=SimpleNamespace(
+            admin=SimpleNamespace(jwt_secret="", jwks_url=JWKS_URL, jwks_audience=AUDIENCE),
+            central=SimpleNamespace(is_awaiting_bootstrap=True),
+        ),
+    )
+    monkeypatch.setattr(
+        "pilot.integrations.central.metadata.InstanceMetadata.get_credentials",
+        lambda self: None,
+    )
+
+    assert Session(bench).verify_token(_mint()) is None
 
 
 def test_bootstrapped_central_host_uses_the_saved_issuer(monkeypatch) -> None:

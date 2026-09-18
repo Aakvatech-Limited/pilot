@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import threading
 import time
 from typing import TYPE_CHECKING, ClassVar
 
@@ -158,6 +159,8 @@ class Session:
         "PS512",
         "EdDSA",
     ]
+    _staged_jwks_configs: ClassVar[dict[Path, tuple[str, str]]] = {}
+    _staged_jwks_lock: ClassVar[threading.Lock] = threading.Lock()
 
     def __init__(self, bench: Bench) -> None:
         self.bench = bench
@@ -313,17 +316,28 @@ class Session:
         if not getattr(central, "is_awaiting_bootstrap", False):
             return url, audience
 
+        directory = self.bench.path.parent
+        with self._staged_jwks_lock:
+            if config := self._staged_jwks_configs.get(directory):
+                return config
+            config = self._load_staged_jwks_config(directory)
+            if config != ("", ""):
+                self._staged_jwks_configs[directory] = config
+            return config
+
+    @staticmethod
+    def _load_staged_jwks_config(directory: Path) -> tuple[str, str]:
         from pilot.integrations.central import CentralClientError, InstanceMetadata
 
         try:
             credentials = InstanceMetadata().get_credentials()
         except CentralClientError as error:
             logging.warning("Cannot use the staged Central JWKS issuer: %s", error)
-            return url, audience
+            return "", ""
         if credentials is None:
-            return url, audience
+            return "", ""
 
         url = credentials["jwks_url"]
         if initial_cache := credentials.get("initial_jwks_cache"):
-            JwksCache(self.bench.path.parent, url).seed(initial_cache)
+            JwksCache(directory, url).seed(initial_cache)
         return url, credentials["jwks_audience_id"]
