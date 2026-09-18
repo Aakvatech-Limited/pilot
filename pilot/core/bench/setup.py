@@ -146,7 +146,7 @@ class ProductionSetup:
         from pilot.core.site.storage.systemd import SiteStorageConfigurator
         from pilot.core.site.uptime_monitoring_config import UptimeMonitorConfigurator
 
-        self._apply_metrics_token(on_progress)
+        self._apply_telemetry_config(on_progress)
 
         monitor = MonitorConfigurator(self.bench)
         monitor.install()
@@ -158,65 +158,46 @@ class ProductionSetup:
 
         SiteStorageConfigurator().install()
 
-    def _apply_metrics_token(self, on_progress: Callable[[str], None]) -> None:
-        """Fetch the Datum metrics JWT from Central when common_config.toml has none."""
+    def _apply_telemetry_config(self, on_progress: Callable[[str], None]) -> None:
+        """Fetch the one Datum credential from Central and write it over whatever is there.
+
+        Metrics and logs present the same token to the same region, so there is one to
+        fetch and one place to keep it. Central is the authority on both, and the token
+        expires, so a setup run takes what Central says rather than keeping a stale copy."""
         from pilot.config import BenchConfig
         from pilot.integrations.central import CentralClient
         from pilot.integrations.central.client import CentralClientError
 
-        datum = self.bench.config.datum
-        if (datum.token and datum.endpoint) or not self.bench.config.central.enabled:
+        telemetry = self.bench.config.telemetry
+        if not self.bench.config.central.enabled:
             return
 
         try:
-            token_info = CentralClient().metrics_token()
+            token_info = CentralClient().datum_token()
             token, endpoint = token_info.get("token"), token_info.get("endpoint")
         except CentralClientError as exc:
-            on_progress(f"Could not fetch a metrics token from Central: {exc}")
+            on_progress(f"Could not fetch a Datum token from Central: {exc}")
             return
         if not token or not endpoint:
             return
 
-        datum.token, datum.endpoint = token, endpoint
+        telemetry.token, telemetry.endpoint = token, endpoint
         with BenchConfig.open(self.bench.path) as config:
-            config.datum.token, config.datum.endpoint = token, endpoint
-
-    def _apply_log_token(self, on_progress: Callable[[str], None]) -> None:
-        """Fetch the Datum logs JWT and endpoint from Central when common_config.toml has none."""
-        from pilot.config import BenchConfig
-        from pilot.integrations.central import CentralClient
-        from pilot.integrations.central.client import CentralClientError
-
-        logs = self.bench.config.logs
-        if (logs.token and logs.endpoint) or not self.bench.config.central.enabled:
-            return
-
-        try:
-            token_info = CentralClient().log_token()
-            token, endpoint = token_info.get("token"), token_info.get("endpoint")
-        except CentralClientError as exc:
-            on_progress(f"Could not fetch a logs token from Central: {exc}")
-            return
-        if not token or not endpoint:
-            return
-
-        logs.token, logs.endpoint = token, endpoint
-        with BenchConfig.open(self.bench.path) as config:
-            config.logs.token, config.logs.endpoint = token, endpoint
+            config.telemetry.token, config.telemetry.endpoint = token, endpoint
 
     def _setup_log_shipping(self, on_progress: Callable[[str], None] = lambda message: None) -> None:
-        """Install Fluent Bit as a systemd service, if a logs endpoint is configured."""
+        """Install Fluent Bit as a systemd service, if this bench has a Datum credential."""
         from pilot.managers.fluentbit import LogsConfigurator
 
-        self._apply_log_token(on_progress)
+        self._apply_telemetry_config(on_progress)
 
-        log_config = self.bench.config.logs
-        if not log_config.is_enabled:
+        telemetry = self.bench.config.telemetry
+        if not telemetry.is_shipping_logs:
             return
 
         configurator = LogsConfigurator(self.bench)
         configurator.setup()
-        configurator.install(log_config)
+        configurator.install(telemetry)
 
     def _persist_production_state(self) -> None:
         """Write the production state to bench.toml LAST, so the switcher never
