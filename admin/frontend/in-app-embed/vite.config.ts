@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import frappeuiPlugin from "frappe-ui/vite";
 import path from "path";
-import fs from "fs";
 
 export default defineConfig({
   plugins: [
@@ -31,22 +30,11 @@ export default defineConfig({
         );
       },
     },
-
-    {
-      name: "cloud-settings-drop-css-assets",
-      closeBundle: () => {
-        const dir = path.resolve(
-          __dirname,
-          "../../backend/static/in-app-embed/cloud-settings/assets",
-        );
-        if (!fs.existsSync(dir)) return;
-        for (const file of fs.readdirSync(dir)) {
-          if (file.endsWith(".css")) fs.rmSync(path.join(dir, file));
-        }
-        if (!fs.readdirSync(dir).length) fs.rmdirSync(dir);
-      },
-    },
   ],
+
+  server: {
+    warmup: { clientFiles: ["./src/cloud-settings/index.ts"] },
+  },
 
   build: {
     outDir: "../../backend/static/in-app-embed/cloud-settings",
