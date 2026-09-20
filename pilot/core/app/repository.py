@@ -265,7 +265,7 @@ class AppRepository:
         if pin.kind == "tag":
             self._sync_remote_url()
             self.repo.prune_stale_temp_packs()
-            run_command(["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", pin.ref])
+            run_command(\n                ["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", pin.ref],\n                env=self.git_env,\n            )
             self._checkout_pinned_ref("FETCH_HEAD")
         else:
             self.checkout_pinned_commit(pin.ref)
@@ -275,7 +275,7 @@ class AppRepository:
         self._sync_remote_url()
         self.repo.prune_stale_temp_packs()
         try:
-            run_command(["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", sha])
+            run_command(\n                ["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", sha],\n                env=self.git_env,\n            )
             self._checkout_pinned_ref("FETCH_HEAD")
             return
         except CommandError:
