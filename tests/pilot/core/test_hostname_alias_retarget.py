@@ -3,7 +3,6 @@ from pathlib import Path
 from pilot.config.central import HostnameAlias
 from pilot.config.common import CommonConfig
 from pilot.core.bench import Bench
-from pilot.core.bench.hostname_aliases import retarget
 from tests.pilot.integrations.test_central_client import _bench
 
 
@@ -28,7 +27,7 @@ def test_a_site_alias_follows_the_renamed_site(tmp_path: Path) -> None:
         HostnameAlias(type="site", pattern="site-*.zone.test", target="old.example.com"),
     )
 
-    assert retarget(bench, "site", "old.example.com", "new.example.com") is True
+    assert bench.hostname_aliases.retarget("site", "old.example.com", "new.example.com") is True
     assert _targets(bench) == ["new.example.com"]
     # The caller renders nginx from the config it holds, so that must move too.
     assert [alias.target for alias in bench.config.central.hostname_aliases] == ["new.example.com"]
@@ -40,7 +39,7 @@ def test_an_admin_alias_is_left_alone_by_a_site_rename(tmp_path: Path) -> None:
         HostnameAlias(type="admin", pattern="vm-*.zone.test", target="old.example.com"),
     )
 
-    assert retarget(bench, "site", "old.example.com", "new.example.com") is False
+    assert bench.hostname_aliases.retarget("site", "old.example.com", "new.example.com") is False
     assert _targets(bench) == ["old.example.com"]
 
 
@@ -51,7 +50,7 @@ def test_only_the_matching_target_moves(tmp_path: Path) -> None:
         HostnameAlias(type="site", pattern="alt-*.zone.test", target="other.example.com"),
     )
 
-    assert retarget(bench, "site", "old.example.com", "new.example.com") is True
+    assert bench.hostname_aliases.retarget("site", "old.example.com", "new.example.com") is True
     assert _targets(bench) == ["new.example.com", "other.example.com"]
 
 
@@ -61,13 +60,13 @@ def test_renaming_to_the_same_host_writes_nothing(tmp_path: Path) -> None:
         HostnameAlias(type="site", pattern="site-*.zone.test", target="Same.example.com"),
     )
 
-    assert retarget(bench, "site", "same.example.com", "Same.example.com") is False
+    assert bench.hostname_aliases.retarget("site", "same.example.com", "Same.example.com") is False
 
 
 def test_a_host_with_no_aliases_is_a_no_op(tmp_path: Path) -> None:
     bench = _with_aliases(tmp_path)
 
-    assert retarget(bench, "site", "old.example.com", "new.example.com") is False
+    assert bench.hostname_aliases.retarget("site", "old.example.com", "new.example.com") is False
 
 
 def test_concurrent_retargets_do_not_overwrite_each_other(tmp_path: Path) -> None:
@@ -85,7 +84,7 @@ def test_concurrent_retargets_do_not_overwrite_each_other(tmp_path: Path) -> Non
 
     def move(alias_type: str, old: str, new: str) -> None:
         barrier.wait()
-        retarget(bench, alias_type, old, new)
+        bench.hostname_aliases.retarget(alias_type, old, new)
 
     threads = [
         threading.Thread(target=move, args=("site", "site-old.example.com", "site-new.example.com")),
@@ -110,7 +109,7 @@ def test_a_shared_file_edit_keeps_the_rest_of_the_file(tmp_path: Path) -> None:
     with CommonConfig.open(bench.path.parent) as common:
         common.mariadb.root_password = "written-by-someone-else"
 
-    retarget(bench, "site", "old.example.com", "new.example.com")
+    bench.hostname_aliases.retarget("site", "old.example.com", "new.example.com")
 
     saved = CommonConfig.read(bench.path.parent)
     assert saved.mariadb.root_password == "written-by-someone-else"

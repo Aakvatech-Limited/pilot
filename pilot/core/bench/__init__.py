@@ -12,6 +12,7 @@ from pilot.exceptions import BenchError
 if TYPE_CHECKING:
     from pilot.config import S3Config, SiteConfig
     from pilot.core.app import App, NewAppOptions, RevisionPin
+    from pilot.core.bench.hostname_aliases import HostnameAliases
     from pilot.core.bench.migration.store import MigrationStore
     from pilot.core.database import Database
     from pilot.core.notification import NotificationStore
@@ -100,6 +101,12 @@ class Bench:
         from pilot.core.notification import NotificationStore
 
         return NotificationStore(self.logs_path)
+
+    @cached_property
+    def hostname_aliases(self) -> "HostnameAliases":
+        from pilot.core.bench.hostname_aliases import HostnameAliases
+
+        return HostnameAliases(self)
 
     @cached_property
     def site_storage(self) -> "SiteStorageCollector":
@@ -373,6 +380,14 @@ class Bench:
 
         BenchProduction(self).setup_nginx(on_progress)
 
+    def resolve_site_name(self, host: str) -> str | None:
+        """Return the directory name of the site that answers to this host."""
+        from pilot.internal.site_paths import site_exists
+
+        if site_exists(self.path, host):
+            return host
+        return self.site_claiming(host)
+
     def site_claiming(self, host: str, ignoring: str = "") -> str | None:
         """Return the site claiming host, excluding one optional site."""
         from pilot.utils import normalize_host
@@ -405,6 +420,32 @@ class Bench:
             return site.name
         return pinned
 
+    def clear_cache(self) -> None:
+        """Drop Frappe's cached config and assets for every site in this bench."""
+        from pilot.utils import run_command
+
+        if not self.sites():
+            return
+
+        run_command(
+            [*self.frappe_call, "frappe", "--site", "all", "clear-cache"],
+            cwd=self.sites_path,
+            timeout=120,
+        )
+
+    @property
+    def admin_endpoint(self) -> str:
+        """The admin URL a site stores as `pilot_endpoint`."""
+        from pilot.core.adapters.domain_provider import DomainRouteProvider
+        from pilot.utils import admin_url, matches_wildcard
+
+        admin = self.config.admin
+        url = admin_url(self.config)
+        if admin.route or not self.config.production.enabled or not admin.domain:
+            return url
+        patterns = DomainRouteProvider.wildcard_domains()
+        return f"https://{admin.domain}" if matches_wildcard(admin.domain, patterns) else url
+
     def change_admin_domain(
         self,
         domain: str,
@@ -414,6 +455,18 @@ class Bench:
         from pilot.core.bench.admin_domain import AdminDomainChange
 
         AdminDomainChange(self, domain, tls).run(on_progress)
+
+    def setup_central(
+        self,
+        admin_pattern: str = "",
+        site_pattern: str = "",
+        redirect: bool = False,
+        rebootstrap: bool = False,
+        on_progress: Callable[[str], None] = lambda message: None,
+    ) -> None:
+        from pilot.core.bench.central import CentralSetup
+
+        CentralSetup(self, admin_pattern, site_pattern, redirect, rebootstrap).run(on_progress)
 
     def setup_letsencrypt(self) -> None:
         from pilot.core.bench.production import BenchProduction

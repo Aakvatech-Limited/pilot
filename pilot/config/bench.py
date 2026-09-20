@@ -14,13 +14,11 @@ from pilot.config.alert_limit import ResourceLimitConfig
 from pilot.config.app import AppConfig
 from pilot.config.central import CentralConfig
 from pilot.config.common import CommonConfig
-from pilot.config.datum import DatumConfig
 from pilot.config.firewall import FirewallConfig, FirewallRule
 from pilot.config.gunicorn import GunicornConfig
 from pilot.config.letsencrypt import LetsEncryptConfig
 from pilot.config.lite_mode import LiteModeConfig
 from pilot.config.llm import LLMConfig
-from pilot.config.logs import LogsConfig
 from pilot.config.mariadb import MariaDBConfig
 from pilot.config.nginx import NginxConfig
 from pilot.config.postgres import PostgresConfig
@@ -28,6 +26,7 @@ from pilot.config.production import ProductionConfig
 from pilot.config.proxy import ProxyConfig
 from pilot.config.redis import RedisConfig
 from pilot.config.s3 import S3Config
+from pilot.config.telemetry import TelemetryConfig
 from pilot.config.waf import WafCondition, WafConfig, WafRule
 from pilot.config.worker import WorkerConfig, WorkerGroup
 from pilot.exceptions import ConfigError
@@ -39,6 +38,9 @@ from pilot.internal.atomic_file import (
 from pilot.internal.toml import ConfigDict, Toml
 
 _BENCH_NAME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+# Every host-wide user unit is named "pilot-<what>.service". A bench owns
+# "<name>-*", so a bench named pilot could not be told apart from them.
+_RESERVED_BENCH_NAMES = frozenset({"pilot"})
 _PORT_MIN = 1
 _PORT_MAX = 65535
 
@@ -121,6 +123,8 @@ class BenchConfig:
     default_branch: str = ""
     # Gates whether developer mode can be toggled per site; sets nothing itself.
     allow_developer_mode: bool = False
+    # Whether `uv pip install -e` pulls an app's `dev` extra, such as frappe's watchdog.
+    install_dev_extra: bool = True
     production: ProductionConfig = field(default_factory=ProductionConfig)
     lite_mode: LiteModeConfig = field(default_factory=LiteModeConfig)
     nginx: NginxConfig = field(default_factory=NginxConfig)
@@ -129,8 +133,7 @@ class BenchConfig:
     admin: AdminConfig = field(default_factory=AdminConfig)
     central: CentralConfig = field(default_factory=CentralConfig)
     proxy: ProxyConfig = field(default_factory=ProxyConfig)
-    datum: DatumConfig = field(default_factory=DatumConfig)
-    logs: LogsConfig = field(default_factory=LogsConfig)
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     firewall: FirewallConfig = field(default_factory=FirewallConfig)
     waf: WafConfig = field(default_factory=WafConfig)
     s3: S3Config = field(default_factory=S3Config)
@@ -212,14 +215,14 @@ class BenchConfig:
             db_type=bench_data.get("db_type", "mariadb"),
             default_branch=bench_data.get("default_branch", ""),
             allow_developer_mode=bench_data.get("allow_developer_mode", False),
+            install_dev_extra=bench_data.get("install_dev_extra", True),
             apps=apps,
             mariadb=common.mariadb,
             postgres=common.postgres,
             letsencrypt=common.letsencrypt,
             central=common.central,
             proxy=common.proxy,
-            datum=common.datum,
-            logs=common.logs,
+            telemetry=common.telemetry,
             resource_limits=common.resource_limits,
             **sections,
         )
@@ -285,6 +288,12 @@ class BenchConfig:
             raise ConfigError(
                 f"bench.name '{self.name}' is invalid. Must start with a letter and contain only letters, digits, underscores, or hyphens."
             )
+        if self.name in _RESERVED_BENCH_NAMES:
+            raise ConfigError(
+                f"bench.name '{self.name}' is reserved: this host's own services are named "
+                f"'{self.name}-<service>', so a bench of this name could not be told apart "
+                f"from them."
+            )
 
     def _validate_app_names_unique(self) -> None:
         names = [app.name for app in self.apps]
@@ -319,7 +328,7 @@ class BenchConfig:
 
         endpoints = {
             "admin.jwks_url": self.admin.jwks_url,
-            "datum.endpoint": self.datum.endpoint,
+            "telemetry.endpoint": self.telemetry.endpoint,
             "llm.api_base": self.llm.api_base,
         }
         for name, url in endpoints.items():
@@ -460,8 +469,7 @@ class BenchConfig:
             letsencrypt=self.letsencrypt,
             central=self.central,
             proxy=self.proxy,
-            datum=self.datum,
-            logs=self.logs,
+            telemetry=self.telemetry,
             resource_limits=self.resource_limits,
             jwks_url=self.admin.jwks_url,
             jwks_audience=self.admin.jwks_audience,
@@ -507,6 +515,7 @@ class BenchConfig:
             "watch_admin_js": self.watch_admin_js,
             "db_type": self.db_type,
             "allow_developer_mode": self.allow_developer_mode,
+            "install_dev_extra": self.install_dev_extra,
         }
         if self.default_branch:
             bench["default_branch"] = self.default_branch
@@ -569,6 +578,8 @@ class BenchConfig:
             "tls": self.admin.tls,
             "allow_bench_management": self.admin.allow_bench_management,
         }
+        if self.admin.route:
+            admin["route"] = self.admin.route.to_dict()
         # jwks_url/jwks_audience are host-shared (common_config.toml), not written here.
         optional_admin = {
             "jwt_secret": self.admin.jwt_secret,
@@ -849,6 +860,7 @@ _BENCH_KEYS = {
     "db_type",
     "default_branch",
     "allow_developer_mode",
+    "install_dev_extra",
 }
 # Keys older Pilot versions wrote that the parser still tolerates.
 _PRODUCTION_LEGACY = {"lightweight", "nginx", "use_companion_manager"}

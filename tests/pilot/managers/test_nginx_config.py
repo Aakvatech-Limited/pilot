@@ -119,6 +119,65 @@ def test_dual_stack_listeners(tmp_path: Path) -> None:
         assert line in config
 
 
+# --- public files -----------------------------------------------------------
+
+
+def test_public_files_are_served_regardless_of_extension(tmp_path: Path) -> None:
+    """An extension allowlist used to drop anything but images and documents,
+    so kernels, disk images and archives 404ed even though they were on disk."""
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert "location /files/ {" in config
+    assert f"root {tmp_path}/sites/site1.example.com/public;" in config
+    # No extension list guards the prefix location.
+    assert "jpg|jpeg|png" not in config
+
+
+def test_public_files_fall_back_to_the_app(tmp_path: Path) -> None:
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert "try_files $uri @app;" in config
+    assert "location @app {" in config
+    assert "proxy_pass         http://bench-test-bench;" in config
+    assert "proxy_set_header   X-Frappe-Site-Name site1.example.com;" in config
+
+
+def test_markup_uploads_are_forced_to_download(tmp_path: Path) -> None:
+    """nginx serves public files off disk, so it must repeat the attachment
+    header frappe would have sent. Inline user markup is stored XSS."""
+    config = _site_config(tmp_path, _BASE_SITE)
+    matcher = next(line for line in config.splitlines() if "location ~* ^/files/" in line)
+
+    assert 'add_header Content-Disposition "attachment";' in config
+    for extension in ("svg", "svgz", "html", "xhtml", "xml", "swf"):
+        assert f"{extension}|" in matcher or f"{extension})" in matcher
+
+
+def test_force_download_match_is_case_insensitive(tmp_path: Path) -> None:
+    """A case-sensitive match would let evil.SVG render inline."""
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert "location ~* ^/files/" in config
+
+
+def test_force_download_location_precedes_the_prefix_location(tmp_path: Path) -> None:
+    """nginx prefers a regex location over a prefix one, but only the first
+    regex that matches, so this block has to come before any other /files regex."""
+    config = _site_config(tmp_path, _BASE_SITE)
+
+    assert config.index("location ~* ^/files/") < config.index("location /files/ {")
+
+
+def test_every_files_fallback_has_a_named_location(tmp_path: Path) -> None:
+    """try_files pointing at an undeclared @app fails nginx at startup, which a
+    template test is the only cheap place to catch."""
+    config = _site_config(tmp_path, _BASE_SITE, ssl=True)
+
+    for block in config.split("server {")[1:]:
+        if "try_files $uri @app;" in block:
+            assert "location @app {" in block
+
+
 # --- trusted proxy ----------------------------------------------------------
 
 
@@ -127,6 +186,8 @@ def test_direct_exposure_keeps_default_xff(tmp_path: Path) -> None:
 
     assert "set_real_ip_from" not in config
     assert "realip_remote_addr" not in config
+    assert "set $bench_from_proxy" not in config
+    assert "if ($bench_from_proxy = 0)" not in config
     assert "X-Forwarded-For    $proxy_add_x_forwarded_for" in config
 
 
@@ -136,12 +197,24 @@ def test_trusted_proxies_gate_peer_and_trust_xff(tmp_path: Path) -> None:
     assert "set_real_ip_from   203.0.113.5;" in config
     assert "set_real_ip_from   203.0.113.6;" in config
     assert "real_ip_header     X-Forwarded-For;" in config
-    assert (
-        r'if ($realip_remote_addr ~ "^(203\.0\.113\.5|203\.0\.113\.6)$") { set $bench_from_proxy 1; }'
-        in config
-    )
+    assert "geo $realip_remote_addr $bench_test_bench_from_proxy" in config
+    assert "203.0.113.5 1;" in config
+    assert "203.0.113.6 1;" in config
     assert "if ($bench_from_proxy = 0) { return 403; }" in config
     assert r'if ($request_uri ~ "^/\.well-known/acme-challenge/") { set $bench_from_proxy 1; }' in config
+
+
+def test_trusted_proxy_accepts_ipv4_and_ipv6_networks(tmp_path: Path) -> None:
+    config = _site_config(
+        tmp_path,
+        _BASE_SITE,
+        proxy_servers=["203.0.113.0/24", "2001:db8::/48"],
+    )
+
+    assert "203.0.113.0/24 1;" in config
+    assert "2001:db8::/48 1;" in config
+    assert "set_real_ip_from   203.0.113.0/24;" in config
+    assert "set_real_ip_from   2001:db8::/48;" in config
     assert "X-Forwarded-For    $http_x_forwarded_for" in config
     assert "$proxy_add_x_forwarded_for" not in config
 
@@ -766,6 +839,22 @@ def test_a_serving_alias_serves_static_files(tmp_path: Path) -> None:
     assert "return 301" not in alias_block
 
 
+def test_a_serving_alias_serves_public_files_of_any_extension(tmp_path: Path) -> None:
+    config = _cloud_config(
+        tmp_path,
+        [(_PLACEHOLDER_SITE, False)],
+        hostname_mappings={_SITE_GLOB: _PLACEHOLDER_SITE.name},
+        redirect=False,
+    )
+
+    alias_block = _alias_block(config)
+    assert "location /files/ {" in alias_block
+    assert "location ~* ^/files/" in alias_block
+    assert 'add_header Content-Disposition "attachment";' in alias_block
+    assert "location @app {" in alias_block
+    assert f"proxy_set_header   X-Frappe-Site-Name {_PLACEHOLDER_SITE.name};" in alias_block
+
+
 def test_a_redirecting_alias_has_no_static_locations(tmp_path: Path) -> None:
     config = _cloud_config(
         tmp_path,
@@ -817,6 +906,64 @@ def test_a_domain_may_terminate_tls_while_the_site_does_not(tmp_path: Path) -> N
 
     assert site.tls_domains == ["shop.customer.com"]
     assert site.plain_domains == ["site-a1b2c3.zone.example"]
+
+
+def test_provider_route_separates_public_https_from_origin_http(tmp_path: Path) -> None:
+    from pilot.config import RoutePolicy
+
+    site = SiteConfig(
+        name="site-a1b2c3.zone.example",
+        apps=["frappe"],
+        ssl=False,
+        route=RoutePolicy("https", "http", "x_forwarded_for"),
+    )
+    config = _renderer(tmp_path, proxy_servers=["203.0.113.10"]).generate_bench_config(
+        [(site, site.tls_domains)], admin_ssl=False
+    )
+
+    assert "listen 80;" in config
+    assert "listen 443 ssl" not in config
+    assert "proxy_set_header   X-Forwarded-Proto  https;" in config
+    assert "set_real_ip_from   203.0.113.10;" in config
+
+
+def test_provider_passthrough_route_enables_proxy_protocol(tmp_path: Path) -> None:
+    from pilot.config import RoutePolicy
+
+    site = SiteConfig(
+        name="site-a1b2c3.zone.example",
+        apps=["frappe"],
+        domains=[
+            {
+                "domain": "shop.customer.com",
+                "route": RoutePolicy("https", "https", "proxy_protocol_v2").to_dict(),
+            }
+        ],
+    )
+    config = _renderer(tmp_path, proxy_servers=["203.0.113.10"]).generate_bench_config(
+        [(site, site.tls_domains)], admin_ssl=False
+    )
+
+    assert "listen 443 ssl http2 proxy_protocol;" in config
+    assert "real_ip_header     proxy_protocol;" in config
+    assert "proxy_set_header   X-Forwarded-Proto  https;" in config
+
+
+def test_proxy_route_with_no_servers_defines_a_fail_closed_gate(tmp_path: Path) -> None:
+    from pilot.config import RoutePolicy
+
+    site = SiteConfig(
+        name="site-a1b2c3.zone.example",
+        apps=["frappe"],
+        route=RoutePolicy("https", "http", "x_forwarded_for"),
+    )
+    config = _renderer(tmp_path, proxy_servers=[]).generate_bench_config(
+        [(site, site.tls_domains)], admin_ssl=False
+    )
+
+    assert "geo $realip_remote_addr $bench_test_bench_from_proxy {" in config
+    assert "default 0;" in config
+    assert "set $bench_from_proxy $bench_test_bench_from_proxy;" in config
 
 
 def test_edge_terminated_domains_are_served_plain_and_never_redirected(tmp_path: Path) -> None:

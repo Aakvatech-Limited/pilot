@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pilot.exceptions import BenchError, CommandError
+from pilot.managers.systemd_user import memory_capped, systemctl_env
 from pilot.utils import extract_tar_archive, get_yarn_bin, git_has_local_changes, run_command
 
 if TYPE_CHECKING:
@@ -28,11 +30,31 @@ class PythonAssetBuilder:
         self.manager = manager
         self.bench = manager.bench
 
+    def run_compiler(self, argv: list[str], **kwargs) -> None:
+        """Run a compiler capped at a share of host memory, so a runaway build
+        fails instead of exhausting the machine."""
+        from pilot.core.build_memory import build_memory_limit_mb
+
+        limit_mb = build_memory_limit_mb()
+        kwargs["env"] = {**systemctl_env(), **(kwargs.get("env") or {})}
+        try:
+            run_command(memory_capped(argv, limit_mb), **kwargs)
+        except CommandError as error:
+            # The kernel kills the scope, so the runner only sees a signal.
+            if error.returncode < 0:
+                raise BenchError(
+                    f"Build ran out of memory: it may use {limit_mb}MB on this machine."
+                ) from error
+            raise CommandError(
+                error.message.replace(repr("systemd-run"), repr(argv[0]), 1),
+                returncode=error.returncode,
+            ) from error
+
     def build_assets(self) -> None:
         for app in self.bench.apps():
             if (app.path / "package.json").exists():
                 self.ensure_yarn_install(app.path)
-        run_command(
+        self.run_compiler(
             [*self.bench.frappe_call, "frappe", "build", "--force"],
             cwd=self.bench.sites_path,
             env=self.node_build_env(),
@@ -57,7 +79,7 @@ class PythonAssetBuilder:
 
         print(f"  Building assets for {app.config.name}...")
         sys.stdout.flush()
-        run_command(
+        self.run_compiler(
             [*self.bench.frappe_call, "frappe", "build", "--force", "--app", app.config.name],
             cwd=self.bench.sites_path,
             env=self.node_build_env(),
@@ -68,7 +90,7 @@ class PythonAssetBuilder:
             if (app.path / frontend_dir / "package.json").exists():
                 print(f"  Building {frontend_dir} for {app.config.name}...")
                 sys.stdout.flush()
-                run_command(
+                self.run_compiler(
                     [get_yarn_bin(), "build"],
                     cwd=app.path / frontend_dir,
                     env=self.node_build_env(),
