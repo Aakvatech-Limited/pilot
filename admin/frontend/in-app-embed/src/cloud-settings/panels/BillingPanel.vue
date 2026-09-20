@@ -108,14 +108,16 @@ const openChangePlan = async () => {
 </script>
 
 <template>
-  <SettingsHeader
-    :title="__('Billing')"
-    :description="__('Your plan, usage, credit and payment method.')"
-  />
+  <SettingsHeader class="!px-10 !pt-9">
+    <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Billing') }}</h2>
 
-  <SettingsBody>
+    <p class="mt-1 text-base text-ink-gray-6">
+      {{ __('Your plan, usage, credit and payment method.') }}
+    </p>
+  </SettingsHeader>
+
+  <SettingsBody viewport-class="px-10 pb-16">
     <PanelState
-      class="pt-8"
       :loading="!billing && !error"
       :error="loadFailed ? error : ''"
       :title="__(`Couldn't load billing`)"
@@ -123,66 +125,69 @@ const openChangePlan = async () => {
     >
       <div
         v-if="!plan"
-        class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 rounded-7 border border-dashed border-outline-gray-3 p-4"
+        class="mt-6 flex min-h-64 flex-col items-center justify-center rounded-6 border border-dashed border-outline-gray-3 px-6 py-12 text-center"
       >
-        <span class="lucide-wallet mt-0.5 size-4 text-ink-gray-5" aria-hidden="true" />
+        <div
+          class="flex size-10 items-center justify-center rounded-6 bg-surface-gray-2 text-ink-gray-5"
+        >
+          <span class="lucide-wallet size-4" aria-hidden="true" />
+        </div>
 
-        <p class="text-base font-medium text-ink-gray-9">
+        <p class="mt-4 text-base-medium text-ink-gray-8">
           {{ __("Billing isn't available for this site yet") }}
         </p>
 
-        <p class="col-start-2 mt-1 text-p-sm text-ink-gray-6">
+        <p class="mt-1 max-w-sm text-p-sm text-ink-gray-5">
           {{ __(
               "This site isn't connected to a billing account, or the connection isn't ready.",
             ) }}
         </p>
 
         <Button
-          class="col-start-2 mt-3 justify-self-start"
+          class="mt-5"
           icon-right="arrow-up-right"
           :disabled="openingChangePlan"
+          :label="openingChangePlan ? __('Opening…') : __('View plans')"
           @click="openChangePlan"
-        >
-          {{ openingChangePlan ? __("Opening…") : __("View plans") }}
-        </Button>
-        <ErrorMessage :message="changePlanError" class="col-start-2 mt-2" />
+        />
+
+        <ErrorMessage :message="changePlanError" class="mt-2" />
       </div>
 
-      <div v-else class="space-y-4">
+      <div v-else class="mt-6 space-y-4">
         <ErrorMessage :message="loadFailed ? '' : error" />
 
         <section
-          class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 rounded-7 border border-outline-gray-2 p-4"
+          class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 rounded-6 border border-outline-gray-2 p-5"
         >
           <p class="text-p-sm text-ink-gray-5">{{ __("Plan") }}</p>
 
-          <p class="text-lg font-semibold text-ink-gray-9">
+          <p class="col-start-1 mt-0.5 text-base-semibold text-ink-gray-8">
             {{ plan.name || __("Current plan") }}
           </p>
 
-          <p class="text-p-sm text-ink-gray-6">{{ planSubtitle }}</p>
+          <p class="col-start-1 mt-0.5 text-p-sm text-ink-gray-5">{{ planSubtitle }}</p>
 
           <Button
             class="col-start-2 row-span-3 row-start-1"
             icon-right="arrow-up-right"
             :disabled="openingChangePlan"
+            :label="openingChangePlan ? __('Opening…') : __('Change plan')"
             @click="openChangePlan"
-          >
-            {{ openingChangePlan ? __("Opening…") : __("Change plan") }}
-          </Button>
+          />
+
           <ErrorMessage :message="changePlanError" class="col-span-2 mt-2" />
 
-          <div class="col-span-2 mt-3 grid grid-cols-3 gap-5">
-            <div
-              v-for="meter in meters"
-              :key="meter.name"
-              class="grid grid-cols-[1fr_auto] items-center text-p-sm"
-            >
-              <span class="text-ink-gray-7">{{ meter.name }}</span>
-              <span class="font-medium text-ink-gray-9"> {{ meter.percent }}% </span>
+          <div class="col-span-2 mt-5 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-5">
+            <div v-for="meter in meters" :key="meter.name">
+              <div class="mb-2 flex items-center justify-between gap-4 text-sm">
+                <span class="text-ink-gray-6">{{ meter.name }}</span>
+
+                <span class="font-medium tabular-nums text-ink-gray-9"> {{ meter.percent }}% </span>
+              </div>
 
               <div
-                class="col-span-2 my-1 h-1.5 overflow-hidden rounded-full bg-surface-gray-3"
+                class="h-1 overflow-hidden rounded-full bg-surface-gray-2"
                 role="progressbar"
                 :aria-label="meter.name"
                 aria-valuemin="0"
@@ -190,49 +195,41 @@ const openChangePlan = async () => {
                 :aria-valuenow="meter.percent"
               >
                 <div
-                  class="h-full rounded-full bg-surface-gray-7"
+                  class="h-full rounded-full bg-surface-gray-10 transition-[width] duration-300"
                   :style="{ width: `${meter.percent}%` }"
                 />
               </div>
 
-              <p class="col-span-2 text-p-xs text-ink-gray-5">
-                {{ meter.detail }}
-              </p>
+              <p class="mt-1.5 text-p-xs text-ink-gray-5">{{ meter.detail }}</p>
             </div>
           </div>
         </section>
 
-        <div class="grid grid-cols-2 gap-3">
-          <section class="rounded-7 border border-outline-gray-2 p-4">
-            <p class="text-p-sm text-ink-gray-5">
-              {{ __("Estimated this cycle") }}
-            </p>
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-3">
+          <section class="rounded-6 border border-outline-gray-2 p-5">
+            <p class="text-p-sm text-ink-gray-5">{{ __("Estimated this cycle") }}</p>
 
-            <p class="mt-1 text-2xl font-semibold text-ink-gray-9">
+            <p class="mt-1.5 text-2xl-semibold tabular-nums text-ink-gray-9">
               {{ billing.estimate?.amount ?? "—" }}
             </p>
 
-            <p class="mt-1 text-p-sm text-ink-gray-6">
-              {{ billing.estimate?.note }}
-            </p>
+            <p class="mt-1.5 text-p-sm text-ink-gray-5">{{ billing.estimate?.note }}</p>
           </section>
 
-          <section class="rounded-7 border border-outline-gray-2 p-4">
+          <section class="rounded-6 border border-outline-gray-2 p-5">
             <p class="text-p-sm text-ink-gray-5">{{ __("Trial credit") }}</p>
 
-            <p class="mt-1 text-2xl font-semibold text-ink-gray-9">
+            <p class="mt-1.5 text-2xl-semibold tabular-nums text-ink-gray-9">
               {{ billing.credit?.amount ?? "—" }}
             </p>
 
             <p
-              class="mt-1 flex items-center gap-1.5 text-p-sm"
-              :class="
-                billing.credit?.warning ? 'text-ink-amber-8' : 'text-ink-gray-6'
-              "
+              class="mt-1.5 flex items-center gap-1.5 text-p-sm"
+              :class="billing.credit?.warning ? 'text-ink-amber-6' : 'text-ink-gray-5'"
             >
               <span
                 v-if="billing.credit?.warning"
-                class="lucide-triangle-alert size-3.5"
+                class="lucide-triangle-alert size-3.5 shrink-0"
                 aria-hidden="true"
               />
               {{ billing.credit?.note }}
@@ -251,22 +248,15 @@ const openChangePlan = async () => {
 
         <section
           v-else
-          class="grid items-start gap-x-3 rounded-7 border border-dashed border-outline-gray-3 p-4"
-          :class="
-            billing.payment_method
-              ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
-              : 'grid-cols-[auto_minmax(0,1fr)]'
-          "
+          class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-6 border border-outline-gray-2 p-5"
         >
-          <span class="lucide-credit-card mt-0.5 size-4 text-ink-gray-5" aria-hidden="true" />
-
-          <p class="text-base font-medium text-ink-gray-9">
+          <p class="text-base-medium text-ink-gray-8">
             {{ billing.payment_method
                 ? billing.payment_method.label
                 : __("No payment method yet") }}
           </p>
 
-          <p class="col-start-2 mt-1 text-p-sm text-ink-gray-6">
+          <p class="col-start-1 mt-0.5 text-p-sm text-ink-gray-5">
             {{ billing.payment_method
                 ? __("Used for your monthly bill.")
                 : __(
@@ -274,24 +264,24 @@ const openChangePlan = async () => {
                   ) }}
           </p>
 
-          <ErrorMessage :message="removeError" class="col-start-2 mt-2" />
           <Button
             v-if="billing.payment_method"
-            class="col-start-3 row-span-3 row-start-1 ml-1 self-center"
+            class="col-start-2 row-span-2 row-start-1"
             :loading="removing"
+            :label="__('Remove')"
             @click="removeCard"
-          >
-            {{ __("Remove") }}
-          </Button>
+          />
+
           <Button
             v-else
-            class="col-span-2 mt-3 justify-self-start"
+            class="col-start-2 row-span-2 row-start-1"
             variant="solid"
             icon-left="plus"
+            :label="__('Add payment method')"
             @click="startPayment"
-          >
-            {{ __("Add payment method") }}
-          </Button>
+          />
+
+          <ErrorMessage :message="removeError" class="col-span-2 mt-2" />
         </section>
       </div>
     </PanelState>

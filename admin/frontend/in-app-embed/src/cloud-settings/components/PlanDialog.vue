@@ -139,7 +139,7 @@ const comparePlans = () => {
 <template>
   <Dialog v-model="open" :title="__('Change plan')" size="xl" :dismissible="!submitting">
     <template #default>
-      <div v-if="loading" class="py-10 text-center text-p-sm text-ink-gray-6">
+      <div v-if="loading" class="py-10 text-center text-p-sm text-ink-gray-5">
         {{ __("Loading plans") }}
       </div>
 
@@ -274,7 +274,7 @@ const comparePlans = () => {
               aria-hidden="true"
             />
 
-            <span class="shrink-0 text-base font-medium text-ink-gray-9">
+            <span class="shrink-0 text-base-medium text-ink-gray-8">
               {{ plan.title }}
             </span>
 
@@ -286,17 +286,17 @@ const comparePlans = () => {
               aria-hidden="true"
             />
 
-            <span class="min-w-0 flex-1 truncate text-p-sm text-ink-gray-6">
+            <span class="min-w-0 flex-1 truncate text-p-sm text-ink-gray-5">
               {{ plan.subtitle }}
             </span>
 
-            <span class="ml-1 shrink-0 text-base font-medium text-ink-gray-9">
+            <span class="ml-1 shrink-0 text-base-medium text-ink-gray-8">
               {{ plan.price }}
             </span>
           </button>
         </div>
 
-        <p v-else class="py-8 text-center text-p-sm text-ink-gray-6">
+        <p v-else class="py-8 text-center text-p-sm text-ink-gray-5">
           {{ __("No plans are available for this server right now.") }}
         </p>
 

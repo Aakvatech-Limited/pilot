@@ -85,11 +85,11 @@ const save = async () => {
 <template>
   <section class="space-y-4 rounded-7 border border-outline-gray-2 p-4">
     <div>
-      <p class="text-base font-semibold text-ink-gray-9">
+      <p class="text-base-semibold text-ink-gray-8">
         {{ __("Add billing details") }}
       </p>
 
-      <p class="mt-1 text-p-sm text-ink-gray-6">
+      <p class="mt-1 text-p-sm text-ink-gray-5">
         {{ __(
             "These go on every invoice — we'll need them before adding a payment method.",
           ) }}

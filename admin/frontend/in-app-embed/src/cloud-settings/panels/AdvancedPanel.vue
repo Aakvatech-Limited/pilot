@@ -1,5 +1,5 @@
 <script setup>
-import { Button, ErrorMessage, SettingsBody, SettingsHeader } from 'frappe-ui'
+import { Button, ErrorMessage, SettingsBody, SettingsHeader, SettingsRow } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import { openExternal } from '../external'
 
@@ -37,54 +37,47 @@ const openBilling = async () => {
 </script>
 
 <template>
-  <SettingsHeader :title="__('Advanced')" :description="__('Deeper controls for your server.')" />
+  <SettingsHeader class="!px-10 !pt-9">
+    <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Advanced') }}</h2>
 
-  <SettingsBody>
-    <div class="divide-y divide-outline-gray-1 pt-4">
-      <div
+    <p class="mt-1 text-base text-ink-gray-6">{{ __('Deeper controls for your server.') }}</p>
+  </SettingsHeader>
+
+  <SettingsBody viewport-class="px-10 pb-16">
+    <div class="mt-6 divide-y divide-outline-gray-1 border-t border-outline-gray-1">
+      <SettingsRow
         v-for="link in links"
         :key="link.title"
-        class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 py-5"
+        label-for=""
+        :title="link.title"
+        :description="link.description"
       >
-        <p class="text-base font-semibold text-ink-gray-9">
-          {{ link.title }}
-        </p>
-
-        <p class="mt-1 text-p-sm text-ink-gray-5">{{ link.description }}</p>
-
         <Button
           v-if="link.url"
-          class="col-start-2 row-span-2 row-start-1"
           icon-right="arrow-up-right"
+          :label="link.label"
           @click="openExternal(link.url)"
-        >
-          {{ link.label }}
-        </Button>
+        />
 
-        <p v-else class="col-start-2 row-span-2 row-start-1 text-p-sm text-ink-gray-4">
-          {{ __("Not configured") }}
-        </p>
-      </div>
+        <span v-else class="text-p-sm text-ink-gray-5">{{ __("Not configured") }}</span>
+      </SettingsRow>
 
-      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 py-5">
-        <p class="text-base font-semibold text-ink-gray-9">
-          {{ __("Account & billing") }}
-        </p>
-
-        <p class="mt-1 text-p-sm text-ink-gray-5">
-          {{ __("Payment methods, invoices, billing email and account settings.") }}
-        </p>
-
+      <SettingsRow
+        label-for=""
+        :title="__('Account & billing')"
+        :description="
+          __('Payment methods, invoices, billing email and account settings.')
+        "
+      >
         <Button
-          class="col-start-2 row-span-2 row-start-1"
           icon-right="arrow-up-right"
           :disabled="openingBilling"
+          :label="openingBilling ? __('Opening billing') : __('Manage billing')"
           @click="openBilling"
-        >
-          {{ openingBilling ? __("Opening billing") : __("Manage billing") }}
-        </Button>
-        <ErrorMessage :message="billingError" class="col-span-2 mt-2" />
-      </div>
+        />
+      </SettingsRow>
     </div>
+
+    <ErrorMessage :message="billingError" class="mt-2" />
   </SettingsBody>
 </template>

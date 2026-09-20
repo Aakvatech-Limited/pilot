@@ -31,11 +31,11 @@ const incompatibleReason = computed(() =>
 
 <template>
   <div
-    class="grid min-h-[73px] grid-cols-[auto_minmax(0,1fr)_auto] content-center items-center gap-x-2.5 border-b border-outline-gray-1 py-3"
+    class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-1.5 border-b border-outline-gray-1 py-3.5"
   >
     <img
       v-if="logoUrl"
-      class="row-span-2 size-8 rounded-[9px] object-cover"
+      class="row-span-2 mr-1.5 size-8 rounded-5 object-cover"
       :src="logoUrl"
       :alt="app.title"
       loading="lazy"
@@ -45,35 +45,36 @@ const incompatibleReason = computed(() =>
 
     <div
       v-else
-      class="row-span-2 flex size-8 items-center justify-center rounded-[9px] bg-surface-gray-2 text-base font-semibold uppercase text-ink-gray-6"
+      class="row-span-2 mr-1.5 grid size-8 place-items-center rounded-5 bg-surface-gray-2 text-sm-medium uppercase text-ink-gray-6"
     >
       {{ (app.title || "?").charAt(0) }}
     </div>
 
-    <div class="flex items-baseline gap-1.5">
-      <span class="truncate text-base font-semibold text-ink-gray-9" :title="app.title">
-        {{ app.title }}
-      </span>
+    <span class="truncate text-base-medium text-ink-gray-8" :title="app.title">
+      {{ app.title }}
+    </span>
 
-      <span class="shrink-0 whitespace-nowrap text-p-sm text-ink-gray-5">
-        <template v-if="app.installed && app.has_update">
-          v{{ app.installed_version }}
-          <span class="text-ink-green-7">→ v{{ app.latest_version }}</span>
-        </template>
+    <span class="whitespace-nowrap text-p-sm tabular-nums text-ink-gray-5">
+      <template v-if="app.installed && app.has_update">
+        v{{ app.installed_version }}
+        <span class="text-ink-green-7">→ v{{ app.latest_version }}</span>
+      </template>
 
-        <template v-else-if="app.installed && app.installed_version">
-          v{{ app.installed_version }}
-        </template>
+      <template v-else-if="app.installed && app.installed_version">
+        v{{ app.installed_version }}
+      </template>
 
-        <template v-else-if="app.latest_version">v{{ app.latest_version }}</template>
-      </span>
-    </div>
+      <template v-else-if="app.latest_version">v{{ app.latest_version }}</template>
+    </span>
 
-    <p class="col-start-2 truncate text-p-sm text-ink-gray-5" :title="app.description">
+    <p
+      class="col-span-2 col-start-2 mt-0.5 truncate text-p-sm text-ink-gray-5"
+      :title="app.description"
+    >
       {{ app.description }}
     </p>
 
-    <div class="col-start-3 row-span-2 row-start-1 flex items-center gap-1">
+    <div class="col-start-4 row-span-2 row-start-1 flex items-center gap-1">
       <Tooltip v-if="error && !busy" :text="error">
         <span
           class="lucide-triangle-alert size-3.5 text-ink-red-8"
@@ -85,33 +86,34 @@ const incompatibleReason = computed(() =>
 
       <Tooltip v-if="!app.installed && !app.installable" :text="incompatibleReason">
         <span
-          class="rounded-full bg-surface-gray-3 px-2.5 py-1 text-p-sm font-medium text-ink-gray-5"
+          class="rounded-full bg-surface-gray-3 px-2.5 py-1 text-p-xs text-ink-gray-5"
           tabindex="0"
         >
           {{ incompatibleLabel }}
         </span>
       </Tooltip>
 
-      <Button v-else-if="!app.installed" :disabled="busy" @click="emit('install', app)">
-        <template v-if="pending === 'install'" #prefix>
-          <span class="cs-spinner" aria-hidden="true" />
-        </template>
-        {{ pending === "install" ? __("Installing") : __("Install") }}
-      </Button>
+      <Button
+        v-else-if="!app.installed"
+        :disabled="busy"
+        :loading="pending === 'install'"
+        :label="pending === 'install' ? __('Installing') : __('Install')"
+        @click="emit('install', app)"
+      />
 
       <template v-else-if="app.has_update">
-        <Button variant="solid" :disabled="busy" @click="emit('update', app)">
-          <template v-if="pending === 'update'" #prefix>
-            <span class="cs-spinner" aria-hidden="true" />
-          </template>
-          {{ pending === "update" ? __("Updating") : __("Update") }}
-        </Button>
+        <Button
+          variant="solid"
+          :disabled="busy"
+          :loading="pending === 'update'"
+          :label="pending === 'update' ? __('Updating') : __('Update')"
+          @click="emit('update', app)"
+        />
+
         <Dropdown
-          :options="[
-            { label: __('Uninstall'), onClick: () => emit('uninstall', app) },
-          ]"
-          :portal-to="overlayTarget"
           align="end"
+          :portal-to="overlayTarget"
+          :options="[{ label: __('Uninstall'), onClick: () => emit('uninstall', app) }]"
         >
           <Button
             variant="ghost"
@@ -122,29 +124,13 @@ const incompatibleReason = computed(() =>
         </Dropdown>
       </template>
 
-      <Button v-else :disabled="busy" @click="emit('uninstall', app)">
-        <template v-if="pending === 'uninstall'" #prefix>
-          <span class="cs-spinner" aria-hidden="true" />
-        </template>
-        {{ pending === "uninstall" ? __("Uninstalling") : __("Uninstall") }}
-      </Button>
+      <Button
+        v-else
+        :disabled="busy"
+        :loading="pending === 'uninstall'"
+        :label="pending === 'uninstall' ? __('Uninstalling') : __('Uninstall')"
+        @click="emit('uninstall', app)"
+      />
     </div>
   </div>
 </template>
-
-<style>
-.cs-spinner {
-  width: 1em;
-  height: 1em;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 9999px;
-  animation: cs-spin 0.8s linear infinite;
-}
-
-@keyframes cs-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-</style>

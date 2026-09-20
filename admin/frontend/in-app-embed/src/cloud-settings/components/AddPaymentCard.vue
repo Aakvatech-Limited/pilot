@@ -195,7 +195,7 @@ const tileClass = (isSelected) => [
 
 <template>
   <section class="space-y-4 rounded-7 border border-outline-gray-2 p-4">
-    <p class="text-base font-semibold text-ink-gray-9">
+    <p class="text-base-semibold text-ink-gray-8">
       {{ __("Add payment method") }}
     </p>
 
@@ -226,11 +226,11 @@ const tileClass = (isSelected) => [
             />
           </span>
 
-          <span class="text-base font-semibold text-ink-gray-9">
+          <span class="text-base-semibold text-ink-gray-8">
             {{ option.label }}
           </span>
 
-          <span class="col-start-2 text-p-sm text-ink-gray-6">
+          <span class="col-start-2 text-p-sm text-ink-gray-5">
             {{ option.hint }}
           </span>
         </button>
@@ -243,7 +243,7 @@ const tileClass = (isSelected) => [
       <Button v-else-if="!gateways" @click="load">{{ __("Try again") }}</Button>
 
       <div v-else-if="!visibleGateways.length" class="space-y-2">
-        <p class="text-p-sm text-ink-gray-6">
+        <p class="text-p-sm text-ink-gray-5">
           {{ __(
               "No gateway is available for this payment type in your billing currency.",
             ) }}
@@ -277,16 +277,16 @@ const tileClass = (isSelected) => [
 
           <span
             v-else
-            class="row-span-2 flex size-8 items-center justify-center rounded-6 bg-surface-gray-3 text-p-sm font-bold text-ink-gray-8"
+            class="row-span-2 flex size-8 items-center justify-center rounded-6 bg-surface-gray-3 text-p-sm-bold text-ink-gray-8"
           >
             {{ (option.label || "?").charAt(0) }}
           </span>
 
-          <span class="text-base font-medium text-ink-gray-9">
+          <span class="text-base-medium text-ink-gray-8">
             {{ option.label }}
           </span>
 
-          <span class="col-start-2 text-p-sm text-ink-gray-6">
+          <span class="col-start-2 text-p-sm text-ink-gray-5">
             {{ option.subtitle }}
           </span>
         </button>

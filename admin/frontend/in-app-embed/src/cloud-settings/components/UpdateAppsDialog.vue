@@ -62,12 +62,12 @@ const submit = () => {
 
           <span
             v-else
-            class="row-span-2 flex size-8 items-center justify-center rounded-6 bg-surface-gray-3 text-p-sm font-semibold text-ink-gray-7"
+            class="row-span-2 flex size-8 items-center justify-center rounded-6 bg-surface-gray-3 text-p-sm-semibold text-ink-gray-7"
           >
             {{ (app.title || "?").charAt(0) }}
           </span>
 
-          <span class="truncate text-base font-semibold text-ink-gray-9">
+          <span class="truncate text-base-semibold text-ink-gray-8">
             {{ app.title }}
           </span>
 
@@ -86,7 +86,7 @@ const submit = () => {
         </button>
       </div>
 
-      <div v-if="updating" class="mt-4 text-p-sm text-ink-gray-6" role="status">
+      <div v-if="updating" class="mt-4 text-p-sm text-ink-gray-5" role="status">
         {{ __("Updating selected apps. This can take a few minutes.") }}
       </div>
 

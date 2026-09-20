@@ -1,13 +1,5 @@
 <script setup>
-import {
-  Badge,
-  Button,
-  ErrorMessage,
-  SettingsBody,
-  SettingsHeader,
-  TextInput,
-  Tooltip,
-} from 'frappe-ui'
+import { Badge, Button, ErrorMessage, SettingsBody, SettingsHeader, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import PanelState from '../components/PanelState.vue'
 
@@ -30,7 +22,14 @@ watch(
   { immediate: true },
 )
 
-const domains = computed(() => store.state.domains?.domains)
+const domains = computed(() => {
+  const rows = store.state.domains?.domains
+  const routes = rows
+    ?.filter((row) => typeof row.domain === 'object')
+    .map(({ domain }) => ({ ...domain, is_default: domain.is_site }))
+
+  return routes?.length ? routes : rows
+})
 const error = computed(() => store.state.domainsError)
 const loadFailed = computed(() => Boolean(error.value) && !domains.value)
 const canAdd = computed(() => Boolean(input.value.trim()) && !working.value)
@@ -88,92 +87,116 @@ const clearPreview = () => {
 </script>
 
 <template>
-  <SettingsHeader :title="__('Domains')" :description="__('The addresses this site answers on.')" />
+  <SettingsHeader class="!px-10 !pt-9">
+    <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Domains') }}</h2>
 
-  <SettingsBody>
+    <p class="mt-1 text-base text-ink-gray-6">{{ __('The addresses this site answers on.') }}</p>
+  </SettingsHeader>
+
+  <SettingsBody viewport-class="px-10 pb-16">
     <PanelState
-      class="space-y-4 pt-8"
       :loading="!domains && !error"
       :error="loadFailed ? error : ''"
       :title="__(`Couldn't load domains`)"
       @retry="store.loadDomains(true)"
     >
-      <div class="flex items-center gap-2">
-        <TextInput
-          v-model="input"
-          class="flex-1"
-          :placeholder="__('shop.mycompany.in')"
-          :disabled="working"
-          @keyup.enter="previewDomain"
-        />
-        <Button :disabled="!canAdd" :loading="working && !pendingDomain" @click="previewDomain">
-          {{ __("Add") }}
-        </Button>
-      </div>
+      <div class="mt-6 space-y-6">
+        <div class="flex items-end gap-2">
+          <TextInput
+            v-model="input"
+            class="flex-1"
+            :label="__('Add a domain')"
+            :placeholder="__('shop.mycompany.in')"
+            :disabled="working"
+            @keydown.enter="previewDomain"
+          />
 
-      <ErrorMessage :message="error" />
+          <Button
+            :disabled="!canAdd"
+            :loading="working && !pendingDomain"
+            :label="__('Add')"
+            @click="previewDomain"
+          />
+        </div>
 
-      <section v-if="dnsRecords.length" class="rounded-7 border border-outline-gray-2 p-4">
-        <p class="text-base font-medium text-ink-gray-9">{{ pendingDomain }}</p>
+        <ErrorMessage :message="error" />
 
-        <p class="mt-1 text-p-sm text-ink-gray-6">
-          {{ __("Add these DNS records at your provider, then continue.") }}
-        </p>
+        <section v-if="dnsRecords.length" class="rounded-6 border border-outline-gray-2 p-5">
+          <h2 class="text-base-semibold text-ink-gray-8">{{ pendingDomain }}</h2>
 
-        <div class="my-3 space-y-2">
+          <p class="mt-0.5 text-p-sm text-ink-gray-5">
+            {{ __("Add these DNS records at your provider, then continue.") }}
+          </p>
+
+          <dl class="mt-4 divide-y divide-outline-gray-1 border-t border-outline-gray-1">
+            <div
+              v-for="(record, index) in dnsRecords"
+              :key="index"
+              class="grid grid-cols-[4rem_minmax(0,1fr)] items-baseline gap-x-3 py-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.4fr)]"
+            >
+              <dt class="text-sm-medium text-ink-gray-8">{{ record.type }}</dt>
+              <dd class="truncate text-p-sm text-ink-gray-5">{{ record.host }}</dd>
+              <dd class="col-start-2 truncate text-p-sm text-ink-gray-5 sm:col-start-3">
+                {{ record.value }}
+              </dd>
+            </div>
+          </dl>
+
+          <div class="mt-4 flex justify-end gap-2">
+            <Button :disabled="working" :label="__('Cancel')" @click="clearPreview" />
+
+            <Button
+              variant="solid"
+              :loading="working"
+              :label="__('Add domain')"
+              @click="confirmAdd"
+            />
+          </div>
+        </section>
+
+        <div class="divide-y divide-outline-gray-1 border-t border-outline-gray-1">
           <div
-            v-for="(record, index) in dnsRecords"
-            :key="index"
-            class="grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-3 rounded-6 bg-surface-gray-1 px-3 py-2.5 text-p-sm text-ink-gray-7"
+            v-for="domain in domains"
+            :key="domain.domain"
+            class="grid grid-cols-[minmax(0,auto)_auto_1fr_auto] items-center gap-x-1.5 py-3.5"
           >
-            <span>{{ record.type }}</span>
-            <code class="truncate text-ink-gray-9">{{ record.host }}</code>
-            <code class="truncate text-ink-gray-9">{{ record.value }}</code>
+            <p class="truncate text-base-medium text-ink-gray-8">{{ domain.domain }}</p>
+
+            <Badge v-if="domain.is_primary" theme="green" size="sm" :label="__('Primary')" />
+
+            <Badge v-else-if="domain.is_default" size="sm" :label="__('Included')" />
+
+            <p
+              class="col-span-3 col-start-1 mt-1 flex items-center gap-1.5 text-p-sm text-ink-gray-5"
+            >
+              <span class="lucide-lock size-3.5 shrink-0 text-ink-green-7" aria-hidden="true" />
+              {{ __("Managed SSL") }}
+            </p>
+
+            <div class="col-start-4 row-span-2 row-start-1 flex items-center gap-2">
+              <Button
+                v-if="!domain.is_primary"
+                :disabled="working"
+                :label="__('Make primary')"
+                @click="makePrimary(domain.domain)"
+              />
+
+              <Button
+                v-if="!domain.is_default"
+                :disabled="working"
+                :label="__('Remove')"
+                @click="remove(domain.domain)"
+              />
+            </div>
           </div>
         </div>
 
-        <div class="flex justify-end gap-2">
-          <Button :disabled="working" @click="clearPreview" :label="__('Cancel')" />
-          <Button variant="solid" :loading="working" @click="confirmAdd">
-            {{ __("Add domain") }}
-          </Button>
-        </div>
-      </section>
-
-      <div
-        v-for="domain in domains"
-        :key="domain.domain"
-        class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-6 border border-outline-gray-2 p-3"
-      >
-        <p class="flex items-center gap-1.5 text-base font-semibold text-ink-gray-9">
-          {{ domain.domain }}
-          <Tooltip :text="__('Managed SSL certificate')">
-            <span class="lucide-lock size-3.5 text-ink-green-7" aria-hidden="true" />
-          </Tooltip>
+        <p v-if="(domains || []).length <= 1" class="text-p-sm text-ink-gray-5">
+          {{ __(
+              "No custom domains yet. Add one above and we'll handle SSL once DNS checks out.",
+            ) }}
         </p>
-
-        <p class="mt-1 text-p-sm text-ink-gray-6">
-          {{ domain.is_default
-              ? __("Default address · managed SSL")
-              : __("Managed SSL") }}
-        </p>
-
-        <div class="col-start-2 row-span-2 row-start-1 flex items-center gap-2">
-          <Badge v-if="domain.is_primary" theme="green" :label="__('Primary')" />
-          <Button v-else :disabled="working" @click="makePrimary(domain.domain)">
-            {{ __("Make primary") }}
-          </Button>
-          <Button v-if="!domain.is_default" :disabled="working" @click="remove(domain.domain)">
-            {{ __("Remove") }}
-          </Button>
-        </div>
       </div>
-
-      <p v-if="(domains || []).length <= 1" class="text-p-sm text-ink-gray-5">
-        {{ __(
-            "No custom domains yet. Add one above and we'll handle SSL once DNS checks out.",
-          ) }}
-      </p>
     </PanelState>
   </SettingsBody>
 </template>

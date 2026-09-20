@@ -156,60 +156,53 @@ const notify = (message, indicator = 'green') => {
 </script>
 
 <template>
-  <SettingsHeader>
-    <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1">
-      <h2 class="text-lg font-semibold text-ink-gray-8">
-        {{ __("Marketplace") }}
-      </h2>
+  <SettingsHeader class="!px-10 !pt-9 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
+    <h2 class="text-lg-semibold text-ink-gray-8">{{ __("Marketplace") }}</h2>
 
-      <p class="text-base text-ink-gray-6">
-        {{ __("Install apps and keep them up to date.") }}
-      </p>
+    <p class="col-start-1 mt-1 text-base text-ink-gray-6">
+      {{ __("Install apps and keep them up to date.") }}
+    </p>
 
-      <Button
-        v-if="updateCount"
-        variant="solid"
-        class="col-start-2 row-span-2 row-start-1"
-        :loading="updatingAll"
-        @click="((updateAllError = ''), (showUpdates = true))"
-      >
-        {{ updatingAll ? __("Updating") : __("Update all ({0})", [updateCount]) }}
-      </Button>
-    </div>
-
-    <div v-if="marketplace" class="mt-8 flex items-center gap-2">
-      <TextInput v-model="query" class="flex-1" :placeholder="__('Search apps')" />
-      <Select v-model="category" :options="categoryOptions" class="w-[184px] shrink-0" />
-    </div>
+    <Button
+      v-if="updateCount"
+      class="col-start-2 row-span-2 row-start-1"
+      variant="solid"
+      :loading="updatingAll"
+      :label="updatingAll ? __('Updating') : __('Update all ({0})', [updateCount])"
+      @click="((updateAllError = ''), (showUpdates = true))"
+    />
   </SettingsHeader>
 
-  <SettingsBody>
+  <SettingsBody viewport-class="px-10 pb-16">
     <PanelState
-      class="pt-6"
       :loading="!marketplace && !error"
       :error="loadFailed ? error : ''"
       :title="__(`Couldn't load the marketplace`)"
       @retry="store.loadMarketplace(true)"
     >
-      <ErrorMessage :message="loadFailed ? '' : error" class="mb-4" />
+      <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <TextInput v-model="query" class="flex-1" :placeholder="__('Search apps')" />
+
+        <Select v-model="category" class="sm:w-44" :options="categoryOptions" />
+      </div>
+
+      <ErrorMessage :message="loadFailed ? '' : error" class="mt-2" />
 
       <ActionableError
         v-if="blocker"
-        class="mb-4"
+        class="mt-4"
         :message="blocker.message"
         :action-label="blocker.actionLabel"
         :action-url="blocker.actionUrl"
       />
 
-      <div v-if="!filteredApps.length" class="flex flex-col items-center gap-2 py-10 text-center">
-        <p class="text-base text-ink-gray-6">
-          {{ __("No apps match your search.") }}
-        </p>
+      <p v-if="!filteredApps.length" class="py-12 text-center text-p-sm text-ink-gray-5">
+        {{ __("No apps match your search.") }}
 
-        <Button @click="clearFilters">{{ __("Clear filters") }}</Button>
-      </div>
+        <Button class="mt-3 block" :label="__('Clear filters')" @click="clearFilters" />
+      </p>
 
-      <div v-else class="grid grid-cols-2 gap-x-8">
+      <div v-else class="mt-4 grid gap-x-8 sm:grid-cols-2">
         <AppRow
           v-for="app in filteredApps"
           :key="app.name"

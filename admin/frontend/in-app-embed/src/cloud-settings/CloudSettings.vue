@@ -12,12 +12,13 @@ import {
 import { ConfigProvider } from 'reka-ui'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
-import TailwindStyles from './TailwindStyles.vue'
+import FrappeCloudLogo from './components/FrappeCloudLogo.vue'
 import AdvancedPanel from './panels/AdvancedPanel.vue'
 import BillingPanel from './panels/BillingPanel.vue'
 import DomainsPanel from './panels/DomainsPanel.vue'
 import MarketplacePanel from './panels/MarketplacePanel.vue'
 import { createStore } from './store'
+import TailwindStyles from './TailwindStyles.vue'
 
 const props = defineProps({
   context: { type: Object, default: () => ({}) },
@@ -29,25 +30,25 @@ const TABS = [
   {
     value: 'billing',
     label: __('Billing'),
-    icon: 'lucide-wallet',
+    icon: 'lucide-credit-card',
     component: BillingPanel,
   },
   {
     value: 'marketplace',
     label: __('Marketplace'),
-    icon: 'lucide-layout-grid',
+    icon: 'lucide-store',
     component: MarketplacePanel,
   },
   {
     value: 'domains',
     label: __('Domains'),
-    icon: 'lucide-globe',
+    icon: 'lucide-globe-code',
     component: DomainsPanel,
   },
   {
     value: 'advanced',
     label: __('Advanced'),
-    icon: 'lucide-sliders-horizontal',
+    icon: 'lucide-bolt',
     component: AdvancedPanel,
   },
 ]
@@ -95,10 +96,14 @@ const needsBilling = computed(() => Boolean(store.value.state.billing?.credit?.w
       :keyboard-shortcut="false"
       :unmount-on-hide="false"
     >
-      <template #title>{{ __("Cloud settings") }}</template>
+      <template #title>{{ __("Cloud Settings") }}</template>
 
-      <SettingsSidebar class="dark:border-outline-gray-2">
-        <SettingsNavGroup :label="__('Cloud settings')">
+      <SettingsSidebar class="dark:border-transparent">
+        <SettingsNavGroup>
+          <p class="mb-1 flex h-7 items-center px-2 text-base text-ink-gray-5">
+            <FrappeCloudLogo class="mr-2 size-4 rounded-2" />
+            {{ __("Cloud Settings") }}
+          </p>
           <SettingsNavItem v-for="item in TABS" :key="item.value" :value="item.value">
             <template #prefix>
               <span :class="[item.icon, 'size-4 shrink-0 text-ink-gray-6']" />
@@ -122,7 +127,7 @@ const needsBilling = computed(() => Boolean(store.value.state.billing?.credit?.w
         </SettingsNavGroup>
       </SettingsSidebar>
 
-      <SettingsContent class="relative">
+      <SettingsContent class="relative dark:bg-surface-elevation-2">
         <Button
           variant="ghost"
           icon="x"
