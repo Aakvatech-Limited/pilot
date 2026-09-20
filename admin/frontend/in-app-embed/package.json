@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "./dev.sh",
     "build": "vite build",
     "buildwatch": "vite build --watch",
     "preview": "vite preview"
