@@ -33,6 +33,7 @@ export default defineConfig({
   ],
 
   server: {
+    host: "::",
     warmup: { clientFiles: ["./src/cloud-settings/index.ts"] },
   },
 

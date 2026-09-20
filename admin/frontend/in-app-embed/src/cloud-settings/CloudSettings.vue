@@ -11,6 +11,8 @@ import {
 } from 'frappe-ui'
 import { ConfigProvider } from 'reka-ui'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+
+import TailwindStyles from './TailwindStyles.vue'
 import AdvancedPanel from './panels/AdvancedPanel.vue'
 import BillingPanel from './panels/BillingPanel.vue'
 import DomainsPanel from './panels/DomainsPanel.vue'
@@ -135,6 +137,8 @@ const needsBilling = computed(() => Boolean(store.value.state.billing?.credit?.w
       </SettingsContent>
     </SettingsDialog>
 
-    <div ref="overlays" :class="{ dark: isDark }" />
+    <div ref="overlays" :data-theme="isDark ? 'dark' : 'light'" />
+
+    <TailwindStyles />
   </ConfigProvider>
 </template>
