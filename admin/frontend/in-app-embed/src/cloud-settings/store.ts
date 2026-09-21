@@ -47,6 +47,29 @@ export const waitForTask = async (
   return 'cancelled'
 }
 
+type RememberedTask = { taskId: string; verb: string }
+
+const tasksKey = (site: string) => `cloud-settings:tasks:${site}`
+
+export const getRememberedTasks = (site: string): Record<string, RememberedTask> => {
+  try {
+    return JSON.parse(localStorage.getItem(tasksKey(site)) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+export const rememberTask = (site: string, name: string, task?: RememberedTask) => {
+  const tasks = getRememberedTasks(site)
+
+  if (task) tasks[name] = task
+  else delete tasks[name]
+
+  try {
+    localStorage.setItem(tasksKey(site), JSON.stringify(tasks))
+  } catch {}
+}
+
 export const createStore = (context?: CloudContext) => {
   const state = reactive({
     context: context || {},

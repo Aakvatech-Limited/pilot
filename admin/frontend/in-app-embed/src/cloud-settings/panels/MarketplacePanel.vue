@@ -6,13 +6,14 @@ import AppRow from '../components/AppRow.vue'
 import PanelState from '../components/PanelState.vue'
 import UninstallAppDialog from '../components/UninstallAppDialog.vue'
 import UpdateAppsDialog from '../components/UpdateAppsDialog.vue'
-import { waitForTask } from '../store'
+import { getRememberedTasks, rememberTask, waitForTask } from '../store'
 
 const props = defineProps({
   store: { type: Object, required: true },
   active: { type: Boolean, default: false },
 })
 const store = props.store
+const site = store.state.context.site_name || window.location.host
 
 const ACTION = {
   install: {
@@ -50,8 +51,12 @@ onBeforeUnmount(() => (gone = true))
 
 watch(
   () => props.active,
-  (active) => {
-    if (active) store.loadMarketplace()
+  async (active) => {
+    if (!active) return
+
+    await store.loadMarketplace()
+
+    resumeTasks()
   },
   { immediate: true },
 )
@@ -117,13 +122,16 @@ const asBlocker = (exception) => {
   }
 }
 
-const updateAll = async ({ apps }) => {
+const updateAll = async ({ apps, taskId }) => {
   updatingAll.value = true
   updateAllError.value = ''
   blocker.value = null
 
   try {
-    const { task_id } = await store.api.updateApps(apps)
+    const { task_id } = taskId ? { task_id: taskId } : await store.api.updateApps(apps)
+
+    rememberTask(site, '*', { taskId: task_id, verb: 'update' })
+
     const done = await settle(task_id, ACTION.update, __('all apps'))
 
     await store.loadMarketplace(true)
@@ -142,6 +150,7 @@ const updateAll = async ({ apps }) => {
       if (!showUpdates.value) notify(updateAllError.value, 'red')
     }
   } finally {
+    rememberTask(site, '*')
     updatingAll.value = false
   }
 }
@@ -153,6 +162,9 @@ const runAction = async (app, verb, action) => {
 
   try {
     const { task_id } = await action()
+
+    rememberTask(site, app.name, { taskId: task_id, verb })
+
     const done = await settle(task_id, ACTION[verb], app.title)
 
     delete errors[app.name]
@@ -178,7 +190,22 @@ const runAction = async (app, verb, action) => {
       notify(errors[app.name], 'red')
     }
   } finally {
+    rememberTask(site, app.name)
     delete pending[app.name]
+  }
+}
+
+const resumeTasks = () => {
+  const tasks = getRememberedTasks(site)
+
+  if (tasks['*'] && !updatingAll.value) updateAll({ taskId: tasks['*'].taskId })
+
+  for (const [name, task] of Object.entries(tasks)) {
+    if (name === '*' || pending[name]) continue
+
+    const app = marketplace.value?.apps?.find((row) => row.name === name) || { name, title: name }
+
+    runAction(app, task.verb, () => ({ task_id: task.taskId }))
   }
 }
 
