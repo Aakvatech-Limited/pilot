@@ -32,44 +32,45 @@ const props = withDefaults(defineProps<Props>(), {
 })
 const emit = defineEmits(['close'])
 
-const TABS = [
+const GROUPS = [
   {
-    value: 'billing',
-    label: __('Billing'),
-    icon: 'lucide-credit-card',
-    component: BillingPanel,
+    tabs: [
+      {
+        value: 'billing',
+        label: __('Billing'),
+        icon: 'lucide-credit-card',
+        component: BillingPanel,
+      },
+      {
+        value: 'marketplace',
+        label: __('Marketplace'),
+        icon: 'lucide-store',
+        component: MarketplacePanel,
+      },
+    ],
   },
   {
-    value: 'marketplace',
-    label: __('Marketplace'),
-    icon: 'lucide-store',
-    component: MarketplacePanel,
-  },
-  {
-    value: 'domains',
-    label: __('Domains'),
-    icon: 'lucide-globe-code',
-    component: DomainsPanel,
-  },
-  {
-    value: 'backups',
-    label: __('Backups'),
-    icon: 'lucide-archive',
-    component: BackupsPanel,
-  },
-  {
-    value: 'analytics',
-    label: __('Analytics'),
-    icon: 'lucide-chart-line',
-    component: AnalyticsPanel,
-  },
-  {
-    value: 'advanced',
-    label: __('Advanced'),
-    icon: 'lucide-bolt',
-    component: AdvancedPanel,
+    label: __('Site'),
+    tabs: [
+      {
+        value: 'analytics',
+        label: __('Analytics'),
+        icon: 'lucide-chart-line',
+        component: AnalyticsPanel,
+      },
+      {
+        value: 'domains',
+        label: __('Domains'),
+        icon: 'lucide-globe-code',
+        component: DomainsPanel,
+      },
+      { value: 'backups', label: __('Backups'), icon: 'lucide-archive', component: BackupsPanel },
+      { value: 'advanced', label: __('Advanced'), icon: 'lucide-bolt', component: AdvancedPanel },
+    ],
   },
 ]
+
+const TABS = GROUPS.flatMap((group) => group.tabs)
 
 const overlays = ref(null)
 
@@ -125,25 +126,39 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
 
       <SettingsSidebar class="!border-0">
         <SettingsNavGroup>
-          <span class="mb-1 flex items-center p-2 text-base text-ink-gray-7">
+          <span class="mb-1 flex h-7 items-center px-2 text-base text-ink-gray-7">
             <FrappeCloudLogo class="mr-2 size-4 rounded-2" />
             {{ __("Cloud Settings") }}
           </span>
 
-          <SettingsNavItem v-for="item in TABS" :key="item.value" :value="item.value">
-            <template #prefix>
-              <span :class="[item.icon, 'size-4 shrink-0 text-ink-gray-6']" />
-            </template>
-            {{ item.label }}
+          <template v-for="(group, index) in GROUPS" :key="index">
+            <span
+              v-if="group.label"
+              class="mt-1.5 flex h-7 items-center px-2 text-sm-medium text-ink-gray-5"
+            >
+              {{ group.label }}
+            </span>
 
-            <template #suffix>
-              <Badge
-                v-if="item.value === 'marketplace' && updateCount"
-                theme="gray"
-                :label="String(updateCount)"
-              />
-            </template>
-          </SettingsNavItem>
+            <SettingsNavItem
+              v-for="(item, position) in group.tabs"
+              :key="item.value"
+              :class="index && !group.label && !position && 'mt-1.5'"
+              :value="item.value"
+            >
+              <template #prefix>
+                <span :class="[item.icon, 'size-4 shrink-0 text-ink-gray-6']" />
+              </template>
+              {{ item.label }}
+
+              <template #suffix>
+                <Badge
+                  v-if="item.value === 'marketplace' && updateCount"
+                  theme="gray"
+                  :label="String(updateCount)"
+                />
+              </template>
+            </SettingsNavItem>
+          </template>
         </SettingsNavGroup>
       </SettingsSidebar>
 
