@@ -1,5 +1,5 @@
 <script setup>
-import { Button, Dropdown, Tooltip } from 'frappe-ui'
+import { Badge, Button, Dropdown, Tooltip } from 'frappe-ui'
 import { computed, inject, ref } from 'vue'
 
 const props = defineProps({
@@ -30,12 +30,10 @@ const incompatibleReason = computed(() =>
 </script>
 
 <template>
-  <div
-    class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-1.5 border-b border-outline-gray-1 py-3.5"
-  >
+  <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-1.5 py-2">
     <img
       v-if="logoUrl"
-      class="row-span-2 mr-1.5 size-8 rounded-5 object-cover"
+      class="row-span-2 mr-1.5 size-10 rounded-6 object-cover"
       :src="logoUrl"
       :alt="app.title"
       loading="lazy"
@@ -45,7 +43,7 @@ const incompatibleReason = computed(() =>
 
     <div
       v-else
-      class="row-span-2 mr-1.5 grid size-8 place-items-center rounded-5 bg-surface-gray-2 text-sm-medium uppercase text-ink-gray-6"
+      class="row-span-2 mr-1.5 grid size-10 place-items-center rounded-6 bg-surface-gray-2 text-base-medium uppercase text-ink-gray-6"
     >
       {{ (app.title || "?").charAt(0) }}
     </div>
@@ -85,52 +83,48 @@ const incompatibleReason = computed(() =>
       </Tooltip>
 
       <Tooltip v-if="!app.installed && !app.installable" :text="incompatibleReason">
-        <span
-          class="rounded-full bg-surface-gray-3 px-2.5 py-1 text-p-xs text-ink-gray-5"
-          tabindex="0"
+        <Badge size="sm" :label="incompatibleLabel" />
+      </Tooltip>
+
+      <Tooltip v-else-if="!app.installed" :text="__('Install {0}', [app.title])">
+        <Button
+          variant="ghost"
+          class="group"
+          :disabled="busy"
+          :loading="pending === 'install'"
+          :label="__('Install')"
+          @click="emit('install', app)"
         >
-          {{ incompatibleLabel }}
-        </span>
+          <template #icon>
+            <span
+              class="lucide-download size-4 transition-transform duration-150 group-active:scale-95"
+            />
+          </template>
+        </Button>
       </Tooltip>
 
       <Button
-        v-else-if="!app.installed"
+        v-else-if="app.has_update"
+        variant="ghost"
         :disabled="busy"
-        :loading="pending === 'install'"
-        :label="pending === 'install' ? __('Installing') : __('Install')"
-        @click="emit('install', app)"
+        :loading="pending === 'update'"
+        :label="pending === 'update' ? __('Updating') : __('Update')"
+        @click="emit('update', app)"
       />
 
-      <template v-else-if="app.has_update">
+      <Dropdown
+        v-if="app.installed"
+        align="end"
+        :portal-to="overlayTarget"
+        :options="[{ label: __('Uninstall'), onClick: () => emit('uninstall', app) }]"
+      >
         <Button
-          variant="solid"
+          variant="ghost"
+          icon="more-vertical"
           :disabled="busy"
-          :loading="pending === 'update'"
-          :label="pending === 'update' ? __('Updating') : __('Update')"
-          @click="emit('update', app)"
+          :label="__('More actions for {0}', [app.title])"
         />
-
-        <Dropdown
-          align="end"
-          :portal-to="overlayTarget"
-          :options="[{ label: __('Uninstall'), onClick: () => emit('uninstall', app) }]"
-        >
-          <Button
-            variant="ghost"
-            icon="more-vertical"
-            :disabled="busy"
-            :label="__('More actions for {0}', [app.title])"
-          />
-        </Dropdown>
-      </template>
-
-      <Button
-        v-else
-        :disabled="busy"
-        :loading="pending === 'uninstall'"
-        :label="pending === 'uninstall' ? __('Uninstalling') : __('Uninstall')"
-        @click="emit('uninstall', app)"
-      />
+      </Dropdown>
     </div>
   </div>
 </template>

@@ -37,13 +37,13 @@ const openBilling = async () => {
 </script>
 
 <template>
-  <SettingsHeader class="!px-10 !pt-9">
+  <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 bg-surface-elevation-1">
     <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Advanced') }}</h2>
 
     <p class="mt-1 text-base text-ink-gray-6">{{ __('Deeper controls for your server.') }}</p>
   </SettingsHeader>
 
-  <SettingsBody viewport-class="px-10 pb-16">
+  <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">
     <div class="mt-6 divide-y divide-outline-gray-1 border-t border-outline-gray-1">
       <SettingsRow
         v-for="link in links"

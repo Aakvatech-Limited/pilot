@@ -10,3 +10,7 @@
 .fui-spinner {
   animation: none !important;
 }
+
+:host {
+  font-family: InterVar, InterVariable, Inter, ui-sans-serif, system-ui, sans-serif;
+}

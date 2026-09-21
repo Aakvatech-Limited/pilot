@@ -87,13 +87,13 @@ const clearPreview = () => {
 </script>
 
 <template>
-  <SettingsHeader class="!px-10 !pt-9">
+  <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 bg-surface-elevation-1">
     <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Domains') }}</h2>
 
     <p class="mt-1 text-base text-ink-gray-6">{{ __('The addresses this site answers on.') }}</p>
   </SettingsHeader>
 
-  <SettingsBody viewport-class="px-10 pb-16">
+  <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">
     <PanelState
       :loading="!domains && !error"
       :error="loadFailed ? error : ''"
@@ -154,11 +154,11 @@ const clearPreview = () => {
           </div>
         </section>
 
-        <div class="divide-y divide-outline-gray-1 border-t border-outline-gray-1">
+        <div class="space-y-2">
           <div
             v-for="domain in domains"
             :key="domain.domain"
-            class="grid grid-cols-[minmax(0,auto)_auto_1fr_auto] items-center gap-x-1.5 py-3.5"
+            class="grid grid-cols-[minmax(0,auto)_auto_1fr_auto] items-center gap-x-1.5 rounded-6 border border-outline-gray-2 p-4 dark:bg-surface-gray-2"
           >
             <p class="truncate text-base-medium text-ink-gray-8">{{ domain.domain }}</p>
 

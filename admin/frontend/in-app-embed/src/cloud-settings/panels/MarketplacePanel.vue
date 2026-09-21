@@ -156,7 +156,9 @@ const notify = (message, indicator = 'green') => {
 </script>
 
 <template>
-  <SettingsHeader class="!px-10 !pt-9 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
+  <SettingsHeader
+    class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-4 grid bg-surface-elevation-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4"
+  >
     <h2 class="text-lg-semibold text-ink-gray-8">{{ __("Marketplace") }}</h2>
 
     <p class="col-start-1 mt-1 text-base text-ink-gray-6">
@@ -173,14 +175,14 @@ const notify = (message, indicator = 'green') => {
     />
   </SettingsHeader>
 
-  <SettingsBody viewport-class="px-10 pb-16">
+  <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">
     <PanelState
       :loading="!marketplace && !error"
       :error="loadFailed ? error : ''"
       :title="__(`Couldn't load the marketplace`)"
       @retry="store.loadMarketplace(true)"
     >
-      <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
         <TextInput v-model="query" class="flex-1" :placeholder="__('Search apps')" />
 
         <Select v-model="category" class="sm:w-44" :options="categoryOptions" />
@@ -202,7 +204,7 @@ const notify = (message, indicator = 'green') => {
         <Button class="mt-3 block" :label="__('Clear filters')" @click="clearFilters" />
       </p>
 
-      <div v-else class="mt-4 grid gap-x-8 sm:grid-cols-2">
+      <div v-else class="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
         <AppRow
           v-for="app in filteredApps"
           :key="app.name"

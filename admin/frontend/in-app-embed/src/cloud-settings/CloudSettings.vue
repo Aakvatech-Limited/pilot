@@ -98,9 +98,9 @@ const needsBilling = computed(() => Boolean(store.value.state.billing?.credit?.w
     >
       <template #title>{{ __("Cloud Settings") }}</template>
 
-      <SettingsSidebar class="dark:border-transparent">
+      <SettingsSidebar class="!border-0 !border-r  border-outline-gray-2">
         <SettingsNavGroup>
-          <p class="mb-1 flex h-7 items-center px-2 text-base text-ink-gray-5">
+          <p class="mb-1 flex h-7 items-center px-2 text-base text-ink-gray-7">
             <FrappeCloudLogo class="mr-2 size-4 rounded-2" />
             {{ __("Cloud Settings") }}
           </p>
@@ -127,7 +127,7 @@ const needsBilling = computed(() => Boolean(store.value.state.billing?.credit?.w
         </SettingsNavGroup>
       </SettingsSidebar>
 
-      <SettingsContent class="relative dark:bg-surface-elevation-2">
+      <SettingsContent class="relative">
         <Button
           variant="ghost"
           icon="x"
