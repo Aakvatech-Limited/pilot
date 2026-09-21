@@ -1,7 +1,6 @@
 <script setup>
 import {
   Badge,
-  Button,
   SettingsContent,
   SettingsDialog,
   SettingsNavGroup,
@@ -13,8 +12,8 @@ import { ConfigProvider } from 'reka-ui'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
 import FrappeCloudLogo from './components/FrappeCloudLogo.vue'
-import BackupsPanel from './panels/BackupsPanel.vue'
 import AdvancedPanel from './panels/AdvancedPanel.vue'
+import BackupsPanel from './panels/BackupsPanel.vue'
 import BillingPanel from './panels/BillingPanel.vue'
 import DomainsPanel from './panels/DomainsPanel.vue'
 import MarketplacePanel from './panels/MarketplacePanel.vue'
@@ -45,12 +44,12 @@ const TABS = [
     label: __('Domains'),
     icon: 'lucide-globe-code',
     component: DomainsPanel,
+  },
   {
     value: 'backups',
     label: __('Backups'),
     icon: 'lucide-archive',
     component: BackupsPanel,
-  },
   },
   {
     value: 'advanced',
@@ -135,15 +134,7 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
         </SettingsNavGroup>
       </SettingsSidebar>
 
-      <SettingsContent class="relative">
-        <Button
-          variant="ghost"
-          icon="lucide-x"
-          :label="__('Close')"
-          class="absolute right-4 top-3.5 z-20"
-          @click="isOpen = false"
-        />
-
+      <SettingsContent>
         <SettingsPanel v-for="item in TABS" :key="item.value" :value="item.value">
           <component :is="item.component" :store="store" :active="tab === item.value" />
         </SettingsPanel>
