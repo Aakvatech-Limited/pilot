@@ -13,6 +13,7 @@ import { ConfigProvider } from 'reka-ui'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
 import FrappeCloudLogo from './components/FrappeCloudLogo.vue'
+import BackupsPanel from './panels/BackupsPanel.vue'
 import AdvancedPanel from './panels/AdvancedPanel.vue'
 import BillingPanel from './panels/BillingPanel.vue'
 import DomainsPanel from './panels/DomainsPanel.vue'
@@ -44,6 +45,12 @@ const TABS = [
     label: __('Domains'),
     icon: 'lucide-globe-code',
     component: DomainsPanel,
+  {
+    value: 'backups',
+    label: __('Backups'),
+    icon: 'lucide-archive',
+    component: BackupsPanel,
+  },
   },
   {
     value: 'advanced',

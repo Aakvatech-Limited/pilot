@@ -130,5 +130,17 @@ export const removeDomain = (domain: string) => call('remove_domain', { domain }
 
 export const setPrimaryDomain = (domain: string) => call('set_primary_domain', { domain })
 
+const pilotRequest = (method: 'GET' | 'POST' | 'DELETE', path: string) =>
+  call('pilot_request', { method, path }, method === 'GET' ? 'GET' : 'POST')
+
+export const getBackups = () => pilotRequest('GET', 'backups')
+
+export const createBackup = () => pilotRequest('POST', 'backups')
+
+export const deleteBackup = (timestamp: string) => pilotRequest('DELETE', `backups/${timestamp}`)
+
+export const getBackupDownloadLinks = (timestamp: string) =>
+  pilotRequest('GET', `backups/${timestamp}/download-links`)
+
 export const getErrorMessage = (exception: unknown, fallback?: string) =>
   (exception as Error | undefined)?.message || fallback || __('Something went wrong.')
