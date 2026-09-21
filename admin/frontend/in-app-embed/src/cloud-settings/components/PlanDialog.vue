@@ -149,7 +149,7 @@ const comparePlans = () => {
           class="mb-4 grid gap-3"
           :class="
             providerOptions.length && regionOptions.length
-              ? 'grid-cols-2'
+              ? 'sm:grid-cols-2'
               : 'grid-cols-1'
           "
         >
@@ -260,7 +260,7 @@ const comparePlans = () => {
             type="button"
             role="radio"
             :aria-checked="isSelected(plan)"
-            class="flex min-h-12 w-full items-center gap-2 rounded-6 border border-outline-gray-2 px-3.5 py-3 text-left hover:bg-surface-gray-1"
+            class="flex min-h-12 w-full items-center gap-2 rounded-6 border border-outline-gray-2 px-3.5 py-3 text-left hover:bg-surface-gray-2"
             :disabled="submitting"
             @click="selected = plan.name"
           >

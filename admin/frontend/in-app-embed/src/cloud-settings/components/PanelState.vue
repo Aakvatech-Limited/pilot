@@ -10,13 +10,13 @@ defineEmits(['retry'])
 </script>
 
 <template>
-  <div v-if="loading" class="mt-6 space-y-3" role="status" :aria-label="__('Loading')">
+  <div v-if="loading" class="space-y-3" role="status" :aria-label="__('Loading')">
     <Skeleton v-for="n in 3" :key="n" class="h-24 rounded-6" />
   </div>
 
   <div
     v-else-if="error"
-    class="mt-6 flex min-h-64 flex-col items-center justify-center rounded-6 border border-dashed border-outline-gray-3 px-6 py-12 text-center"
+    class="flex min-h-64 flex-col items-center justify-center rounded-6 border border-dashed border-outline-gray-3 px-6 py-12 text-center"
   >
     <div
       class="flex size-10 items-center justify-center rounded-6 bg-surface-gray-2 text-ink-gray-5"

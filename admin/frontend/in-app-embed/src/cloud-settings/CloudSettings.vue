@@ -84,7 +84,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => themeWatcher?.disconnect())
 const updateCount = computed(() => store.value.state.marketplace?.update_count || 0)
-const needsBilling = computed(() => Boolean(store.value.state.billing?.credit?.warning))
 </script>
 
 <template>
@@ -111,14 +110,8 @@ const needsBilling = computed(() => Boolean(store.value.state.billing?.credit?.w
             {{ item.label }}
 
             <template #suffix>
-              <span
-                v-if="item.value === 'billing' && needsBilling"
-                class="size-1.5 rounded-full bg-surface-amber-3"
-                :aria-label="__('Billing needs attention')"
-              />
-
               <Badge
-                v-else-if="item.value === 'marketplace' && updateCount"
+                v-if="item.value === 'marketplace' && updateCount"
                 theme="gray"
                 :label="String(updateCount)"
               />

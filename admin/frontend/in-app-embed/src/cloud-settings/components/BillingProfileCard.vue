@@ -1,5 +1,5 @@
 <script setup>
-import { Button, ErrorMessage, Select, TextInput } from 'frappe-ui'
+import { Button, ErrorMessage, Select, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
 
 const props = defineProps({ store: { type: Object, required: true } })
@@ -83,22 +83,20 @@ const save = async () => {
 </script>
 
 <template>
-  <section class="space-y-4 rounded-7 border border-outline-gray-2 p-4">
+  <section class="space-y-4 rounded-6 border border-outline-gray-2 p-5">
     <div>
-      <p class="text-base-semibold text-ink-gray-8">
+      <h2 class="text-base-semibold text-ink-gray-8">
         {{ __("Add billing details") }}
-      </p>
+      </h2>
 
       <p class="mt-1 text-p-sm text-ink-gray-5">
-        {{ __(
-            "These go on every invoice — we'll need them before adding a payment method.",
-          ) }}
+        {{ __("These are visible on every invoice and are needed to add a payment method.") }}
       </p>
     </div>
 
     <ErrorMessage :message="error" />
 
-    <div v-if="!loaded && !error" class="h-20 rounded-6 bg-surface-gray-2" />
+    <Skeleton v-if="!loaded && !error" class="h-20 rounded-6" />
 
     <div v-else-if="!loaded" class="flex gap-2">
       <Button @click="emit('close')">{{ __("Cancel") }}</Button>
@@ -106,7 +104,7 @@ const save = async () => {
     </div>
 
     <template v-else>
-      <div class="grid grid-cols-2 gap-3.5">
+      <div class="grid gap-4 sm:grid-cols-2">
         <TextInput
           v-for="field in FIELDS"
           :key="field.key"
@@ -117,7 +115,7 @@ const save = async () => {
           "
           :placeholder="field.placeholder"
           :disabled="working"
-          :class="field.full ? 'col-span-2' : ''"
+          :class="field.full ? 'sm:col-span-2' : ''"
         />
         <Select
           v-model="form.currency"

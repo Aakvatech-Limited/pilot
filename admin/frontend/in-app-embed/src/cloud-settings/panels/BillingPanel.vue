@@ -108,10 +108,10 @@ const openChangePlan = async () => {
 </script>
 
 <template>
-  <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 bg-surface-elevation-1">
+  <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-6 bg-surface-elevation-1">
     <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Billing') }}</h2>
 
-    <p class="mt-1 text-base text-ink-gray-6">
+    <p class="mt-1 text-base leading-5 text-ink-gray-6">
       {{ __('Your plan, usage, credit and payment method.') }}
     </p>
   </SettingsHeader>
@@ -125,7 +125,7 @@ const openChangePlan = async () => {
     >
       <div
         v-if="!plan"
-        class="mt-6 flex min-h-64 flex-col items-center justify-center rounded-6 border border-dashed border-outline-gray-3 px-6 py-12 text-center"
+        class="flex min-h-64 flex-col items-center justify-center rounded-6 border border-dashed border-outline-gray-3 px-6 py-12 text-center"
       >
         <div
           class="flex size-10 items-center justify-center rounded-6 bg-surface-gray-2 text-ink-gray-5"
@@ -154,31 +154,33 @@ const openChangePlan = async () => {
         <ErrorMessage :message="changePlanError" class="mt-2" />
       </div>
 
-      <div v-else class="mt-6 space-y-4">
+      <div v-else class="space-y-4">
         <ErrorMessage :message="loadFailed ? '' : error" />
 
-        <section
-          class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 rounded-6 border border-outline-gray-2 p-5"
-        >
-          <p class="text-p-sm text-ink-gray-5">{{ __("Plan") }}</p>
+        <section class="rounded-6 border border-outline-gray-2 p-5">
+          <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
+            <p class="text-p-sm text-ink-gray-5">{{ __("Plan") }}</p>
 
-          <p class="col-start-1 mt-0.5 text-base-semibold text-ink-gray-8">
-            {{ plan.name || __("Current plan") }}
-          </p>
+            <p class="col-start-1 mt-0.5 text-base-semibold text-ink-gray-8">
+              {{ plan.name || __("Current plan") }}
+            </p>
 
-          <p class="col-start-1 mt-0.5 text-p-sm text-ink-gray-5">{{ planSubtitle }}</p>
+            <p class="col-start-1 mt-0.5 text-p-sm text-ink-gray-5">{{ planSubtitle }}</p>
 
-          <Button
-            class="col-start-2 row-span-3 row-start-1"
-            icon-right="arrow-up-right"
-            :disabled="openingChangePlan"
-            :label="openingChangePlan ? __('Opening…') : __('Change plan')"
-            @click="openChangePlan"
-          />
+            <Button
+              class="col-start-2 row-span-3 row-start-1"
+              icon-right="arrow-up-right"
+              :disabled="openingChangePlan"
+              :label="openingChangePlan ? __('Opening…') : __('Change plan')"
+              @click="openChangePlan"
+            />
 
-          <ErrorMessage :message="changePlanError" class="col-span-2 mt-2" />
+            <ErrorMessage :message="changePlanError" class="col-span-2 mt-2" />
+          </div>
 
-          <div class="col-span-2 mt-5 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-5">
+          <div
+            class="-mx-5 mt-5 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-5 border-t border-outline-gray-2 px-5 pt-5"
+          >
             <div v-for="meter in meters" :key="meter.name">
               <div class="mb-2 flex items-center justify-between gap-4 text-sm">
                 <span class="text-ink-gray-6">{{ meter.name }}</span>
@@ -250,7 +252,12 @@ const openChangePlan = async () => {
           v-else
           class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-6 border border-outline-gray-2 p-5"
         >
-          <p class="text-base-medium text-ink-gray-8">
+          <p class="flex items-center gap-2 text-base-medium text-ink-gray-8">
+            <span
+              v-if="billing.payment_method"
+              class="lucide-credit-card size-4 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
             {{ billing.payment_method
                 ? billing.payment_method.label
                 : __("No payment method yet") }}

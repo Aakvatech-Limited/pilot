@@ -55,23 +55,23 @@ const submit = () => {
         >
           <img
             v-if="/^https?:\/\//i.test(app.logo_url || '')"
-            class="row-span-2 size-8 rounded-6 object-cover"
+            class="row-span-2 size-8 rounded-5 object-cover"
             :src="app.logo_url"
             :alt="app.title"
           />
 
           <span
             v-else
-            class="row-span-2 flex size-8 items-center justify-center rounded-6 bg-surface-gray-3 text-p-sm-semibold text-ink-gray-7"
+            class="row-span-2 flex size-8 items-center justify-center rounded-5 bg-surface-gray-2 text-sm-medium uppercase text-ink-gray-6"
           >
             {{ (app.title || "?").charAt(0) }}
           </span>
 
-          <span class="truncate text-base-semibold text-ink-gray-8">
+          <span class="truncate text-base-medium text-ink-gray-8">
             {{ app.title }}
           </span>
 
-          <span class="col-start-2 text-p-sm text-ink-gray-5">
+          <span class="col-start-2 text-p-sm tabular-nums text-ink-gray-5">
             v{{ app.installed_version }}
             <span class="px-1">→</span>
             <span class="text-ink-green-7">v{{ app.latest_version }}</span>

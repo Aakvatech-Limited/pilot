@@ -1,5 +1,5 @@
 <script setup>
-import { Button, ErrorMessage, TextInput } from 'frappe-ui'
+import { Button, ErrorMessage, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import RazorpayLogo from '../assets/Razorpay-1.svg?inline'
 import StripeLogo from '../assets/Stripe.svg?inline'
@@ -194,10 +194,10 @@ const tileClass = (isSelected) => [
 </script>
 
 <template>
-  <section class="space-y-4 rounded-7 border border-outline-gray-2 p-4">
-    <p class="text-base-semibold text-ink-gray-8">
+  <section class="space-y-4 rounded-6 border border-outline-gray-2 p-5">
+    <h2 class="text-base-semibold text-ink-gray-8">
       {{ __("Add payment method") }}
-    </p>
+    </h2>
 
     <ErrorMessage :message="error" />
 
@@ -206,7 +206,7 @@ const tileClass = (isSelected) => [
         {{ __("Choose a payment method") }}
       </p>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid gap-3 sm:grid-cols-2">
         <button
           v-for="option in METHODS"
           :key="option.value"
@@ -239,8 +239,8 @@ const tileClass = (isSelected) => [
 
     <div>
       <p class="mb-2 text-p-sm text-ink-gray-5">{{ __("Pay through") }}</p>
-      <div v-if="!gateways && !error" class="h-16 rounded-6 bg-surface-gray-2" />
-      <Button v-else-if="!gateways" @click="load">{{ __("Try again") }}</Button>
+      <Skeleton v-if="!gateways && !error" class="h-16 rounded-6" />
+      <Button v-else-if="!gateways" :label="__('Try again')" @click="load" />
 
       <div v-else-if="!visibleGateways.length" class="space-y-2">
         <p class="text-p-sm text-ink-gray-5">
@@ -249,12 +249,15 @@ const tileClass = (isSelected) => [
             ) }}
         </p>
 
-        <Button v-if="accountUrl" icon-right="arrow-up-right" @click="openExternal(accountUrl)">
-          {{ __("Manage account") }}
-        </Button>
+        <Button
+          v-if="accountUrl"
+          icon-right="arrow-up-right"
+          :label="__('Manage account')"
+          @click="openExternal(accountUrl)"
+        />
       </div>
 
-      <div v-else class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+      <div v-else class="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
         <button
           v-for="option in visibleGateways"
           :key="option.name"

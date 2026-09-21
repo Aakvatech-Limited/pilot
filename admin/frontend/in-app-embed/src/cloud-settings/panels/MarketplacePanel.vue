@@ -157,11 +157,11 @@ const notify = (message, indicator = 'green') => {
 
 <template>
   <SettingsHeader
-    class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-4 grid bg-surface-elevation-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4"
+    class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-6 grid bg-surface-elevation-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4"
   >
     <h2 class="text-lg-semibold text-ink-gray-8">{{ __("Marketplace") }}</h2>
 
-    <p class="col-start-1 mt-1 text-base text-ink-gray-6">
+    <p class="col-start-1 mt-1 text-base leading-5 text-ink-gray-6">
       {{ __("Install apps and keep them up to date.") }}
     </p>
 

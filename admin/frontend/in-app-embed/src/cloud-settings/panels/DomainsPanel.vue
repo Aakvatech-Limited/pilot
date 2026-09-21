@@ -87,10 +87,10 @@ const clearPreview = () => {
 </script>
 
 <template>
-  <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 bg-surface-elevation-1">
+  <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-6 bg-surface-elevation-1">
     <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Domains') }}</h2>
 
-    <p class="mt-1 text-base text-ink-gray-6">{{ __('The addresses this site answers on.') }}</p>
+    <p class="mt-1 text-base leading-5 text-ink-gray-6">{{ __('The addresses this site answers on.') }}</p>
   </SettingsHeader>
 
   <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">
@@ -100,11 +100,11 @@ const clearPreview = () => {
       :title="__(`Couldn't load domains`)"
       @retry="store.loadDomains(true)"
     >
-      <div class="mt-6 space-y-6">
+      <div class="space-y-6">
         <div class="flex items-end gap-2">
           <TextInput
             v-model="input"
-            class="flex-1"
+            class="flex-1 [&_[data-slot='label']]:leading-5"
             :label="__('Add a domain')"
             :placeholder="__('shop.mycompany.in')"
             :disabled="working"
