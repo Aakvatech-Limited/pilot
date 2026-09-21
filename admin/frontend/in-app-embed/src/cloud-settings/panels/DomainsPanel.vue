@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Badge, Button, Dialog, ErrorMessage, TextInput } from 'frappe-ui'
-import { computed, ref, watch } from 'vue'
+import { Badge, Button, Dialog, Dropdown, ErrorMessage, TextInput } from 'frappe-ui'
+import { computed, inject, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
+import Table from '../components/Table.vue'
+import { openExternal } from '../external'
 import type { Store } from '../store'
 
 interface Props {
@@ -13,11 +15,12 @@ const props = defineProps<Props>()
 const store = props.store
 
 const input = ref('')
-const pendingDomain = ref('')
 const dnsRecords = ref([])
 const working = ref(false)
 const removeTarget = ref('')
 const showRemove = ref(false)
+const busyDomain = ref('')
+const overlayTarget = inject('overlayTarget', 'body')
 
 watch(
   () => props.active,
@@ -35,6 +38,19 @@ const domains = computed(() => {
 
   return routes?.length ? routes : rows
 })
+
+const columns = [
+  { label: __('Domain'), key: 'domain', class: 'w-1/2' },
+  { label: __('Type'), key: 'type' },
+  { label: __('SSL'), key: 'ssl' },
+  { label: '', key: 'actions', class: 'w-12' },
+]
+
+const rows = computed(() =>
+  (domains.value || []).map((domain) => ({ id: domain.domain, ...domain })),
+)
+
+const hasCustomDomains = computed(() => rows.value.some((row) => !row.is_default))
 
 const error = computed(() => store.state.domainsError)
 const loadFailed = computed(() => Boolean(error.value) && !domains.value)
@@ -65,38 +81,64 @@ const canAdd = computed(
   () => Boolean(normalizedDomain.value) && !domainError.value && !working.value,
 )
 
-const previewDomain = async () => {
+let dnsTimer
+
+watch(normalizedDomain, (domain) => {
+  clearTimeout(dnsTimer)
+  dnsRecords.value = []
+
+  if (!domain || domainError.value) return
+
+  dnsTimer = setTimeout(() => loadDnsRecords(domain), 400)
+})
+
+const loadDnsRecords = async (domain) => {
+  try {
+    const response = await store.api.getDomainDnsRecords(domain)
+
+    if (domain === normalizedDomain.value) dnsRecords.value = response.records || []
+  } catch {}
+}
+
+const confirmAdd = async () => {
   const domain = normalizedDomain.value
 
   if (!canAdd.value) return
 
   await run(async () => {
-    const response = await store.api.getDomainDnsRecords(domain)
-
-    dnsRecords.value = response.records || []
-    pendingDomain.value = domain
-
-    if (!dnsRecords.value.length) await confirmAdd()
-  })
-}
-
-const confirmAdd = async () => {
-  const domain = pendingDomain.value || normalizedDomain.value
-
-  if (!domain) return
-
-  await run(async () => {
     await store.api.addDomain(domain)
-    clearPreview()
+
+    input.value = ''
+
     await store.loadDomains(true)
   })
 }
 
-const makePrimary = (domain) =>
+const urlFor = (row) => `${row.public_scheme || (row.tls ? 'https' : 'http')}://${row.domain}`
+
+const menuOptions = (row) =>
+  [
+    !row.is_primary && {
+      label: __('Make primary'),
+      icon: 'lucide-star',
+      onClick: () => makePrimary(row.domain),
+    },
+    !row.is_default && {
+      label: __('Remove'),
+      icon: 'lucide-trash-2',
+      theme: 'red',
+      onClick: () => askRemove(row.domain),
+    },
+  ].filter(Boolean)
+
+const makePrimary = (domain) => {
+  busyDomain.value = domain
+
   run(async () => {
     await store.api.setPrimaryDomain(domain)
     await store.loadDomains(true)
   })
+}
 
 const askRemove = (domain) => {
   removeTarget.value = domain
@@ -105,6 +147,7 @@ const askRemove = (domain) => {
 
 const confirmRemove = () => {
   showRemove.value = false
+  busyDomain.value = removeTarget.value
 
   run(async () => {
     await store.api.removeDomain(removeTarget.value)
@@ -122,13 +165,8 @@ const run = async (action) => {
     store.state.domainsError = store.api.getErrorMessage(exception)
   } finally {
     working.value = false
+    busyDomain.value = ''
   }
-}
-
-const clearPreview = () => {
-  dnsRecords.value = []
-  pendingDomain.value = ''
-  input.value = ''
 }
 </script>
 
@@ -141,94 +179,96 @@ const clearPreview = () => {
     :error-title="__(`Couldn't load domains`)"
     @retry="store.loadDomains(true)"
   >
-    <div class="flex items-end gap-2">
-      <TextInput
-        v-model="input"
-        class="flex-1 [&_[data-slot='label']]:leading-5"
-        :label="__('Add a domain')"
-        :placeholder="__('shop.mycompany.in')"
-        :disabled="working"
-        @keydown.enter="previewDomain"
-      />
+    <div class="rounded-6 border border-outline-gray-2">
+      <div class="grid items-end gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <TextInput
+          v-model="input"
+          :label="__('Domain')"
+          :placeholder="__('shop.example.com')"
+          :disabled="working"
+          @keydown.enter="confirmAdd"
+        />
 
-      <Button
-        :disabled="!canAdd"
-        :loading="working && !pendingDomain"
-        :label="__('Add')"
-        @click="previewDomain"
-      />
-    </div>
-
-    <ErrorMessage class="mt-2" :message="domainError || error" />
-
-    <section v-if="dnsRecords.length" class="mt-6 rounded-6 border border-outline-gray-2 p-5">
-      <h2 class="text-base-semibold text-ink-gray-8">{{ pendingDomain }}</h2>
-
-      <p class="mt-0.5 text-p-sm text-ink-gray-5">
-        {{ __("Add these DNS records at your provider, then continue.") }}
-      </p>
-
-      <dl class="mt-4 divide-y divide-outline-gray-1 border-t border-outline-gray-1">
-        <div
-          v-for="(record, index) in dnsRecords"
-          :key="index"
-          class="grid grid-cols-[4rem_minmax(0,1fr)] items-baseline gap-x-3 py-3 sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1.4fr)]"
-        >
-          <dt class="text-sm-medium text-ink-gray-8">{{ record.type }}</dt>
-          <dd class="truncate text-p-sm text-ink-gray-5">{{ record.host }}</dd>
-          <dd class="col-start-2 truncate text-p-sm text-ink-gray-5 sm:col-start-3">
-            {{ record.value }}
-          </dd>
-        </div>
-      </dl>
-
-      <div class="mt-4 flex justify-end gap-2">
-        <Button :disabled="working" :label="__('Cancel')" @click="clearPreview" />
-
-        <Button variant="solid" :loading="working" :label="__('Add domain')" @click="confirmAdd" />
+        <Button
+          variant="solid"
+          :disabled="!canAdd"
+          :loading="working && !busyDomain"
+          :label="__('Add')"
+          @click="confirmAdd"
+        />
       </div>
-    </section>
 
-    <div class="mt-6 space-y-2">
       <div
-        v-for="domain in domains"
-        :key="domain.domain"
-        class="grid grid-cols-[minmax(0,auto)_auto_1fr_auto] items-center gap-x-1.5 rounded-6 border border-outline-gray-2 p-4 dark:bg-surface-gray-2"
+        v-if="domainError || error || dnsRecords.length"
+        class="border-t border-outline-gray-2 px-4 py-3 text-p-sm text-ink-gray-5"
       >
-        <p class="truncate text-base-medium text-ink-gray-8">{{ domain.domain }}</p>
+        <ErrorMessage v-if="domainError || error" :message="domainError || error" />
 
-        <Badge v-if="domain.is_primary" theme="green" size="sm" :label="__('Primary')" />
+        <template v-else-if="dnsRecords.length">
+          <p>{{ __("Add these records at your DNS provider, then add the domain.") }}</p>
 
-        <Badge v-else-if="domain.is_default" size="sm" :label="__('Included')" />
-
-        <p class="col-span-3 col-start-1 mt-1 flex items-center gap-1.5 text-p-sm text-ink-gray-5">
-          <span class="lucide-lock size-3.5 shrink-0 text-ink-green-7" aria-hidden="true" />
-          {{ __("Managed SSL") }}
-        </p>
-
-        <div class="col-start-4 row-span-2 row-start-1 flex items-center gap-2">
-          <Button
-            v-if="!domain.is_primary"
-            :disabled="working"
-            :label="__('Make primary')"
-            @click="makePrimary(domain.domain)"
-          />
-
-          <Button
-            v-if="!domain.is_default"
-            :disabled="working"
-            :label="__('Remove')"
-            @click="askRemove(domain.domain)"
-          />
-        </div>
+          <dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-x-6 gap-y-1">
+            <template v-for="(record, index) in dnsRecords" :key="index">
+              <dt class="text-ink-gray-8">{{ record.type }}</dt>
+              <dd class="truncate text-ink-gray-7">{{ record.host }}</dd>
+              <dd class="truncate font-mono text-ink-gray-7">{{ record.value }}</dd>
+            </template>
+          </dl>
+        </template>
       </div>
     </div>
 
-    <p v-if="(domains || []).length <= 1" class="mt-6 text-p-sm text-ink-gray-5">
-      {{ __(
-            "No custom domains yet. Add one above and we'll handle SSL once DNS checks out.",
-          ) }}
-    </p>
+    <Table class="mt-6" :columns="columns" :rows="rows">
+      <template #domain="{ row }">
+        <a
+          class="text-ink-gray-8 hover:underline"
+          :href="urlFor(row)"
+          target="_blank"
+          rel="noopener"
+          @click.prevent="openExternal(urlFor(row))"
+        >
+          {{ row.domain }}
+        </a>
+
+        <Badge v-if="row.is_primary" class="ml-2" theme="green" size="sm" :label="__('Primary')" />
+      </template>
+
+      <template #type="{ row }">
+        <span class="text-ink-gray-6">
+          {{ row.is_default ? __('Site address') : __('Custom domain') }}
+        </span>
+      </template>
+
+      <template #ssl="{ row }">
+        <span
+          class="flex items-center gap-1.5"
+          :class="row.tls ? 'text-ink-green-7' : 'text-ink-gray-5'"
+        >
+          <span
+            :class="[row.tls ? 'lucide-lock' : 'lucide-lock-open', 'size-3.5']"
+            aria-hidden="true"
+          />
+          {{ row.tls ? __('HTTPS') : __('HTTP only') }}
+        </span>
+      </template>
+
+      <template #actions="{ row }">
+        <Dropdown
+          v-if="menuOptions(row).length"
+          align="end"
+          :portal-to="overlayTarget"
+          :options="menuOptions(row)"
+        >
+          <Button
+            variant="ghost"
+            icon="lucide-ellipsis"
+            :loading="busyDomain === row.domain"
+            :disabled="working && busyDomain !== row.domain"
+            :label="__('Actions for {0}', [row.domain])"
+          />
+        </Dropdown>
+      </template>
+    </Table>
   </Panel>
 
   <Dialog v-model="showRemove" :title="__('Remove domain')" size="md">
