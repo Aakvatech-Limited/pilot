@@ -1,5 +1,13 @@
 <script setup>
-import { Badge, Button, ErrorMessage, SettingsBody, SettingsHeader, TextInput } from 'frappe-ui'
+import {
+  Badge,
+  Button,
+  Dialog,
+  ErrorMessage,
+  SettingsBody,
+  SettingsHeader,
+  TextInput,
+} from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import PanelState from '../components/PanelState.vue'
 
@@ -13,6 +21,8 @@ const input = ref('')
 const pendingDomain = ref('')
 const dnsRecords = ref([])
 const working = ref(false)
+const removeTarget = ref('')
+const showRemove = ref(false)
 
 watch(
   () => props.active,
@@ -93,11 +103,19 @@ const makePrimary = (domain) =>
     await store.loadDomains(true)
   })
 
-const remove = (domain) =>
+const askRemove = (domain) => {
+  removeTarget.value = domain
+  showRemove.value = true
+}
+
+const confirmRemove = () => {
+  showRemove.value = false
+
   run(async () => {
-    await store.api.removeDomain(domain)
+    await store.api.removeDomain(removeTarget.value)
     await store.loadDomains(true)
   })
+}
 
 const run = async (action) => {
   working.value = true
@@ -219,7 +237,7 @@ const clearPreview = () => {
               v-if="!domain.is_default"
               :disabled="working"
               :label="__('Remove')"
-              @click="remove(domain.domain)"
+              @click="askRemove(domain.domain)"
             />
           </div>
         </div>
@@ -232,4 +250,20 @@ const clearPreview = () => {
       </p>
     </PanelState>
   </SettingsBody>
+
+  <Dialog v-model="showRemove" :title="__('Remove domain')" size="md">
+    <template #default>
+      <p class="text-p-base text-ink-gray-7">
+        {{ __("{0} will stop pointing to this site. You can add it again later.", [removeTarget]) }}
+      </p>
+    </template>
+
+    <template #actions>
+      <div class="flex justify-end gap-2">
+        <Button :label="__('Cancel')" @click="showRemove = false" />
+
+        <Button variant="solid" theme="red" :label="__('Remove')" @click="confirmRemove" />
+      </div>
+    </template>
+  </Dialog>
 </template>
