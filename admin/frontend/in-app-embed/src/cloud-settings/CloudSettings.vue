@@ -123,12 +123,12 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
     >
       <template #title>{{ __("Cloud Settings") }}</template>
 
-      <SettingsSidebar class="!border-0 !border-r  border-outline-gray-2">
+      <SettingsSidebar class="!border-0">
         <SettingsNavGroup>
-          <p class="mb-1 flex h-7 items-center px-2 text-base text-ink-gray-7">
+          <span class="mb-1 flex items-center p-2 text-base text-ink-gray-7">
             <FrappeCloudLogo class="mr-2 size-4 rounded-2" />
             {{ __("Cloud Settings") }}
-          </p>
+          </span>
 
           <SettingsNavItem v-for="item in TABS" :key="item.value" :value="item.value">
             <template #prefix>
@@ -147,7 +147,7 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
         </SettingsNavGroup>
       </SettingsSidebar>
 
-      <SettingsContent>
+      <SettingsContent class="bg-surface-base">
         <SettingsPanel v-for="item in TABS" :key="item.value" :value="item.value">
           <component :is="item.component" :store="store" :active="tab === item.value" />
         </SettingsPanel>
