@@ -1,10 +1,15 @@
-<script setup>
+<script setup lang="ts">
 import { Button, ErrorMessage, SettingsRow } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import Panel from '../components/Panel.vue'
 import { openExternal } from '../external'
+import type { Store } from '../store'
 
-const props = defineProps({ store: { type: Object, required: true } })
+interface Props {
+  store: Store
+}
+
+const props = defineProps<Props>()
 
 const context = computed(() => props.store.state.context || {})
 const openingBilling = ref(false)

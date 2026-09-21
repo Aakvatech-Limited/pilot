@@ -125,3 +125,5 @@ export const createStore = (context?: CloudContext) => {
     loadDomains,
   }
 }
+
+export type Store = ReturnType<typeof createStore>

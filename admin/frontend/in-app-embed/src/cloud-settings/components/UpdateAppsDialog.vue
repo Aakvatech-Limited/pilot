@@ -1,11 +1,16 @@
-<script setup>
+<script setup lang="ts">
 import { Button, Checkbox, Dialog, ErrorMessage } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 
-const props = defineProps({
-  apps: { type: Array, default: () => [] },
-  updating: { type: Boolean, default: false },
-  error: { type: String, default: '' },
+interface Props {
+  apps?: Record<string, any>[]
+  updating?: boolean
+  error?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  apps: () => [],
+  error: '',
 })
 const emit = defineEmits(['submit'])
 const open = defineModel({ type: Boolean, default: false })

@@ -1,9 +1,14 @@
-<script setup>
+<script setup lang="ts">
 import { Badge, Button, Dialog, ErrorMessage, Select } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import { openExternal } from '../external'
+import type { Store } from '../store'
 
-const props = defineProps({ store: { type: Object, required: true } })
+interface Props {
+  store: Store
+}
+
+const props = defineProps<Props>()
 const emit = defineEmits(['open-billing'])
 const open = defineModel({ type: Boolean, default: false })
 

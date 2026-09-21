@@ -1,12 +1,17 @@
-<script setup>
+<script setup lang="ts">
 import { Button, ErrorMessage, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import RazorpayLogo from '../assets/Razorpay-1.svg?inline'
 import StripeLogo from '../assets/Stripe.svg?inline'
 import UpiLogo from '../assets/UPI-1.svg?inline'
 import { openExternal } from '../external'
+import type { Store } from '../store'
 
-const props = defineProps({ store: { type: Object, required: true } })
+interface Props {
+  store: Store
+}
+
+const props = defineProps<Props>()
 const emit = defineEmits(['close'])
 const store = props.store
 

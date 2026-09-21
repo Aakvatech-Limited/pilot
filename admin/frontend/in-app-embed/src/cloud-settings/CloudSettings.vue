@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {
   Badge,
   SettingsContent,
@@ -20,9 +20,13 @@ import MarketplacePanel from './panels/MarketplacePanel.vue'
 import { createStore } from './store'
 import TailwindStyles from './TailwindStyles.vue'
 
-const props = defineProps({
-  context: { type: Object, default: () => ({}) },
-  open: { type: Boolean, default: false },
+interface Props {
+  context?: Record<string, any>
+  open?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  context: () => ({}),
 })
 const emit = defineEmits(['close'])
 

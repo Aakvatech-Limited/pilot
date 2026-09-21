@@ -1,11 +1,16 @@
-<script setup>
+<script setup lang="ts">
 import { Badge, Button, Dropdown, Tooltip } from 'frappe-ui'
 import { computed, inject, ref } from 'vue'
 
-const props = defineProps({
-  app: { type: Object, required: true },
-  pending: { type: String, default: '' },
-  error: { type: String, default: '' },
+interface Props {
+  app: Record<string, any>
+  pending?: string
+  error?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  pending: '',
+  error: '',
 })
 const emit = defineEmits(['install', 'uninstall', 'update'])
 

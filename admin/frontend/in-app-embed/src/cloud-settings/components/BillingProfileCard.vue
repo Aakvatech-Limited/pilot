@@ -1,8 +1,13 @@
-<script setup>
+<script setup lang="ts">
 import { Button, ErrorMessage, Select, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
+import type { Store } from '../store'
 
-const props = defineProps({ store: { type: Object, required: true } })
+interface Props {
+  store: Store
+}
+
+const props = defineProps<Props>()
 const emit = defineEmits(['close', 'saved'])
 const store = props.store
 

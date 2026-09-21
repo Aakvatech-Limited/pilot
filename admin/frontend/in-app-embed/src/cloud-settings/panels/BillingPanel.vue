@@ -1,15 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import { Button, ErrorMessage } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import AddPaymentCard from '../components/AddPaymentCard.vue'
 import BillingProfileCard from '../components/BillingProfileCard.vue'
 import Panel from '../components/Panel.vue'
 import { openExternal } from '../external'
+import type { Store } from '../store'
 
-const props = defineProps({
-  store: { type: Object, required: true },
-  active: { type: Boolean, default: false },
-})
+interface Props {
+  store: Store
+  active?: boolean
+}
+
+const props = defineProps<Props>()
 const store = props.store
 
 const flow = ref('')

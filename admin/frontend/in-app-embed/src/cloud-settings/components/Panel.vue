@@ -1,12 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import { Button, SettingsBody, SettingsHeader, Skeleton } from 'frappe-ui'
 
-defineProps({
-  title: { type: String, required: true },
-  description: { type: String, default: '' },
-  loading: { type: Boolean, default: false },
-  error: { type: String, default: '' },
-  errorTitle: { type: String, default: '' },
+interface Props {
+  title: string
+  description?: string
+  loading?: boolean
+  error?: string
+  errorTitle?: string
+}
+
+withDefaults(defineProps<Props>(), {
+  description: '',
+  error: '',
+  errorTitle: '',
 })
 defineEmits(['retry'])
 </script>

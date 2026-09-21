@@ -1,10 +1,14 @@
-<script setup>
+<script setup lang="ts">
 import { Button, Dialog } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 
-const props = defineProps({
-  app: { type: Object, default: null },
-  canDisable: { type: Boolean, default: false },
+interface Props {
+  app?: Record<string, any> | null
+  canDisable?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  app: null,
 })
 const emit = defineEmits(['confirm'])
 const open = defineModel({ type: Boolean, default: false })

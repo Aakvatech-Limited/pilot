@@ -1,11 +1,17 @@
-<script setup>
+<script setup lang="ts">
 import { Button } from 'frappe-ui'
 import { openExternal } from '../external'
 
-defineProps({
-  message: { type: String, default: '' },
-  actionLabel: { type: String, default: '' },
-  actionUrl: { type: String, default: '' },
+interface Props {
+  message?: string
+  actionLabel?: string
+  actionUrl?: string
+}
+
+withDefaults(defineProps<Props>(), {
+  message: '',
+  actionLabel: '',
+  actionUrl: '',
 })
 </script>
 

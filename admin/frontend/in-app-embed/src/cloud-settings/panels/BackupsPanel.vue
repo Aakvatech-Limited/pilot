@@ -1,15 +1,17 @@
-<script setup>
+<script setup lang="ts">
 import { Badge, Button, Dialog, Dropdown, ErrorMessage } from 'frappe-ui'
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
 import { openExternal } from '../external'
-import { waitForTask } from '../store'
+import { type Store, waitForTask } from '../store'
 
-const props = defineProps({
-  store: { type: Object, required: true },
-  active: { type: Boolean, default: false },
-})
+interface Props {
+  store: Store
+  active?: boolean
+}
+
+const props = defineProps<Props>()
 const store = props.store
 
 const FILE_LABELS = {

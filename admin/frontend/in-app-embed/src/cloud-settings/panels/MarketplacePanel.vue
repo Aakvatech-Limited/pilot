@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { Button, ErrorMessage, Select, TextInput } from 'frappe-ui'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import ActionableError from '../components/ActionableError.vue'
@@ -6,12 +6,14 @@ import AppRow from '../components/AppRow.vue'
 import Panel from '../components/Panel.vue'
 import UninstallAppDialog from '../components/UninstallAppDialog.vue'
 import UpdateAppsDialog from '../components/UpdateAppsDialog.vue'
-import { getRememberedTasks, rememberTask, waitForTask } from '../store'
+import { type Store, getRememberedTasks, rememberTask, waitForTask } from '../store'
 
-const props = defineProps({
-  store: { type: Object, required: true },
-  active: { type: Boolean, default: false },
-})
+interface Props {
+  store: Store
+  active?: boolean
+}
+
+const props = defineProps<Props>()
 const store = props.store
 const site = store.state.context.site_name || window.location.host
 

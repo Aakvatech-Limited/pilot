@@ -1,8 +1,10 @@
-<script setup>
-defineProps({
-  columns: { type: Array, required: true },
-  rows: { type: Array, required: true },
-})
+<script setup lang="ts">
+interface Props {
+  columns: Record<string, any>[]
+  rows: Record<string, any>[]
+}
+
+defineProps<Props>()
 </script>
 
 <template>
