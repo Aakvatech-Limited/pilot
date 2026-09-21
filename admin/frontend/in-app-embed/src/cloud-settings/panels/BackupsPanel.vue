@@ -1,15 +1,7 @@
 <script setup>
-import {
-  Badge,
-  Button,
-  Dialog,
-  Dropdown,
-  ErrorMessage,
-  SettingsBody,
-  SettingsHeader,
-} from 'frappe-ui'
+import { Badge, Button, Dialog, Dropdown, ErrorMessage } from 'frappe-ui'
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
-import PanelState from '../components/PanelState.vue'
+import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
 import { openExternal } from '../external'
 import { waitForTask } from '../store'
@@ -183,58 +175,50 @@ const menuOptions = (backup) => [
 </script>
 
 <template>
-  <SettingsHeader
-    class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-6 grid bg-surface-elevation-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4"
+  <Panel
+    :title="__('Backups')"
+    :description="__('Back up your site and download past backups.')"
+    :loading="!backups && !error"
+    :error="loadFailed ? error : ''"
+    :error-title="__(`Couldn't load backups`)"
+    @retry="load"
   >
-    <h2 class="text-lg-semibold text-ink-gray-8">{{ __("Backups") }}</h2>
+    <template #actions>
+      <Button
+        class="col-start-2 row-span-2 row-start-1"
+        icon-left="lucide-archive"
+        :loading="creating"
+        :label="creating ? __('Backing up') : __('Back up now')"
+        @click="backUp"
+      />
+    </template>
 
-    <p class="col-start-1 mt-1 text-base leading-5 text-ink-gray-6">
-      {{ __("Back up your site and download past backups.") }}
+    <ErrorMessage :message="loadFailed ? '' : error" class="mb-4" />
+
+    <p v-if="!backups.length" class="py-12 text-center text-p-sm text-ink-gray-5">
+      {{ __("No backups yet.") }}
     </p>
 
-    <Button
-      class="col-start-2 row-span-2 row-start-1"
-      icon-left="lucide-archive"
-      :loading="creating"
-      :label="creating ? __('Backing up') : __('Back up now')"
-      @click="backUp"
-    />
-  </SettingsHeader>
+    <Table v-else :columns="columns" :rows="rows">
+      <template #offsite="{ row }">
+        <Badge v-if="row.backup.is_offsite" theme="green" size="sm" :label="__('Uploaded')" />
 
-  <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">
-    <PanelState
-      :loading="!backups && !error"
-      :error="loadFailed ? error : ''"
-      :title="__(`Couldn't load backups`)"
-      @retry="load"
-    >
-      <ErrorMessage :message="loadFailed ? '' : error" class="mb-4" />
+        <Badge v-else size="sm" :label="__('Local only')" />
+      </template>
 
-      <p v-if="!backups.length" class="py-12 text-center text-p-sm text-ink-gray-5">
-        {{ __("No backups yet.") }}
-      </p>
-
-      <Table v-else :columns="columns" :rows="rows">
-        <template #offsite="{ row }">
-          <Badge v-if="row.backup.is_offsite" theme="green" size="sm" :label="__('Uploaded')" />
-
-          <Badge v-else size="sm" :label="__('Local only')" />
-        </template>
-
-        <template #actions="{ row }">
-          <Dropdown align="end" :portal-to="overlayTarget" :options="menuOptions(row.backup)">
-            <Button
-              variant="ghost"
-              icon="lucide-ellipsis"
-              :disabled="deleting && deleteTarget?.timestamp !== row.backup.timestamp"
-              :loading="deleting && deleteTarget?.timestamp === row.backup.timestamp"
-              :label="__('Actions for {0}', [row.date])"
-            />
-          </Dropdown>
-        </template>
-      </Table>
-    </PanelState>
-  </SettingsBody>
+      <template #actions="{ row }">
+        <Dropdown align="end" :portal-to="overlayTarget" :options="menuOptions(row.backup)">
+          <Button
+            variant="ghost"
+            icon="lucide-ellipsis"
+            :disabled="deleting && deleteTarget?.timestamp !== row.backup.timestamp"
+            :loading="deleting && deleteTarget?.timestamp === row.backup.timestamp"
+            :label="__('Actions for {0}', [row.date])"
+          />
+        </Dropdown>
+      </template>
+    </Table>
+  </Panel>
 
   <Dialog v-model="showDelete" :title="__('Delete backup')" size="md">
     <template #default>

@@ -1,6 +1,7 @@
 <script setup>
-import { Button, ErrorMessage, SettingsBody, SettingsHeader, SettingsRow } from 'frappe-ui'
+import { Button, ErrorMessage, SettingsRow } from 'frappe-ui'
 import { computed, ref } from 'vue'
+import Panel from '../components/Panel.vue'
 import { openExternal } from '../external'
 
 const props = defineProps({ store: { type: Object, required: true } })
@@ -41,15 +42,7 @@ const openBilling = async () => {
 </script>
 
 <template>
-  <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-6 bg-surface-elevation-1">
-    <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Advanced') }}</h2>
-
-    <p class="mt-1 text-base leading-5 text-ink-gray-6">
-      {{ __('Deeper controls for your server.') }}
-    </p>
-  </SettingsHeader>
-
-  <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">
+  <Panel :title="__('Advanced')" :description="__('Deeper controls for your server.')">
     <div class="divide-y divide-outline-gray-1 border-t border-outline-gray-1">
       <SettingsRow
         v-for="link in links"
@@ -85,5 +78,5 @@ const openBilling = async () => {
     </div>
 
     <ErrorMessage :message="billingError" class="mt-2" />
-  </SettingsBody>
+  </Panel>
 </template>

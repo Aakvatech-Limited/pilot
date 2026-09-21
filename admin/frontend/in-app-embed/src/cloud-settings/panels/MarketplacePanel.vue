@@ -1,9 +1,9 @@
 <script setup>
-import { Button, ErrorMessage, Select, SettingsBody, SettingsHeader, TextInput } from 'frappe-ui'
+import { Button, ErrorMessage, Select, TextInput } from 'frappe-ui'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import ActionableError from '../components/ActionableError.vue'
 import AppRow from '../components/AppRow.vue'
-import PanelState from '../components/PanelState.vue'
+import Panel from '../components/Panel.vue'
 import UninstallAppDialog from '../components/UninstallAppDialog.vue'
 import UpdateAppsDialog from '../components/UpdateAppsDialog.vue'
 import { getRememberedTasks, rememberTask, waitForTask } from '../store'
@@ -236,74 +236,66 @@ const notify = (message, indicator = 'green') => {
 </script>
 
 <template>
-  <SettingsHeader
-    class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-6 grid bg-surface-elevation-1 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4"
+  <Panel
+    :title="__('Marketplace')"
+    :description="__('Install apps and keep them up to date.')"
+    :loading="!marketplace && !error"
+    :error="loadFailed ? error : ''"
+    :error-title="__(`Couldn't load the marketplace`)"
+    @retry="store.loadMarketplace(true)"
   >
-    <h2 class="text-lg-semibold text-ink-gray-8">{{ __("Marketplace") }}</h2>
+    <template #actions>
+      <Button
+        v-if="updateCount"
+        class="col-start-2 row-span-2 row-start-1"
+        variant="solid"
+        :loading="updatingAll"
+        :label="updatingAll ? __('Updating') : __('Update all ({0})', [updateCount])"
+        @click="((updateAllError = ''), (showUpdates = true))"
+      />
+    </template>
 
-    <p class="col-start-1 mt-1 text-base leading-5 text-ink-gray-6">
-      {{ __("Install apps and keep them up to date.") }}
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <TextInput v-model="query" class="flex-1" :placeholder="__('Search apps')" />
+
+      <Select v-model="category" class="sm:w-44" :options="categoryOptions" />
+    </div>
+
+    <ErrorMessage :message="loadFailed ? '' : error" class="mt-2" />
+
+    <ActionableError
+      v-if="blocker"
+      class="mt-4"
+      :message="blocker.message"
+      :action-label="blocker.actionLabel"
+      :action-url="blocker.actionUrl"
+    />
+
+    <p v-if="!filteredApps.length" class="py-12 text-center text-p-sm text-ink-gray-5">
+      {{ __("No apps match your search.") }}
+
+      <Button class="mt-3 block" :label="__('Clear filters')" @click="clearFilters" />
     </p>
 
-    <Button
-      v-if="updateCount"
-      class="col-start-2 row-span-2 row-start-1"
-      variant="solid"
-      :loading="updatingAll"
-      :label="updatingAll ? __('Updating') : __('Update all ({0})', [updateCount])"
-      @click="((updateAllError = ''), (showUpdates = true))"
-    />
-  </SettingsHeader>
+    <template v-for="(section, index) in sections" :key="section.label">
+      <h3 class="mb-3 text-base-semibold text-ink-gray-8" :class="index ? 'mt-8' : 'mt-6'">
+        {{ section.label }}
+      </h3>
 
-  <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">
-    <PanelState
-      :loading="!marketplace && !error"
-      :error="loadFailed ? error : ''"
-      :title="__(`Couldn't load the marketplace`)"
-      @retry="store.loadMarketplace(true)"
-    >
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <TextInput v-model="query" class="flex-1" :placeholder="__('Search apps')" />
-
-        <Select v-model="category" class="sm:w-44" :options="categoryOptions" />
+      <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+        <AppRow
+          v-for="app in section.apps"
+          :key="app.name"
+          :app="app"
+          :pending="pending[app.name] || ''"
+          :error="errors[app.name] || ''"
+          @install="install"
+          @uninstall="askUninstall"
+          @update="updateOne"
+        />
       </div>
-
-      <ErrorMessage :message="loadFailed ? '' : error" class="mt-2" />
-
-      <ActionableError
-        v-if="blocker"
-        class="mt-4"
-        :message="blocker.message"
-        :action-label="blocker.actionLabel"
-        :action-url="blocker.actionUrl"
-      />
-
-      <p v-if="!filteredApps.length" class="py-12 text-center text-p-sm text-ink-gray-5">
-        {{ __("No apps match your search.") }}
-
-        <Button class="mt-3 block" :label="__('Clear filters')" @click="clearFilters" />
-      </p>
-
-      <template v-for="(section, index) in sections" :key="section.label">
-        <h3 class="mb-3 text-base-semibold text-ink-gray-8" :class="index ? 'mt-8' : 'mt-6'">
-          {{ section.label }}
-        </h3>
-
-        <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-          <AppRow
-            v-for="app in section.apps"
-            :key="app.name"
-            :app="app"
-            :pending="pending[app.name] || ''"
-            :error="errors[app.name] || ''"
-            @install="install"
-            @uninstall="askUninstall"
-            @update="updateOne"
-          />
-        </div>
-      </template>
-    </PanelState>
-  </SettingsBody>
+    </template>
+  </Panel>
 
   <UpdateAppsDialog
     v-model="showUpdates"
