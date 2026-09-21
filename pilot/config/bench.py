@@ -330,6 +330,7 @@ class BenchConfig:
             "admin.jwks_url": self.admin.jwks_url,
             "telemetry.endpoint": self.telemetry.endpoint,
             "llm.api_base": self.llm.api_base,
+            "s3.endpoint_url": self.s3.endpoint_url,
         }
         for name, url in endpoints.items():
             if error := validate_external_url(url, name):
@@ -640,6 +641,7 @@ class BenchConfig:
             "bucket": self.s3.bucket,
             "provider": self.s3.provider,
             "region": self.s3.region,
+            "endpoint_url": self.s3.endpoint_url,
         }
 
     def _llm_section(self) -> ConfigDict:
@@ -783,6 +785,7 @@ _SECTIONS: tuple[_Section, ...] = (
                 or config.s3.bucket
                 or config.s3.provider
                 or config.s3.region
+                or config.s3.endpoint_url
             )
             else None
         ),

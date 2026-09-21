@@ -142,7 +142,7 @@ These tables are per-bench unless noted otherwise:
 - `[gunicorn]`: Gunicorn settings.
 - `[firewall]`: firewall behavior.
 - `[waf]`: WAF rules and behavior.
-- `[s3]`: backup storage credentials and bucket settings.
+- `[s3]`: backup storage credentials and bucket settings. Set `endpoint_url` for a custom S3-compatible provider.
 - `[llm]`: admin assistant provider settings.
 - `[resource_limits]`: CPU, memory, disk, uptime, and webhook alerts.
 
