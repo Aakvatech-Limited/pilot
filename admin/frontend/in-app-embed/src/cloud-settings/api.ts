@@ -101,7 +101,8 @@ export const getMarketplaceApps = () => call('get_marketplace_apps', {}, 'GET')
 
 export const installApp = (app: string) => call('install_app', { app })
 
-export const uninstallApp = (app: string) => call('uninstall_app', { app })
+export const uninstallApp = (app: string, mode?: string) =>
+  call('uninstall_app', mode === 'disable' ? { app, mode } : { app })
 
 export const updateApps = (apps?: string[]) => {
   const args = apps ? { apps: JSON.stringify(apps) } : {}

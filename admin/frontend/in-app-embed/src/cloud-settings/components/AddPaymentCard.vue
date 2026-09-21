@@ -251,7 +251,7 @@ const tileClass = (isSelected) => [
 
         <Button
           v-if="accountUrl"
-          icon-right="arrow-up-right"
+          icon-right="lucide-arrow-up-right"
           :label="__('Manage account')"
           @click="openExternal(accountUrl)"
         />

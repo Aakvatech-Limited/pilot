@@ -54,7 +54,7 @@ const openBilling = async () => {
       >
         <Button
           v-if="link.url"
-          icon-right="arrow-up-right"
+          icon-right="lucide-arrow-up-right"
           :label="link.label"
           @click="openExternal(link.url)"
         />
@@ -70,7 +70,7 @@ const openBilling = async () => {
         "
       >
         <Button
-          icon-right="arrow-up-right"
+          icon-right="lucide-arrow-up-right"
           :disabled="openingBilling"
           :label="openingBilling ? __('Opening billing') : __('Manage billing')"
           @click="openBilling"

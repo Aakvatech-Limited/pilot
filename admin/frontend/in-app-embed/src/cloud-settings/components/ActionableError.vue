@@ -21,7 +21,7 @@ defineProps({
     <Button
       v-if="actionLabel && actionUrl"
       class="col-start-2 mt-2 justify-self-start"
-      icon-right="arrow-up-right"
+      icon-right="lucide-arrow-up-right"
       @click="openExternal(actionUrl)"
     >
       {{ actionLabel }}

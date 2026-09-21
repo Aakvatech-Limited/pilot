@@ -123,9 +123,9 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
       <SettingsContent class="relative">
         <Button
           variant="ghost"
-          icon="x"
+          icon="lucide-x"
           :label="__('Close')"
-          class="absolute right-4 top-3.5 z-10"
+          class="absolute right-4 top-3.5 z-20"
           @click="isOpen = false"
         />
 

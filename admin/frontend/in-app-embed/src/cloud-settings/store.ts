@@ -20,7 +20,9 @@ export const waitForTask = async (
     try {
       task = await api.getTask(taskId)
     } catch {
-      return 'error'
+      if (Date.now() > deadline) return 'error'
+      await sleep(POLL_INTERVAL)
+      continue
     }
     const status = task?.status
     if (!status) return 'gone'

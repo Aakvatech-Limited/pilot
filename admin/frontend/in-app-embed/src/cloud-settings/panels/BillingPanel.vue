@@ -145,7 +145,7 @@ const openChangePlan = async () => {
 
         <Button
           class="mt-5"
-          icon-right="arrow-up-right"
+          icon-right="lucide-arrow-up-right"
           :disabled="openingChangePlan"
           :label="openingChangePlan ? __('Opening…') : __('View plans')"
           @click="openChangePlan"
@@ -169,7 +169,7 @@ const openChangePlan = async () => {
 
             <Button
               class="col-start-2 row-span-3 row-start-1"
-              icon-right="arrow-up-right"
+              icon-right="lucide-arrow-up-right"
               :disabled="openingChangePlan"
               :label="openingChangePlan ? __('Opening…') : __('Change plan')"
               @click="openChangePlan"
@@ -283,7 +283,7 @@ const openChangePlan = async () => {
             v-else
             class="col-start-2 row-span-2 row-start-1"
             variant="solid"
-            icon-left="plus"
+            icon-left="lucide-plus"
             :label="__('Add payment method')"
             @click="startPayment"
           />

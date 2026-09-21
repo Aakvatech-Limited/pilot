@@ -30,7 +30,7 @@ const incompatibleReason = computed(() =>
 </script>
 
 <template>
-  <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-1.5 py-2">
+  <div class="grid grid-cols-[auto_minmax(0,max-content)_1fr_auto] items-center gap-x-1.5 py-2">
     <img
       v-if="logoUrl"
       class="row-span-2 mr-1.5 size-10 rounded-6 object-cover"
@@ -52,7 +52,7 @@ const incompatibleReason = computed(() =>
       {{ app.title }}
     </span>
 
-    <span class="whitespace-nowrap text-p-sm tabular-nums text-ink-gray-5">
+    <span class="whitespace-nowrap text-sm tabular-nums text-ink-gray-5">
       <template v-if="app.installed && app.has_update">
         v{{ app.installed_version }}
         <span class="text-ink-green-7">→ v{{ app.latest_version }}</span>
@@ -90,7 +90,6 @@ const incompatibleReason = computed(() =>
         <Button
           variant="ghost"
           class="group"
-          :disabled="busy"
           :loading="pending === 'install'"
           :label="__('Install')"
           @click="emit('install', app)"
@@ -106,7 +105,6 @@ const incompatibleReason = computed(() =>
       <Button
         v-else-if="app.has_update"
         variant="ghost"
-        :disabled="busy"
         :loading="pending === 'update'"
         :label="pending === 'update' ? __('Updating') : __('Update')"
         @click="emit('update', app)"
@@ -116,12 +114,19 @@ const incompatibleReason = computed(() =>
         v-if="app.installed"
         align="end"
         :portal-to="overlayTarget"
-        :options="[{ label: __('Uninstall'), onClick: () => emit('uninstall', app) }]"
+        :options="[
+          {
+            label: __('Uninstall'),
+            icon: 'lucide-trash-2',
+            onClick: () => emit('uninstall', app),
+          },
+        ]"
       >
         <Button
           variant="ghost"
-          icon="more-vertical"
-          :disabled="busy"
+          icon="lucide-ellipsis-vertical"
+          :disabled="pending === 'update'"
+          :loading="pending === 'uninstall' || pending === 'disable'"
           :label="__('More actions for {0}', [app.title])"
         />
       </Dropdown>

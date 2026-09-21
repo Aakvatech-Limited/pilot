@@ -4,11 +4,9 @@
 
 :host {
   position: relative;
-  z-index: 2100;
-}
 
-.fui-spinner {
-  animation: none !important;
+  /* Desk's dialog z-index is higher so keep ours lower! */
+  z-index: 1999;
 }
 
 :host {

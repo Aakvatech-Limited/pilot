@@ -22,6 +22,15 @@ const CloudSettingsElement = defineCustomElement({
 
 if (!customElements.get(TAG)) customElements.define(TAG, CloudSettingsElement)
 
+try {
+  CSS.registerProperty({
+    name: '--fui-spinner-angle',
+    syntax: '<angle>',
+    inherits: false,
+    initialValue: '0deg',
+  })
+} catch {}
+
 const host = new CloudSettingsElement()
 
 host.addEventListener('close', () => {
