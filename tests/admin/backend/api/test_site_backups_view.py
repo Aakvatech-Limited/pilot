@@ -108,6 +108,34 @@ def test_get_backup_404s_for_an_unknown_timestamp(tmp_path: Path) -> None:
 def test_download_backup_file_serves_the_file(tmp_path: Path) -> None:
     bench_root = tmp_path / "benches" / "current"
     _make_site(bench_root, "site.localhost")
+def test_delete_backup_queues_task_with_the_set_files(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    _make_site(bench_root, "site.localhost")
+    _make_backup_file(bench_root, "site.localhost", "20240101_000000", "database.sql.gz")
+    _make_backup_file(bench_root, "site.localhost", "20240101_000000", "site_config_backup.json")
+    client = _client(bench_root)
+
+    response = _request(client, "delete", "/api/v1/sites/site.localhost/backups/20240101_000000")
+
+    body = response.get_json()
+    assert response.status_code == 202
+    assert body["command"] == "delete-backup"
+    assert sorted(body["args"]["filenames"]) == [
+        "20240101_000000-site.localhost-database.sql.gz",
+        "20240101_000000-site.localhost-site_config_backup.json",
+    ]
+
+
+def test_delete_backup_404s_for_an_unknown_timestamp(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    _make_site(bench_root, "site.localhost")
+    client = _client(bench_root)
+
+    response = _request(client, "delete", "/api/v1/sites/site.localhost/backups/20240101_000000")
+
+    assert response.status_code == 404
+
+
     _make_backup_file(bench_root, "site.localhost", "20240101_000000", "database.sql.gz")
     client = _client(bench_root)
 
