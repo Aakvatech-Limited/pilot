@@ -16,6 +16,7 @@ watch(
   open,
   (isOpen) => {
     if (!isOpen) return
+
     selected.value = new Set(props.apps.map((app) => app.name))
   },
   { immediate: true },
@@ -26,17 +27,21 @@ const submitLabel = computed(() => {
   if (!selected.value.size) return __('Update')
   if (selected.value.size === props.apps.length) return __('Update all')
   if (selected.value.size === 1) return __('Update 1 app')
+
   return __('Update {0} apps', [selected.value.size])
 })
 
 const toggle = (name) => {
   const next = new Set(selected.value)
+
   next.has(name) ? next.delete(name) : next.add(name)
+
   selected.value = next
 }
 
 const submit = () => {
   if (!selected.value.size || props.updating) return
+
   emit('submit', { apps: [...selected.value] })
 }
 </script>
@@ -98,6 +103,7 @@ const submit = () => {
         <Button :disabled="updating || !selected.size" @click="selected = new Set()">
           {{ __("Clear") }}
         </Button>
+
         <Button variant="solid" :disabled="updating || !selected.size" @click="submit">
           {{ submitLabel }}
         </Button>

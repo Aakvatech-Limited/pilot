@@ -45,7 +45,9 @@ const uninstallTarget = ref(null)
 const showUninstall = ref(false)
 
 let gone = false
+
 onBeforeUnmount(() => (gone = true))
+
 watch(
   () => props.active,
   (active) => {
@@ -72,6 +74,7 @@ const categoryOptions = computed(() => [
 
 const filteredApps = computed(() => {
   const term = query.value.trim().toLowerCase()
+
   return (marketplace.value?.apps || []).filter((app) => {
     if (category.value && app.category !== category.value) return false
     if (!term) return true
@@ -93,16 +96,20 @@ const clearFilters = () => {
 }
 
 const install = (app) => runAction(app, 'install', () => store.api.installApp(app.name))
+
 const askUninstall = (app) => {
   uninstallTarget.value = app
   showUninstall.value = true
 }
+
 const uninstall = (app, mode) => runAction(app, mode, () => store.api.uninstallApp(app.name, mode))
 const updateOne = (app) => runAction(app, 'update', () => store.api.updateApps([app.name]))
 
 const asBlocker = (exception) => {
   if (!store.api.isMigrationConflict(exception)) return null
+
   const server = store.state.context.server_url
+
   return {
     message: store.api.getErrorMessage(exception),
     actionLabel: server ? __('Open updates') : '',
@@ -114,6 +121,7 @@ const updateAll = async ({ apps }) => {
   updatingAll.value = true
   updateAllError.value = ''
   blocker.value = null
+
   try {
     const { task_id } = await store.api.updateApps(apps)
     const done = await settle(task_id, ACTION.update, __('all apps'))
@@ -125,10 +133,12 @@ const updateAll = async ({ apps }) => {
     showUpdates.value = false
   } catch (exception) {
     blocker.value = asBlocker(exception)
+
     if (blocker.value) {
       showUpdates.value = false
     } else {
       updateAllError.value = store.api.getErrorMessage(exception)
+
       if (!showUpdates.value) notify(updateAllError.value, 'red')
     }
   } finally {
@@ -140,6 +150,7 @@ const runAction = async (app, verb, action) => {
   errors[app.name] = ''
   blocker.value = null
   pending[app.name] = verb
+
   try {
     const { task_id } = await action()
     const done = await settle(task_id, ACTION[verb], app.title)
@@ -156,11 +167,14 @@ const runAction = async (app, verb, action) => {
         __("Couldn't uninstall {0}. Another installed app may depend on it.", [app.title]),
       )
     }
+
     notify(__('{0} {1}.', [app.title, ACTION[verb].done]), 'green')
   } catch (exception) {
     blocker.value = asBlocker(exception)
+
     if (!blocker.value) {
       errors[app.name] = store.api.getErrorMessage(exception)
+
       notify(errors[app.name], 'red')
     }
   } finally {
@@ -170,6 +184,7 @@ const runAction = async (app, verb, action) => {
 
 const settle = async (taskId, action, label) => {
   if (!taskId) return true
+
   const outcome = await waitForTask(taskId, () => gone)
 
   if (outcome === 'success') return true

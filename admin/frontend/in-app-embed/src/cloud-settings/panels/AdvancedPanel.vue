@@ -20,13 +20,17 @@ const links = computed(() => [
 
 const openBilling = async () => {
   if (openingBilling.value) return
+
   openingBilling.value = true
   billingError.value = ''
+
   try {
     const response = context.value.account_url
       ? { url: context.value.account_url }
       : await props.store.api.getAccountUrl()
+
     if (!response?.url) throw new Error(__('Central is not configured.'))
+
     openExternal(response.url)
   } catch (exception) {
     billingError.value = props.store.api.getErrorMessage(exception)
@@ -40,7 +44,9 @@ const openBilling = async () => {
   <SettingsHeader class="!px-4 !pt-6 sm:!px-10 sm:!pt-9 relative z-10 pb-6 bg-surface-elevation-1">
     <h2 class="text-lg-semibold text-ink-gray-8">{{ __('Advanced') }}</h2>
 
-    <p class="mt-1 text-base leading-5 text-ink-gray-6">{{ __('Deeper controls for your server.') }}</p>
+    <p class="mt-1 text-base leading-5 text-ink-gray-6">
+      {{ __('Deeper controls for your server.') }}
+    </p>
   </SettingsHeader>
 
   <SettingsBody viewport-class="px-4 pb-10 sm:px-10 sm:pb-16">

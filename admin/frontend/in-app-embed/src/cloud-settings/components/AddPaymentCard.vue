@@ -44,10 +44,13 @@ const visibleGateways = computed(() =>
     (g) => method.value !== 'UPI Autopay' || g.adapter_key === 'Razorpay',
   ),
 )
+
 const gateway = computed(() => visibleGateways.value.find((g) => g.name === selected.value))
+
 const needsContact = computed(
   () => method.value === 'Card' && gateway.value?.adapter_key === 'Razorpay',
 )
+
 const canContinue = computed(
   () =>
     Boolean(gateway.value) &&
@@ -65,6 +68,7 @@ watch(
 
 const load = async () => {
   error.value = ''
+
   try {
     gateways.value = await store.api.getPaymentGateways()
   } catch (exception) {
@@ -76,6 +80,7 @@ onMounted(load)
 
 const start = () => {
   if (!canContinue.value) return
+
   return gateway.value.adapter_key === 'Razorpay' ? startRazorpay() : startStripe()
 }
 
@@ -85,7 +90,9 @@ const startStripe = async () => {
       window.location.href,
       selected.value,
     )
+
     message.value = __('Checkout opened in a new tab. Add your card there, then check its status.')
+
     openExternal(checkout.value.checkout_url)
   })
 }
@@ -94,12 +101,14 @@ const startRazorpay = async () => {
   working.value = true
   error.value = ''
   message.value = ''
+
   try {
     const handles = await store.api.addPaymentMethod(
       method.value,
       selected.value,
       contact.value.trim() || null,
     )
+
     await loadRazorpay()
     openRazorpayCheckout(handles)
   } catch (exception) {
@@ -126,10 +135,12 @@ const openRazorpayCheckout = (handles) => {
       },
     },
   })
+
   rzp.on('payment.failed', (response) => {
     error.value = response?.error?.description || __('Authorisation failed.')
     working.value = false
   })
+
   rzp.open()
 }
 
@@ -141,11 +152,14 @@ const confirmRazorpay = async (paymentMethod, response) => {
       razorpay_order_id: response.razorpay_order_id,
       razorpay_signature: response.razorpay_signature,
     })
+
     if (result.status === 'Active') {
       await store.loadBilling(true)
+
       emit('close')
       return
     }
+
     error.value = __('Saved but not active ({0}).', [result.status])
   })
 }
@@ -153,10 +167,13 @@ const confirmRazorpay = async (paymentMethod, response) => {
 const loadRazorpay = () => {
   return new Promise((resolve, reject) => {
     if (window.Razorpay) return resolve()
+
     const script = document.createElement('script')
+
     script.src = RAZORPAY_SDK
     script.onload = resolve
     script.onerror = () => reject(new Error(__('Could not load Razorpay Checkout.')))
+
     document.body.appendChild(script)
   })
 }
@@ -164,11 +181,14 @@ const loadRazorpay = () => {
 const check = async () => {
   await run(async () => {
     const result = await store.api.confirmPaymentMethodCheckout(checkout.value.reference)
+
     if (result.active) {
       await store.loadBilling(true)
+
       emit('close')
       return
     }
+
     message.value =
       result.message || __('Not confirmed yet — finish adding the card, then check again.')
   })
@@ -178,6 +198,7 @@ const run = async (action) => {
   working.value = true
   error.value = ''
   message.value = ''
+
   try {
     await action()
   } catch (exception) {

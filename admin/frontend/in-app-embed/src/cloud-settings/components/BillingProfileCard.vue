@@ -40,6 +40,7 @@ const form = reactive({
   pincode: '',
   gstin: '',
 })
+
 const currencies = ref([])
 const loaded = ref(false)
 const working = ref(false)
@@ -48,16 +49,21 @@ const error = ref('')
 const canSave = computed(
   () => !working.value && REQUIRED.every((key) => String(form[key] || '').trim()),
 )
+
 const noCurrencies = computed(() => loaded.value && !currencies.value.length)
 
 const load = async () => {
   error.value = ''
+
   try {
     const profile = await store.api.getBillingProfile()
+
     currencies.value = (profile.supported_currencies || []).map((c) =>
       typeof c === 'string' ? { label: c, value: c } : c,
     )
+
     for (const key of Object.keys(form)) form[key] = profile[key] || ''
+
     loaded.value = true
   } catch (exception) {
     error.value = store.api.getErrorMessage(exception)
@@ -68,11 +74,14 @@ onMounted(load)
 
 const save = async () => {
   if (!canSave.value) return
+
   working.value = true
   error.value = ''
+
   try {
     await store.api.saveBillingProfile({ ...form })
     await store.loadBilling(true)
+
     emit('saved')
   } catch (exception) {
     error.value = store.api.getErrorMessage(exception)
@@ -117,6 +126,7 @@ const save = async () => {
           :disabled="working"
           :class="field.full ? 'sm:col-span-2' : ''"
         />
+
         <Select
           v-model="form.currency"
           :label="`${__('Currency')} *`"
@@ -133,6 +143,7 @@ const save = async () => {
 
       <div class="flex justify-end gap-2">
         <Button :disabled="working" @click="emit('close')" :label="__('Cancel')" />
+
         <Button variant="solid" :loading="working" :disabled="!canSave" @click="save">
           {{ __("Save") }}
         </Button>

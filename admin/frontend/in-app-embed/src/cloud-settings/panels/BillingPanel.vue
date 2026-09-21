@@ -22,6 +22,7 @@ const load = async () => {
   try {
     await store.api.reconcilePaymentSetup()
   } catch {}
+
   await store.loadBilling(true)
 }
 
@@ -40,6 +41,7 @@ const plan = computed(() => billing.value?.plan)
 
 const planSubtitle = computed(() => {
   if (plan.value?.subtitle) return plan.value.subtitle
+
   return Object.values(plan.value?.specs || {})
     .filter(Boolean)
     .join(' · ')
@@ -47,10 +49,13 @@ const planSubtitle = computed(() => {
 
 const meters = computed(() => {
   const usage = billing.value?.usage
+
   if (Array.isArray(usage) && usage.length) {
     return usage.map((m) => ({ ...m, percent: clamp(m.percent) }))
   }
+
   const specs = plan.value?.specs || {}
+
   return [
     { name: __('CPU'), percent: 0, detail: specs.cpu || __('Not reported') },
     {
@@ -77,8 +82,10 @@ const startPayment = () => {
 
 const removeCard = async () => {
   if (removing.value) return
+
   removing.value = true
   removeError.value = ''
+
   try {
     await store.api.removePaymentMethod(billing.value.payment_method.name)
     await store.loadBilling(true)
@@ -91,13 +98,17 @@ const removeCard = async () => {
 
 const openChangePlan = async () => {
   if (openingChangePlan.value) return
+
   openingChangePlan.value = true
   changePlanError.value = ''
+
   try {
     const response = store.state.context?.account_url
       ? { url: store.state.context.account_url }
       : await store.api.getAccountUrl()
+
     if (!response?.url) throw new Error(__('Central is not configured.'))
+
     openExternal(response.url)
   } catch (exception) {
     changePlanError.value = store.api.getErrorMessage(exception)

@@ -14,6 +14,7 @@ const call = <T = any>(
       callback: (response) => resolve(response.message as T),
       error: (response) => reject(errorFromResponse(response)),
     })
+
     Promise.resolve(request).then(
       (response) => response && resolve(response.message as T),
       (exception) => reject(errorFromResponse(exception)),
@@ -30,18 +31,23 @@ export const isMigrationConflict = (exception: unknown) =>
 
 const messageFromResponse = (response?: FrappeResponse) => {
   const raw = response?._server_messages || response?.responseJSON?._server_messages
+
   if (raw) {
     try {
       const messages = JSON.parse(raw)
         .map((item: string) => JSON.parse(item).message)
         .filter(Boolean)
+
       if (messages.length) return messages.join('. ').replace(/<[^>]*>/g, '')
     } catch {}
   }
+
   const exception = response?.exc_type || response?.responseJSON?.exc_type
   const status = response?.status || response?.httpStatus
+
   if (status === 403) return __("You don't have permission to do this.")
   if (exception) return __('{0}. Please try again.', [exception])
+
   return __('Something went wrong. Please try again.')
 }
 
@@ -59,8 +65,10 @@ export const getPlanOptions = ({
   region?: string
 } = {}) => {
   const args: Record<string, string> = {}
+
   if (provider) args.provider = provider
   if (region) args.region = region
+
   return call('get_plan_options', args, 'GET')
 }
 
@@ -106,6 +114,7 @@ export const uninstallApp = (app: string, mode?: string) =>
 
 export const updateApps = (apps?: string[]) => {
   const args = apps ? { apps: JSON.stringify(apps) } : {}
+
   return call('update_apps', args)
 }
 

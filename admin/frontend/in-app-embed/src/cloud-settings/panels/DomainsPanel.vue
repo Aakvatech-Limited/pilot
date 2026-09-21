@@ -30,6 +30,7 @@ const domains = computed(() => {
 
   return routes?.length ? routes : rows
 })
+
 const error = computed(() => store.state.domainsError)
 const loadFailed = computed(() => Boolean(error.value) && !domains.value)
 const domainPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
@@ -45,11 +46,13 @@ const normalizedDomain = computed(() =>
 
 const domainError = computed(() => {
   const domain = normalizedDomain.value
+
   if (!domain) return ''
   if (!domainPattern.test(domain)) return __('Enter a valid domain, like shop.example.com.')
   if ((domains.value || []).some((row) => row.domain === domain)) {
     return __('{0} is already added.', [domain])
   }
+
   return ''
 })
 
@@ -59,18 +62,24 @@ const canAdd = computed(
 
 const previewDomain = async () => {
   const domain = normalizedDomain.value
+
   if (!canAdd.value) return
+
   await run(async () => {
     const response = await store.api.getDomainDnsRecords(domain)
+
     dnsRecords.value = response.records || []
     pendingDomain.value = domain
+
     if (!dnsRecords.value.length) await confirmAdd()
   })
 }
 
 const confirmAdd = async () => {
   const domain = pendingDomain.value || normalizedDomain.value
+
   if (!domain) return
+
   await run(async () => {
     await store.api.addDomain(domain)
     clearPreview()
@@ -93,6 +102,7 @@ const remove = (domain) =>
 const run = async (action) => {
   working.value = true
   store.state.domainsError = ''
+
   try {
     await action()
   } catch (exception) {

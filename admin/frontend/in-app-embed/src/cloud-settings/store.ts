@@ -15,25 +15,35 @@ export const waitForTask = async (
   isCancelled = () => false,
 ): Promise<TaskOutcome> => {
   const deadline = Date.now() + MAX_WAIT
+
   while (!isCancelled()) {
     let task: { status?: string; exit_code?: number | null } | undefined
+
     try {
       task = await api.getTask(taskId)
     } catch {
       if (Date.now() > deadline) return 'error'
+
       await sleep(POLL_INTERVAL)
       continue
     }
+
     const status = task?.status
+
     if (!status) return 'gone'
+
     if (!['success', 'failed', 'killed'].includes(status)) {
       if (Date.now() > deadline) return 'timeout'
+
       await sleep(POLL_INTERVAL)
       continue
     }
+
     const succeeded = status === 'success' && (task?.exit_code === 0 || task?.exit_code == null)
+
     return succeeded ? 'success' : 'failed'
   }
+
   return 'cancelled'
 }
 
@@ -50,7 +60,9 @@ export const createStore = (context?: CloudContext) => {
 
   const loadBilling = async (force = false) => {
     state.billingError = ''
+
     if (state.billing && !force) return
+
     try {
       state.billing = await api.getBilling()
     } catch (exception) {
@@ -60,7 +72,9 @@ export const createStore = (context?: CloudContext) => {
 
   const loadMarketplace = async (force = false) => {
     state.marketplaceError = ''
+
     if (state.marketplace && !force) return
+
     try {
       state.marketplace = await api.getMarketplaceApps()
     } catch (exception) {
@@ -70,7 +84,9 @@ export const createStore = (context?: CloudContext) => {
 
   const loadDomains = async (force = false) => {
     state.domainsError = ''
+
     if (state.domains && !force) return
+
     try {
       state.domains = await api.getDomains()
     } catch (exception) {

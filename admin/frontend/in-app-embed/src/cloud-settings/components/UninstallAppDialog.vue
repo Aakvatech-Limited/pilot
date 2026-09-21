@@ -37,6 +37,7 @@ const options = computed(() => [
 
 const confirm = () => {
   open.value = false
+
   emit('confirm', props.app, mode.value)
 }
 </script>
@@ -72,7 +73,9 @@ const confirm = () => {
           class="lucide-triangle-alert row-span-2 mt-0.5 size-4 shrink-0 text-ink-red-8"
           aria-hidden="true"
         />
+
         <p class="text-sm-medium text-ink-red-8">{{ __("This can't be undone.") }}</p>
+
         <p class="mt-1 text-p-sm text-ink-red-8">
           {{ __("Everything {0} stores on this site is deleted. Back the site up first if you need the data.", [title]) }}
         </p>

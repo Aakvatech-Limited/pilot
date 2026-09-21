@@ -22,6 +22,7 @@ export default defineConfig({
           "/embed/cloud-settings/cloud-settings.js",
           (request, response) => {
             const entry = `http://${request.headers.host}/src/cloud-settings/index.ts`;
+
             response.setHeader("Content-Type", "text/javascript");
             response.end(
               `frappe.cloudSettings = { show: async (context) => { await import(${JSON.stringify(entry)}); frappe.cloudSettings.show(context); } };`,

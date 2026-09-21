@@ -40,6 +40,7 @@ host.addEventListener('close', () => {
 frappe.cloudSettings = {
   show: (context) => {
     if (!host.isConnected) document.body.append(host)
+
     host.context = context || {}
     host.open = true
   },

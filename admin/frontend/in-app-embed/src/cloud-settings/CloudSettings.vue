@@ -54,6 +54,7 @@ const TABS = [
 ]
 
 const overlays = ref(null)
+
 provide('overlayTarget', overlays)
 
 const isOpen = ref(props.open)
@@ -67,22 +68,28 @@ watch(
       store.value = createStore(props.context)
       tab.value = TABS[0].value
     }
+
     isOpen.value = open
   },
 )
+
 watch(isOpen, (open) => !open && emit('close'))
 
 const isDark = ref(document.documentElement.dataset.theme === 'dark')
 let themeWatcher
+
 onMounted(() => {
   themeWatcher = new MutationObserver(() => {
     isDark.value = document.documentElement.dataset.theme === 'dark'
   })
+
   themeWatcher.observe(document.documentElement, {
     attributeFilter: ['data-theme'],
   })
 })
+
 onBeforeUnmount(() => themeWatcher?.disconnect())
+
 const updateCount = computed(() => store.value.state.marketplace?.update_count || 0)
 </script>
 
@@ -103,6 +110,7 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
             <FrappeCloudLogo class="mr-2 size-4 rounded-2" />
             {{ __("Cloud Settings") }}
           </p>
+
           <SettingsNavItem v-for="item in TABS" :key="item.value" :value="item.value">
             <template #prefix>
               <span :class="[item.icon, 'size-4 shrink-0 text-ink-gray-6']" />

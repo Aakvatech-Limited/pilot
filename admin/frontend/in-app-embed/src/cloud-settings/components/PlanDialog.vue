@@ -17,6 +17,7 @@ const error = ref('')
 
 const plans = computed(() => options.value?.plans || [])
 const current = computed(() => options.value?.current || '')
+
 const canChange = computed(
   () => Boolean(selected.value) && selected.value !== current.value && options.value?.sufficient,
 )
@@ -24,12 +25,15 @@ const canChange = computed(
 const providerOptions = computed(() =>
   normalizeChoices(options.value?.providers, options.value?.provider),
 )
+
 const regionOptions = computed(() =>
   normalizeChoices(options.value?.regions, options.value?.region),
 )
+
 const showPlacement = computed(
   () => providerOptions.value.length > 0 || regionOptions.value.length > 0,
 )
+
 const compareUrl = computed(
   () => options.value?.compare_url || props.store.state.context?.account_url || '',
 )
@@ -52,7 +56,9 @@ const normalizeChoices = (list, fallback) => {
       is_current: Boolean(item.is_current),
     }))
   }
+
   if (!fallback) return []
+
   return [
     {
       label: fallback,
@@ -66,6 +72,7 @@ const normalizeChoices = (list, fallback) => {
 
 const choiceIsCurrent = (choices, value) => {
   const match = choices.find((item) => item.value === value)
+
   return Boolean(match?.is_current || (choices.length === 1 && match))
 }
 
@@ -73,6 +80,7 @@ watch(open, (isOpen) => {
   if (isOpen) {
     selectedProvider.value = ''
     selectedRegion.value = ''
+
     load()
   }
 })
@@ -81,11 +89,13 @@ const load = async () => {
   loading.value = true
   error.value = ''
   selected.value = ''
+
   try {
     options.value = await props.store.api.getPlanOptions({
       provider: selectedProvider.value || undefined,
       region: selectedRegion.value || undefined,
     })
+
     selected.value = options.value?.current || ''
     selectedProvider.value =
       options.value?.provider ||
@@ -104,20 +114,25 @@ const load = async () => {
 
 const onPlacementChange = async () => {
   if (loading.value || submitting.value) return
+
   await load()
 }
 
 const submit = async () => {
   if (!canChange.value || submitting.value) return
+
   submitting.value = true
   error.value = ''
+
   try {
     await props.store.api.changePlan(selected.value)
     await props.store.loadBilling(true)
+
     frappe.show_alert({
       message: __('Plan change has been queued.'),
       indicator: 'green',
     })
+
     open.value = false
   } catch (exception) {
     error.value = props.store.api.getErrorMessage(exception)
@@ -128,6 +143,7 @@ const submit = async () => {
 
 const openBilling = () => {
   open.value = false
+
   emit('open-billing')
 }
 
@@ -327,6 +343,7 @@ const comparePlans = () => {
           {{ __("Compare plans") }}
         </Button>
         <Button :disabled="submitting" @click="open = false" :label="__('Cancel')" />
+
         <Button variant="solid" :loading="submitting" :disabled="!canChange" @click="submit">
           {{ __("Change plan") }}
         </Button>

@@ -15,6 +15,7 @@ const overlayTarget = inject('overlayTarget', 'body')
 
 const logoUrl = computed(() => {
   const url = String(props.app.logo_url || '').trim()
+
   return /^https?:\/\//i.test(url) && !imageFailed.value ? url : ''
 })
 
