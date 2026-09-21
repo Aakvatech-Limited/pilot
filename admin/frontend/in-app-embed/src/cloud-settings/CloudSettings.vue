@@ -7,12 +7,14 @@ import {
   SettingsNavItem,
   SettingsPanel,
   SettingsSidebar,
+  providePortalTarget,
 } from 'frappe-ui'
 import { ConfigProvider } from 'reka-ui'
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 
 import FrappeCloudLogo from './components/FrappeCloudLogo.vue'
 import AdvancedPanel from './panels/AdvancedPanel.vue'
+import AnalyticsPanel from './panels/AnalyticsPanel.vue'
 import BackupsPanel from './panels/BackupsPanel.vue'
 import BillingPanel from './panels/BillingPanel.vue'
 import DomainsPanel from './panels/DomainsPanel.vue'
@@ -56,6 +58,12 @@ const TABS = [
     component: BackupsPanel,
   },
   {
+    value: 'analytics',
+    label: __('Analytics'),
+    icon: 'lucide-chart-line',
+    component: AnalyticsPanel,
+  },
+  {
     value: 'advanced',
     label: __('Advanced'),
     icon: 'lucide-bolt',
@@ -66,6 +74,7 @@ const TABS = [
 const overlays = ref(null)
 
 provide('overlayTarget', overlays)
+providePortalTarget(overlays)
 
 const isOpen = ref(props.open)
 const tab = ref(TABS[0].value)

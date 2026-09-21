@@ -142,5 +142,9 @@ export const deleteBackup = (timestamp: string) => pilotRequest('DELETE', `backu
 export const getBackupDownloadLinks = (timestamp: string) =>
   pilotRequest('GET', `backups/${timestamp}/download-links`)
 
+export const getAnalytics = (window: string) => pilotRequest('GET', `monitoring?window=${window}`)
+
+export const getUptime = (window: string) => pilotRequest('GET', `uptime?window=${window}`)
+
 export const getErrorMessage = (exception: unknown, fallback?: string) =>
   (exception as Error | undefined)?.message || fallback || __('Something went wrong.')
