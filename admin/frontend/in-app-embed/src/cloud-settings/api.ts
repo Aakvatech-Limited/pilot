@@ -130,8 +130,15 @@ export const removeDomain = (domain: string) => call('remove_domain', { domain }
 
 export const setPrimaryDomain = (domain: string) => call('set_primary_domain', { domain })
 
-const pilotRequest = (method: 'GET' | 'POST' | 'DELETE', path: string) =>
-  call('pilot_request', { method, path }, method === 'GET' ? 'GET' : 'POST')
+const pilotRequest = (
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  data?: Record<string, unknown>,
+) => {
+  const args = data ? { method, path, data: JSON.stringify(data) } : { method, path }
+
+  return call('pilot_request', args, method === 'GET' ? 'GET' : 'POST')
+}
 
 export const getBackups = () => pilotRequest('GET', 'backups')
 
@@ -145,6 +152,19 @@ export const getBackupDownloadLinks = (timestamp: string) =>
 export const getAnalytics = (window: string) => pilotRequest('GET', `monitoring?window=${window}`)
 
 export const getUptime = (window: string) => pilotRequest('GET', `uptime?window=${window}`)
+
+export const getStorage = () => pilotRequest('GET', 'storage')
+
+export const refreshStorage = () => pilotRequest('POST', 'actions/refresh-storage')
+
+export const getSiteConfig = () => pilotRequest('GET', 'configuration')
+
+export const updateSiteConfig = (patch: Record<string, unknown>) =>
+  pilotRequest('PATCH', 'configuration', patch)
+
+export const clearCache = () => pilotRequest('POST', 'actions/clear-cache')
+
+export const migrate = () => pilotRequest('POST', 'actions/migrate')
 
 export const getErrorMessage = (exception: unknown, fallback?: string) =>
   (exception as Error | undefined)?.message || fallback || __('Something went wrong.')

@@ -18,7 +18,10 @@ import AnalyticsPanel from './panels/AnalyticsPanel.vue'
 import BackupsPanel from './panels/BackupsPanel.vue'
 import BillingPanel from './panels/BillingPanel.vue'
 import DomainsPanel from './panels/DomainsPanel.vue'
+import MaintenancePanel from './panels/MaintenancePanel.vue'
 import MarketplacePanel from './panels/MarketplacePanel.vue'
+import SiteConfigPanel from './panels/SiteConfigPanel.vue'
+import UsagePanel from './panels/UsagePanel.vue'
 import { createStore } from './store'
 import TailwindStyles from './TailwindStyles.vue'
 
@@ -65,6 +68,24 @@ const GROUPS = [
         component: DomainsPanel,
       },
       { value: 'backups', label: __('Backups'), icon: 'lucide-archive', component: BackupsPanel },
+      { value: 'usage', label: __('Usage'), icon: 'lucide-hard-drive', component: UsagePanel },
+    ],
+  },
+  {
+    label: __('Manage'),
+    tabs: [
+      {
+        value: 'site-config',
+        label: __('Site config'),
+        icon: 'lucide-file-cog',
+        component: SiteConfigPanel,
+      },
+      {
+        value: 'maintenance',
+        label: __('Maintenance'),
+        icon: 'lucide-wrench',
+        component: MaintenancePanel,
+      },
       { value: 'advanced', label: __('Advanced'), icon: 'lucide-bolt', component: AdvancedPanel },
     ],
   },
