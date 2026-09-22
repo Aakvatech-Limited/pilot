@@ -63,7 +63,8 @@ def test_creates_a_new_site(bench, page):
 
 
 @pytest.mark.skipif(DB_TYPE != "mariadb", reason="dashboard specs use MariaDB SQL")
-def test_dashboard_specs(bench):
+# browser_name keeps this in the [chromium] group, so pytest runs it before the site is dropped.
+def test_dashboard_specs(bench, browser_name):
     subprocess.run(
         ["npx", "playwright", "test"],
         cwd=DASHBOARD_DIR,
