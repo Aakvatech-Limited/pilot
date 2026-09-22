@@ -296,7 +296,8 @@ class AppRepository:
                 *unshallow_flag,
                 "origin",
                 self.app.config.branch,
-            ]
+            ],
+            env=self.git_env,
         )
         self._checkout_pinned_ref(sha)
 
