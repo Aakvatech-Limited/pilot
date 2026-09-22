@@ -22,11 +22,12 @@ const openingChangePlan = ref(false)
 const changePlanError = ref('')
 
 const load = async () => {
+  await store.loadBilling(true)
+
   try {
     await store.api.reconcilePaymentSetup()
+    await store.loadBilling(true)
   } catch {}
-
-  await store.loadBilling(true)
 }
 
 watch(
