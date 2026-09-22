@@ -2,7 +2,7 @@
 import { Button, ErrorMessage, SettingsRow } from 'frappe-ui'
 import { onBeforeUnmount, ref } from 'vue'
 import Panel from '../components/Panel.vue'
-import { type Store, waitForTask } from '../store'
+import { settleTask, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -45,11 +45,9 @@ const run = async (action) => {
 
   try {
     const { task_id } = await action.run()
-    const outcome = await waitForTask(task_id, () => gone)
 
-    if (outcome === 'failed' || outcome === 'error') {
-      throw new Error(__("Couldn't finish: {0}.", [action.title]))
-    }
+    if (!(await settleTask(task_id, () => gone, __("Couldn't finish: {0}.", [action.title]))))
+      return
 
     frappe.show_alert({ message: action.done, indicator: 'green' })
   } catch (exception) {

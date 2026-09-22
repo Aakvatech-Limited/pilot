@@ -47,6 +47,22 @@ export const waitForTask = async (
   return 'cancelled'
 }
 
+export const settleTask = async (taskId: string, isCancelled: () => boolean, failure: string) => {
+  const outcome = await waitForTask(taskId, isCancelled)
+
+  if (outcome === 'success') return true
+  if (outcome === 'failed' || outcome === 'error') throw new Error(failure)
+
+  if (outcome !== 'cancelled') {
+    frappe.show_alert({
+      message: __('Still running in the background. Check back in a bit.'),
+      indicator: 'orange',
+    })
+  }
+
+  return false
+}
+
 type RememberedTask = { taskId: string; verb: string }
 
 const tasksKey = (site: string) => `cloud-settings:tasks:${site}`

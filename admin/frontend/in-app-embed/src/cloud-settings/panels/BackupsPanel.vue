@@ -4,7 +4,7 @@ import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
 import { openExternal } from '../external'
-import { type Store, waitForTask } from '../store'
+import { settleTask, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -100,11 +100,8 @@ const backUp = async () => {
 
   try {
     const { task_id } = await store.api.createBackup()
-    const outcome = await waitForTask(task_id, () => gone)
 
-    if (outcome === 'failed' || outcome === 'error') {
-      throw new Error(__("Couldn't back up the site."))
-    }
+    if (!(await settleTask(task_id, () => gone, __("Couldn't back up the site.")))) return
 
     await load()
 
@@ -145,11 +142,8 @@ const confirmDelete = async () => {
 
   try {
     const { task_id } = await store.api.deleteBackup(deleteTarget.value.timestamp)
-    const outcome = await waitForTask(task_id, () => gone)
 
-    if (outcome === 'failed' || outcome === 'error') {
-      throw new Error(__("Couldn't delete the backup."))
-    }
+    if (!(await settleTask(task_id, () => gone, __("Couldn't delete the backup.")))) return
 
     await load()
 
