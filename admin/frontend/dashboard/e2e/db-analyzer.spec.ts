@@ -31,6 +31,10 @@ test('Kills a running query', async ({ page }) => {
   const query = `SELECT SLEEP(${60 + (Date.now() % 60)})`
   page.request.post('/api/v1/database/queries', { data: { site, query, read_only: true } }).catch(() => {})
 
+  await expect
+    .poll(async () => (await page.request.get('/api/v1/database/processlist')).text())
+    .toContain(query)
+
   await page.goto('/database/analyzer')
   await page.getByRole('heading', { name: 'Database Processes' }).click()
 
