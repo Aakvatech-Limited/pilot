@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Select } from 'frappe-ui'
+import { Select, Tooltip } from 'frappe-ui'
 import { AreaChart } from 'frappe-ui/charts'
 import { computed, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
@@ -189,13 +189,13 @@ const formatTime = (time) =>
       <h3 class="mb-3 text-base-medium text-ink-gray-8">{{ __("Uptime") }}</h3>
 
       <div class="flex h-8 gap-0.5">
-        <span
+        <Tooltip
           v-for="bucket in uptime.buckets"
           :key="bucket.time"
-          class="flex-1 rounded-1"
-          :class="uptimeClass(bucket)"
-          :title="`${formatTime(bucket.time)} · ${bucket.checks ? `${bucket.percent}%` : __('No checks')}`"
-        />
+          :text="`${formatTime(bucket.time)} · ${bucket.checks ? `${bucket.percent}% up` : __('No checks')}`"
+        >
+          <span class="flex-1 rounded-1" :class="uptimeClass(bucket)" />
+        </Tooltip>
       </div>
     </section>
 
