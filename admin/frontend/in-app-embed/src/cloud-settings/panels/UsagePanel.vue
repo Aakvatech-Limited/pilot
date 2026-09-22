@@ -14,10 +14,10 @@ const props = defineProps<Props>()
 const store = props.store
 
 const colors = {
-  database: 'var(--ink-blue-7)',
-  files: 'var(--ink-violet-7)',
-  backups: 'var(--ink-amber-7)',
-  other: 'var(--ink-gray-5)',
+  database: { bar: 'var(--surface-blue-6)', icon: 'var(--ink-blue-6)' },
+  files: { bar: 'var(--surface-teal-6)', icon: 'var(--ink-teal-6)' },
+  backups: { bar: 'var(--surface-amber-6)', icon: 'var(--ink-amber-6)' },
+  other: { bar: 'var(--surface-gray-4)', icon: 'var(--ink-gray-5)' },
 }
 
 const units = { MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 }
@@ -80,6 +80,22 @@ const quota = computed(() => {
 
 const total = computed(() => (usage.value?.database_bytes || 0) + (usage.value?.bytes || 0))
 
+const hardwareIcons = {
+  cpu: { icon: 'lucide-cpu', tint: 'bg-surface-gray-2 text-ink-gray-5' },
+  memory: { icon: 'lucide-memory-stick', tint: 'bg-surface-gray-2 text-ink-gray-5' },
+}
+
+const fallbackIcon = { icon: 'lucide-gauge', tint: 'bg-surface-gray-2 text-ink-gray-5' }
+
+const hardware = computed(() =>
+  (store.state.billing?.usage || [])
+    .filter((meter) => meter.name.toLowerCase() !== 'storage')
+    .map((meter) => ({
+      ...meter,
+      percent: Math.max(0, Math.min(100, Math.round(Number(meter.percent) || 0))),
+    })),
+)
+
 const bySize = (items) => [...items].sort((a, b) => b.bytes - a.bytes)
 
 const entries = (items, prefix) =>
@@ -95,16 +111,16 @@ const nodes = computed(() => {
   return bySize([
     {
       key: 'database',
+      color: colors.database,
       label: __('Database'),
       bytes: site.database_bytes || 0,
-      color: colors.database,
       icon: 'lucide-database',
     },
     {
       key: 'files',
+      color: colors.files,
       label: __('Files'),
       bytes: (site.public_files_bytes || 0) + (site.private_files_bytes || 0),
-      color: colors.files,
       icon: 'lucide-folder',
       children: bySize([
         {
@@ -121,27 +137,35 @@ const nodes = computed(() => {
     },
     {
       key: 'backups',
+      color: colors.backups,
       label: __('Backups'),
       bytes: site.backups_bytes || 0,
-      color: colors.backups,
       icon: 'lucide-archive',
       children: entries(site.backup_files, 'backup'),
     },
     {
       key: 'other',
+      color: colors.other,
       label: __('Other'),
       bytes: site.other_bytes || 0,
-      color: colors.other,
       icon: 'lucide-box',
       children: entries(site.other_entries, 'other'),
     },
   ])
 })
 
-const parts = computed(() => {
+const blocks = computed(() => {
   const scale = quota.value || total.value || 1
 
-  return nodes.value.map((node) => ({ ...node, width: `${(node.bytes / scale) * 100}%` }))
+  const used = nodes.value
+    .filter((node) => node.bytes)
+    .map((node) => ({ ...node, share: node.bytes / scale }))
+
+  if (quota.value <= total.value) return used
+
+  const free = quota.value - total.value
+
+  return [...used, { key: 'free', label: __('Free'), bytes: free, share: free / scale }]
 })
 
 const measuredAt = computed(() =>
@@ -173,7 +197,7 @@ const refresh = async () => {
 <template>
   <Panel
     :title="__('Usage')"
-    :description="__('How much space your site takes up.')"
+    :description="__('How much of your server and storage your site uses.')"
     :loading="!usage && !error"
     :error="usage ? '' : error"
     :error-title="__(`Couldn't load usage`)"
@@ -191,6 +215,46 @@ const refresh = async () => {
 
     <ErrorMessage :message="error" class="mb-4" />
 
+    <div v-if="hardware.length" class="mb-4 grid gap-3 sm:grid-cols-2">
+      <section
+        v-for="meter in hardware"
+        :key="meter.name"
+        class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 rounded-6 border border-outline-gray-2 p-4"
+      >
+        <span
+          :class="[
+            'row-span-3 grid size-10 place-items-center rounded-6',
+            (hardwareIcons[meter.name.toLowerCase()] || fallbackIcon).tint,
+          ]"
+        >
+          <span
+            :class="[(hardwareIcons[meter.name.toLowerCase()] || fallbackIcon).icon, 'size-5']"
+            aria-hidden="true"
+          />
+        </span>
+
+        <p class="text-sm text-ink-gray-6">{{ meter.name }}</p>
+
+        <p class="text-sm-medium tabular-nums text-ink-gray-9">{{ meter.percent }}%</p>
+
+        <div
+          class="col-span-2 my-2 h-1 overflow-hidden rounded-full bg-surface-gray-2"
+          role="progressbar"
+          :aria-label="meter.name"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="meter.percent"
+        >
+          <div
+            class="h-full rounded-full bg-surface-gray-10 transition-[width] duration-300"
+            :style="{ width: `${meter.percent}%` }"
+          />
+        </div>
+
+        <p class="col-span-2 text-p-xs text-ink-gray-5">{{ meter.detail }}</p>
+      </section>
+    </div>
+
     <section class="rounded-6 border border-outline-gray-2 p-5">
       <p class="flex items-center justify-between gap-3">
         <span class="flex items-center gap-2 text-base-medium text-ink-gray-8">
@@ -204,11 +268,12 @@ const refresh = async () => {
         </span>
       </p>
 
-      <div class="mt-4 flex h-5 w-full overflow-hidden rounded-full bg-surface-gray-4">
+      <div class="mt-4 flex h-5 gap-0.5 overflow-hidden rounded-full">
         <span
-          v-for="part in parts"
-          :key="part.key"
-          :style="{ width: part.width, background: part.color }"
+          v-for="block in blocks"
+          :key="block.key"
+          :class="!block.color && 'bg-surface-gray-2'"
+          :style="{ flex: `${block.share} 1 0`, background: block.color?.bar }"
         />
       </div>
 
@@ -221,7 +286,7 @@ const refresh = async () => {
               <span
                 class="lucide-chevron-right size-3.5 shrink-0 text-ink-gray-5 transition-transform group-open:rotate-90"
               />
-              <span :class="[node.icon, 'size-4 shrink-0']" :style="{ color: node.color }" />
+              <span :class="[node.icon, 'size-4 shrink-0']" :style="{ color: node.color.icon }" />
               <span class="truncate text-ink-gray-8">{{ node.label }}</span>
               <span class="ml-auto shrink-0 tabular-nums text-ink-gray-7">
                 {{ formatBytes(node.bytes) }}
@@ -245,7 +310,7 @@ const refresh = async () => {
           </details>
 
           <p v-else class="flex h-8 items-center gap-2 pl-6 pr-1.5">
-            <span :class="[node.icon, 'size-4 shrink-0']" :style="{ color: node.color }" />
+            <span :class="[node.icon, 'size-4 shrink-0']" :style="{ color: node.color.icon }" />
             <span class="truncate text-ink-gray-8">{{ node.label }}</span>
             <span class="ml-auto shrink-0 tabular-nums text-ink-gray-7">
               {{ formatBytes(node.bytes) }}

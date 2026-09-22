@@ -50,34 +50,6 @@ const planSubtitle = computed(() => {
     .join(' · ')
 })
 
-const meters = computed(() => {
-  const usage = billing.value?.usage
-
-  if (Array.isArray(usage) && usage.length) {
-    return usage.map((m) => ({ ...m, percent: clamp(m.percent) }))
-  }
-
-  const specs = plan.value?.specs || {}
-
-  return [
-    { name: __('CPU'), percent: 0, detail: specs.cpu || __('Not reported') },
-    {
-      name: __('Memory'),
-      percent: 0,
-      detail: specs.memory || __('Not reported'),
-    },
-    {
-      name: __('Storage'),
-      percent: 0,
-      detail: specs.storage || __('Not reported'),
-    },
-  ]
-})
-
-const clamp = (percent) => {
-  return Math.max(0, Math.min(100, Math.round(Number(percent) || 0)))
-}
-
 const startPayment = () => {
   removeError.value = ''
   flow.value = billing.value?.profile_complete ? 'payment' : 'profile'
@@ -124,7 +96,7 @@ const openChangePlan = async () => {
 <template>
   <Panel
     :title="__('Billing')"
-    :description="__('Your plan, usage, credit and payment method.')"
+    :description="__('Your plan, credit and payment method.')"
     :loading="!billing && !error"
     :error="loadFailed ? error : ''"
     :error-title="__(`Couldn't load billing`)"
@@ -164,54 +136,24 @@ const openChangePlan = async () => {
     <div v-else class="space-y-4">
       <ErrorMessage :message="loadFailed ? '' : error" />
 
-      <section class="rounded-6 border border-outline-gray-2 p-5">
-        <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
-          <p class="text-p-sm text-ink-gray-5">{{ __("Plan") }}</p>
+      <section
+        class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-6 border border-outline-gray-2 p-5"
+      >
+        <p class="text-base-semibold text-ink-gray-8">
+          {{ plan.name ? __("{0} plan", [plan.name]) : __("Current plan") }}
+        </p>
 
-          <p class="col-start-1 mt-0.5 text-base-semibold text-ink-gray-8">
-            {{ plan.name || __("Current plan") }}
-          </p>
+        <p class="col-start-1 mt-1 text-sm text-ink-gray-5">{{ planSubtitle }}</p>
 
-          <p class="col-start-1 mt-0.5 text-p-sm text-ink-gray-5">{{ planSubtitle }}</p>
+        <Button
+          class="col-start-2 row-span-2 row-start-1"
+          icon-right="lucide-arrow-up-right"
+          :disabled="openingChangePlan"
+          :label="openingChangePlan ? __('Opening…') : __('Change plan')"
+          @click="openChangePlan"
+        />
 
-          <Button
-            class="col-start-2 row-span-3 row-start-1"
-            icon-right="lucide-arrow-up-right"
-            :disabled="openingChangePlan"
-            :label="openingChangePlan ? __('Opening…') : __('Change plan')"
-            @click="openChangePlan"
-          />
-
-          <ErrorMessage :message="changePlanError" class="col-span-2 mt-2" />
-        </div>
-
-        <div
-          class="-mx-5 mt-5 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-5 border-t border-outline-gray-2 px-5 pt-5"
-        >
-          <div v-for="meter in meters" :key="meter.name">
-            <div class="mb-2 flex items-center justify-between gap-4 text-sm">
-              <span class="text-ink-gray-6">{{ meter.name }}</span>
-
-              <span class="font-medium tabular-nums text-ink-gray-9"> {{ meter.percent }}% </span>
-            </div>
-
-            <div
-              class="h-1 overflow-hidden rounded-full bg-surface-gray-2"
-              role="progressbar"
-              :aria-label="meter.name"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              :aria-valuenow="meter.percent"
-            >
-              <div
-                class="h-full rounded-full bg-surface-gray-10 transition-[width] duration-300"
-                :style="{ width: `${meter.percent}%` }"
-              />
-            </div>
-
-            <p class="mt-1.5 text-p-xs text-ink-gray-5">{{ meter.detail }}</p>
-          </div>
-        </div>
+        <ErrorMessage :message="changePlanError" class="col-span-2 mt-2" />
       </section>
 
       <div class="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-3">
