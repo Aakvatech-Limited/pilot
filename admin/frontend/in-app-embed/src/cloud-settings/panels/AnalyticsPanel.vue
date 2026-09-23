@@ -188,10 +188,11 @@ const formatTime = (time) =>
     <section v-if="hasUptime" class="mt-4 rounded-6 border border-outline-gray-2 p-4">
       <h3 class="mb-3 text-base-medium text-ink-gray-8">{{ __("Uptime") }}</h3>
 
-      <div class="flex h-8 gap-0.5">
+      <div class="flex h-8 gap-1">
         <Tooltip
           v-for="bucket in uptime.buckets"
           :key="bucket.time"
+          :hover-delay="0"
           :text="`${formatTime(bucket.time)} · ${bucket.checks ? `${bucket.percent}% up` : __('No checks')}`"
         >
           <span class="flex-1 rounded-1" :class="uptimeClass(bucket)" />
