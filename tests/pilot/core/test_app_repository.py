@@ -271,12 +271,15 @@ def test_a_commit_the_server_will_not_fetch_by_sha_comes_from_the_full_history(
     assert not clone.is_shallow
 
 
-def test_a_missing_commit_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_missing_commit_leaves_no_clone_behind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A clone left in apps/ would read as an installed app."""
     _set_dev_install(monkeypatch, False)
     remote, _ = _repo_with_two_commits(tmp_path / "remote")
 
     with pytest.raises(BenchError, match="not found"):
         _repository_of(remote, tmp_path / "app").clone_rev("0" * 40)
+
+    assert not (tmp_path / "app").exists()
 
 
 def test_files_already_at_the_app_path_are_kept(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

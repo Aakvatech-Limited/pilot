@@ -169,6 +169,7 @@ class AppRepository:
         try:
             run_command(["git", "-C", str(self.app.path), "checkout", commit])
         except CommandError as exc:
+            shutil.rmtree(self.app.path, ignore_errors=True)
             raise BenchError(f"Commit '{commit}' not found in {self.app.config.repo}.") from exc
 
     def fetch_commit(self, commit: str) -> None:
