@@ -8,6 +8,11 @@ BUILD_MEMORY_SHARE = 0.85
 MIN_BUILD_MEMORY_MB = 512
 
 
+def can_read_memory(meminfo: Path = Path("/proc/meminfo")) -> bool:
+    """Whether this host reports its free memory. Linux does; macOS has no /proc."""
+    return meminfo.exists()
+
+
 def available_memory_mb(meminfo: Path = Path("/proc/meminfo")) -> int:
     """Memory the kernel can hand out without swapping, in MB. Read from /proc instead."""
     for line in meminfo.read_text().splitlines():

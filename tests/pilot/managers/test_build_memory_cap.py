@@ -78,12 +78,22 @@ def test_systemctl_env_carries_the_bus_address(monkeypatch: pytest.MonkeyPatch) 
     assert env["DBUS_SESSION_BUS_ADDRESS"] == f"unix:path={runtime_dir}/bus"
 
 
-def test_a_host_that_cannot_cap_builds_without_reading_memory(monkeypatch: pytest.MonkeyPatch) -> None:
-    """macOS has no systemd and no /proc/meminfo, and still builds, uncapped."""
+def _host(
+    monkeypatch: pytest.MonkeyPatch, reads_memory: bool, caps_memory: bool, free_mb: int = 4096
+) -> list:
+    """A host that does or does not report its memory and cap a build. Returns the commands run."""
     calls: list[list[str]] = []
-    monkeypatch.setattr(python_assets, "can_cap_memory", lambda: False)
-    monkeypatch.setattr(build_memory, "available_memory_mb", lambda: pytest.fail("memory was read"))
+    monkeypatch.setattr(build_memory, "can_read_memory", lambda: reads_memory)
+    monkeypatch.setattr(python_assets, "can_cap_memory", lambda: caps_memory)
+    _free_memory(monkeypatch, free_mb)
     monkeypatch.setattr(python_assets, "run_command", lambda argv, **kwargs: calls.append(argv))
+    return calls
+
+
+def test_macos_builds_uncapped_without_reading_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """macOS has no systemd and no /proc/meminfo."""
+    calls = _host(monkeypatch, reads_memory=False, caps_memory=False)
+    monkeypatch.setattr(build_memory, "available_memory_mb", lambda: pytest.fail("memory was read"))
 
     _builder().run_compiler(["yarn", "build"])
 
@@ -91,10 +101,7 @@ def test_a_host_that_cannot_cap_builds_without_reading_memory(monkeypatch: pytes
 
 
 def test_a_host_that_can_cap_runs_the_build_in_a_capped_scope(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[list[str]] = []
-    monkeypatch.setattr(python_assets, "can_cap_memory", lambda: True)
-    _free_memory(monkeypatch, 4096)
-    monkeypatch.setattr(python_assets, "run_command", lambda argv, **kwargs: calls.append(argv))
+    calls = _host(monkeypatch, reads_memory=True, caps_memory=True)
 
     _builder().run_compiler(["yarn", "build"])
 
@@ -102,14 +109,43 @@ def test_a_host_that_can_cap_runs_the_build_in_a_capped_scope(monkeypatch: pytes
     assert f"MemoryMax={int(4096 * BUILD_MEMORY_SHARE)}M" in calls[0]
 
 
+def test_a_linux_host_without_memory_control_builds_uncapped(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _host(monkeypatch, reads_memory=True, caps_memory=False)
+
+    _builder().run_compiler(["yarn", "build"])
+
+    assert calls == [["yarn", "build"]]
+
+
+def test_a_starved_host_is_refused_even_where_it_cannot_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Uncapped, the build would take the memory the host's other services need."""
+    calls = _host(monkeypatch, reads_memory=True, caps_memory=False, free_mb=MIN_BUILD_MEMORY_MB - 1)
+
+    with pytest.raises(BenchError, match="Not enough free memory"):
+        _builder().run_compiler(["yarn", "build"])
+
+    assert calls == []
+
+
 def test_a_killed_build_reports_memory_not_a_signal(monkeypatch: pytest.MonkeyPatch) -> None:
     def killed(argv, **kwargs):
         raise CommandError("Command 'systemd-run' failed with exit code -9.", returncode=-9)
 
-    monkeypatch.setattr(python_assets, "can_cap_memory", lambda: True)
-    _free_memory(monkeypatch, 4096)
+    _host(monkeypatch, reads_memory=True, caps_memory=True)
     monkeypatch.setattr(python_assets, "run_command", killed)
     with pytest.raises(BenchError, match="ran out of memory"):
+        _builder().run_compiler(["yarn", "build"])
+
+
+def test_an_uncapped_build_killed_by_a_signal_is_not_blamed_on_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def killed(argv, **kwargs):
+        raise CommandError("Command 'yarn' failed with exit code -15.", returncode=-15)
+
+    _host(monkeypatch, reads_memory=True, caps_memory=False)
+    monkeypatch.setattr(python_assets, "run_command", killed)
+    with pytest.raises(CommandError, match="exit code -15"):
         _builder().run_compiler(["yarn", "build"])
 
 
@@ -117,7 +153,7 @@ def test_a_compiler_error_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None
     def failed(argv, **kwargs):
         raise CommandError("syntax error in app.js", returncode=1)
 
-    monkeypatch.setattr(python_assets, "can_cap_memory", lambda: False)
+    _host(monkeypatch, reads_memory=False, caps_memory=False)
     monkeypatch.setattr(python_assets, "run_command", failed)
     with pytest.raises(CommandError, match="syntax error"):
         _builder().run_compiler(["yarn", "build"])
