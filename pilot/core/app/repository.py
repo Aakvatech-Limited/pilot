@@ -154,9 +154,12 @@ class AppRepository:
 
     def clone_rev(self, commit: str) -> None:
         # Git fetches a commit on its own only by its full SHA; a short one is found in the full history.
-        if len(commit) == 40 and self.depth_flags:
-            self.fetch_commit(commit)
-            return
+        if len(commit) == 40 and self.depth_flags and not self.app.path.exists():
+            try:
+                self.fetch_commit(commit)
+                return
+            except CommandError:
+                shutil.rmtree(self.app.path, ignore_errors=True)
 
         run_command(
             ["git", "clone", self.remote_url, str(self.app.path)],
@@ -173,16 +176,11 @@ class AppRepository:
         path = str(self.app.path)
         run_command(["git", "init", "--quiet", path])
         run_command(["git", "-C", path, "remote", "add", "origin", self.remote_url])
-        try:
-            run_command(
-                ["git", "-C", path, "fetch", *self.depth_flags, "origin", commit],
-                env=self.git_env,
-                stream_output=True,
-            )
-        except CommandError as exc:
-            shutil.rmtree(path, ignore_errors=True)
-            raise BenchError(f"Commit '{commit}' not found in {self.app.config.repo}.") from exc
-
+        run_command(
+            ["git", "-C", path, "fetch", *self.depth_flags, "origin", commit],
+            env=self.git_env,
+            stream_output=True,
+        )
         run_command(["git", "-C", path, "checkout", "--quiet", "FETCH_HEAD"])
 
     def clone(self) -> None:
