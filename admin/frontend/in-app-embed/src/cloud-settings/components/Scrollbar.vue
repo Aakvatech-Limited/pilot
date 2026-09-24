@@ -18,7 +18,7 @@ defineProps<Props>()
       class="z-20 flex w-2.5 touch-none select-none p-0.5 transition-colors duration-[160ms] ease-out"
       orientation="vertical"
     >
-      <ScrollAreaThumb class="relative flex-1 rounded-[10px] bg-surface-gray-2" />
+      <ScrollAreaThumb class="relative flex-1 rounded-[10px] bg-surface-gray-3" />
     </ScrollAreaScrollbar>
   </ScrollAreaRoot>
 </template>

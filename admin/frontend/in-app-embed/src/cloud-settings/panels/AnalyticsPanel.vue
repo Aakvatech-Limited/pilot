@@ -107,19 +107,16 @@ const stats = computed(() => {
       label: __('Uptime'),
       value: percent == null ? '—' : `${percent.toFixed(2)}%`,
       icon: 'lucide-activity',
-      tint: 'bg-surface-green-2 text-ink-green-6',
     },
     {
       label: __('Requests'),
       value: total(analytics.value?.requests_over_time).toLocaleString(),
       icon: 'lucide-mouse-pointer-click',
-      tint: 'bg-surface-blue-2 text-ink-blue-6',
     },
     {
       label: __('Background jobs'),
       value: total(analytics.value?.background_jobs_over_time).toLocaleString(),
       icon: 'lucide-cog',
-      tint: 'bg-surface-violet-2 text-ink-violet-6',
     },
   ]
 })
@@ -145,7 +142,7 @@ const topPages = computed(() => {
 })
 
 const uptimeClass = (bucket) => {
-  if (!bucket.checks) return 'bg-surface-gray-2'
+  if (!bucket.checks) return 'bg-surface-gray-3'
   if (bucket.percent >= 99.9) return 'bg-surface-green-3'
   if (bucket.percent >= 95) return 'bg-surface-amber-3'
 
@@ -175,7 +172,7 @@ const formatTime = (time) =>
         :key="stat.label"
         class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 rounded-6 border border-outline-gray-2 p-4"
       >
-        <span :class="['row-span-2 grid size-9 place-items-center rounded-5', stat.tint]">
+        <span class="row-span-2 grid size-9 place-items-center rounded-5 bg-surface-gray-2">
           <span :class="[stat.icon, 'size-4']" aria-hidden="true" />
         </span>
 
@@ -213,7 +210,7 @@ const formatTime = (time) =>
     </div>
 
     <section class="mt-4 overflow-hidden rounded-6 border border-outline-gray-2">
-      <p class="flex items-center justify-between border-b border-outline-gray-2 px-5 py-3 text-sm">
+      <p class="flex items-center justify-between border-b border-outline-gray-2 p-3 text-sm">
         <span class="text-base-medium text-ink-gray-8">{{ __("Top pages") }}</span>
 
         <span class="text-ink-gray-5">{{ __("Requests") }}</span>
