@@ -13,7 +13,7 @@ from pilot.config import AppConfig
 from pilot.core.app import repository
 from pilot.core.app.repository import AppRepository
 from pilot.core.app.revisions import RevisionPin
-from pilot.exceptions import CommandError
+from pilot.exceptions import BenchError, CommandError
 from pilot.internal.git import GitRepo
 
 
@@ -217,3 +217,45 @@ def test_pinned_commit_fallback_fetch_passes_git_auth_env(
     assert len(fetch_calls) == 2
     assert fetch_calls[1][0][-3:] == ["fetch", "origin", "main"]
     assert fetch_calls[1][1]["env"] == {"GIT_CONFIG_COUNT": "1"}
+
+
+def _repository_of(remote: Path, path: Path) -> AppRepository:
+    """A repository cloning from `remote` over file://, which honours --depth as a network remote does."""
+    app = _FakeApp(path)
+    app.config.repo = remote.as_uri()
+    return AppRepository(app)
+
+
+def test_release_install_clones_a_full_commit_without_its_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A full clone of a large app like erpnext does not finish."""
+    _set_dev_install(monkeypatch, False)
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+    first = GitRepo(remote)._run("rev-parse", "HEAD~1").stdout.strip()
+
+    _repository_of(remote, tmp_path / "app").clone_rev(first)
+
+    clone = GitRepo(tmp_path / "app")
+    assert clone.head_sha == first
+    assert clone.is_shallow
+
+
+def test_a_short_commit_is_found_in_the_full_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_dev_install(monkeypatch, False)
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+    first = GitRepo(remote)._run("rev-parse", "HEAD~1").stdout.strip()
+
+    _repository_of(remote, tmp_path / "app").clone_rev(first[:7])
+
+    assert GitRepo(tmp_path / "app").head_sha == first
+
+
+def test_a_missing_commit_leaves_no_clone_behind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_dev_install(monkeypatch, False)
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+
+    with pytest.raises(BenchError, match="not found"):
+        _repository_of(remote, tmp_path / "app").clone_rev("0" * 40)
+
+    assert not (tmp_path / "app").exists()
