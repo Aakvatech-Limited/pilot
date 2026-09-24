@@ -213,7 +213,7 @@ const formatTime = (time) =>
     </div>
 
     <section class="mt-4 overflow-hidden rounded-6 border border-outline-gray-2">
-      <p class="flex items-center justify-between border-b border-outline-gray-2 px-5 py-3 text-sm">
+      <p class="flex items-center justify-between border-b border-outline-gray-2 p-3 text-sm">
         <span class="text-base-medium text-ink-gray-8">{{ __("Top pages") }}</span>
 
         <span class="text-ink-gray-5">{{ __("Requests") }}</span>
