@@ -66,7 +66,7 @@ def test_switch_branch_returns_to_the_old_branch_when_the_new_one_is_broken(tmp_
     ):
         _task(bench).run()
 
-    assert mock_switch.call_args_list == [call("develop"), call("main")]
+    assert mock_switch.call_args_list == [call("develop", force=False), call("main")]
     mock_install.assert_not_called()
 
 
@@ -104,5 +104,30 @@ def test_switch_branch_rolls_back_when_a_check_itself_fails(tmp_path: Path) -> N
     ):
         _task(bench).run()
 
-    assert mock_switch.call_args_list == [call("develop"), call("main")]
+    assert mock_switch.call_args_list == [call("develop", force=False), call("main")]
     mock_install.assert_not_called()
+
+
+def test_switch_branch_passes_force_to_checkout(tmp_path: Path) -> None:
+    bench = make_bench(tmp_path)
+    bench.create_directories()
+    _write_app(bench, '[{"doctype": "Role"}]\n')
+    task = SwitchBranchTask(
+        bench=bench,
+        bench_root=bench.path,
+        name="myapp",
+        branch="develop",
+        force=True,
+    )
+
+    with (
+        patch.object(App, "head_sha", "abc1234"),
+        patch.object(App, "current_branch", "main"),
+        patch.object(App, "switch_branch") as mock_switch,
+        patch.object(App, "record_branch"),
+        patch.object(PythonEnvManager, "install_app"),
+        patch.object(PythonEnvManager, "build_assets_for_app"),
+    ):
+        task.run()
+
+    mock_switch.assert_called_once_with("develop", force=True)
