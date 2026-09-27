@@ -127,6 +127,12 @@ class GitRepo:
     def stash_pop(self) -> None:
         self._run("stash", "pop")
 
+    def discard_local_changes(self) -> bool:
+        """Discard tracked and untracked working-tree changes."""
+        reset = self._run("reset", "--hard")
+        clean = self._run("clean", "-fd")
+        return reset.returncode == 0 and clean.returncode == 0
+
     def checkout_new_branch(self, branch: str, start_point: str) -> bool:
         """Create (or reset) `branch` to start at `start_point` and check it out."""
         return self._run("checkout", "-B", branch, start_point).returncode == 0
