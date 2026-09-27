@@ -292,6 +292,10 @@ class AppRepository:
             if stashed:
                 repo.stash_pop()
             raise BenchError(f"Could not switch '{self.app.config.name}' to branch '{branch}'.")
+        if not repo.configure_tracking_branch(branch):
+            raise BenchError(
+                f"Switched '{self.app.config.name}' to '{branch}', but could not update its Git tracking configuration."
+            )
         self.app.config.branch = branch
 
     def checkout_pinned_target(self, pin: RevisionPin) -> None:
