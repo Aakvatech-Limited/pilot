@@ -11,6 +11,7 @@ class SwitchBranchTask(Task):
 
     name: str
     branch: str
+    force: bool = False
 
     def run(self) -> None:
         from pilot.managers.environment import PythonEnvManager
@@ -38,7 +39,7 @@ class SwitchBranchTask(Task):
         from pilot.exceptions import BenchError
 
         try:
-            app.switch_branch(self.branch)
+            app.switch_branch(self.branch, force=self.force)
         except BenchError as exc:
             print(str(exc))
             sys.exit(1)
