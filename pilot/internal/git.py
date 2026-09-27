@@ -141,6 +141,33 @@ class GitRepo:
         """Point origin at *url*; returns False instead of raising on failure."""
         return self._run("remote", "set-url", "origin", url).returncode == 0
 
+    def configure_tracking_branch(self, branch: str) -> bool:
+        """Keep .git/config aligned with a branch switch.
+
+        A clone made with --single-branch stores one narrow remote.origin.fetch
+        refspec. Replace that stale refspec with the selected branch. Full clones
+        already using refs/heads/* keep their broad fetch configuration.
+        """
+        target = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
+        fetches = self._run("config", "--get-all", "remote.origin.fetch")
+        values = [line.strip() for line in fetches.stdout.splitlines() if line.strip()]
+
+        if not any("refs/heads/*:refs/remotes/origin/*" in value for value in values):
+            if len(values) == 1 and values[0].startswith("+refs/heads/"):
+                result = self._run("config", "--replace-all", "remote.origin.fetch", target)
+            elif target not in values:
+                result = self._run("config", "--add", "remote.origin.fetch", target)
+            else:
+                result = subprocess.CompletedProcess([], returncode=0, stdout="", stderr="")
+            if result.returncode != 0:
+                return False
+
+        if self._run("config", f"branch.{branch}.remote", "origin").returncode != 0:
+            return False
+        return (
+            self._run("config", f"branch.{branch}.merge", f"refs/heads/{branch}").returncode == 0
+        )
+
     @property
     def tag_at_head(self) -> str:
         """Tag pointing exactly at HEAD, or '' when HEAD isn't on a tag."""
