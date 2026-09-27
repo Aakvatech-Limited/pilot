@@ -310,6 +310,12 @@ def test_switch_branch_fetches_remote_tracking_ref_for_single_branch_clone(tmp_p
     clone = GitRepo(tmp_path / "app")
     assert clone.branch == "version-16-hotfix"
     assert clone.tracking_sha("version-16-hotfix")
+    fetches = clone._run("config", "--get-all", "remote.origin.fetch").stdout.splitlines()
+    assert fetches == [
+        "+refs/heads/version-16-hotfix:refs/remotes/origin/version-16-hotfix"
+    ]
+    assert clone._text("config", "branch.version-16-hotfix.remote") == "origin"
+    assert clone._text("config", "branch.version-16-hotfix.merge") == "refs/heads/version-16-hotfix"
     assert repo.app.config.branch == "version-16-hotfix"
 
 
@@ -331,3 +337,19 @@ def test_force_switch_discards_local_changes(tmp_path: Path) -> None:
     assert GitRepo(app_path).branch == "version-16-hotfix"
     assert not (app_path / "untracked").exists()
     assert not GitRepo(app_path).has_local_changes
+
+
+def test_switch_branch_keeps_wildcard_fetch_refspec(tmp_path: Path) -> None:
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+    _git(remote, "branch", "version-16-hotfix")
+    subprocess.run(["git", "clone", "-q", remote.as_uri(), str(tmp_path / "app")], check=True)
+
+    repo = _repository_of(remote, tmp_path / "app")
+    repo.app.is_cloned = True
+    repo.switch_branch("version-16-hotfix")
+
+    clone = GitRepo(tmp_path / "app")
+    fetches = clone._run("config", "--get-all", "remote.origin.fetch").stdout.splitlines()
+    assert "+refs/heads/*:refs/remotes/origin/*" in fetches
+    assert clone._text("config", "branch.version-16-hotfix.remote") == "origin"
+    assert clone._text("config", "branch.version-16-hotfix.merge") == "refs/heads/version-16-hotfix"
