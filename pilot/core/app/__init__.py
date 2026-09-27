@@ -219,8 +219,8 @@ class App:
     def update(self, pin: RevisionPin | None = None) -> None:
         self._repository.update(pin)
 
-    def switch_branch(self, branch: str) -> None:
-        self._repository.switch_branch(branch)
+    def switch_branch(self, branch: str, *, force: bool = False) -> None:
+        self._repository.switch_branch(branch, force=force)
 
     def checkout_commit(self, sha: str) -> None:
         """Check out a specific commit SHA, refetching it from origin if needed."""
