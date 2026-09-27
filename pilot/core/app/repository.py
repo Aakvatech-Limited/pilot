@@ -268,15 +268,26 @@ class AppRepository:
             ]
         )
 
-    def switch_branch(self, branch: str) -> None:
+    def switch_branch(self, branch: str, *, force: bool = False) -> None:
         if not self.app.is_cloned:
             raise BenchError(f"'{self.app.config.name}' is not cloned at {self.app.path}")
 
         repo = self.repo
         self._sync_remote_url()
-        repo.fetch("+refs/heads/*:refs/remotes/origin/*")
+        if not repo.fetch(f"+refs/heads/{branch}:refs/remotes/origin/{branch}"):
+            raise BenchError(
+                f"Could not fetch branch '{branch}' for '{self.app.config.name}'. "
+                "Check that the branch exists and the repository credentials are valid."
+            )
         repo.abort_merge_rebase()
-        stashed = repo.stash_all()
+
+        stashed = False
+        if force:
+            if not repo.discard_local_changes():
+                raise BenchError(f"Could not discard local changes for '{self.app.config.name}'.")
+        else:
+            stashed = repo.stash_all()
+
         if not repo.checkout_new_branch(branch, f"origin/{branch}"):
             if stashed:
                 repo.stash_pop()
