@@ -293,3 +293,41 @@ def test_files_already_at_the_app_path_are_kept(tmp_path: Path, monkeypatch: pyt
         _repository_of(remote, tmp_path / "app").clone_rev("0" * 40)
 
     assert (tmp_path / "app" / "notes").read_text() == "not ours"
+
+
+def test_switch_branch_fetches_remote_tracking_ref_for_single_branch_clone(tmp_path: Path) -> None:
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+    _git(remote, "branch", "version-16-hotfix")
+    subprocess.run(
+        ["git", "clone", "-q", "--single-branch", "--branch", "main", remote.as_uri(), str(tmp_path / "app")],
+        check=True,
+    )
+
+    repo = _repository_of(remote, tmp_path / "app")
+    repo.app.is_cloned = True
+    repo.switch_branch("version-16-hotfix")
+
+    clone = GitRepo(tmp_path / "app")
+    assert clone.branch == "version-16-hotfix"
+    assert clone.tracking_sha("version-16-hotfix")
+    assert repo.app.config.branch == "version-16-hotfix"
+
+
+def test_force_switch_discards_local_changes(tmp_path: Path) -> None:
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+    _git(remote, "branch", "version-16-hotfix")
+    subprocess.run(
+        ["git", "clone", "-q", "--single-branch", "--branch", "main", remote.as_uri(), str(tmp_path / "app")],
+        check=True,
+    )
+    app_path = tmp_path / "app"
+    (app_path / "file").write_text("local change")
+    (app_path / "untracked").write_text("remove me")
+
+    repo = _repository_of(remote, app_path)
+    repo.app.is_cloned = True
+    repo.switch_branch("version-16-hotfix", force=True)
+
+    assert GitRepo(app_path).branch == "version-16-hotfix"
+    assert not (app_path / "untracked").exists()
+    assert not GitRepo(app_path).has_local_changes
