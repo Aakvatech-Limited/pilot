@@ -151,6 +151,40 @@ def test_update_app_404s_when_not_cloned(tmp_path: Path) -> None:
     assert response.status_code == 404
 
 
+def test_switch_branch_queues_branch_task(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    _make_cloned_app(bench_root, "suite")
+    client = _client(bench_root)
+
+    with patch(
+        "pilot.internal.tasks.runner.task_workers.wake",
+        return_value=False,
+    ):
+        response = client.post(
+            "/api/v1/apps/suite/actions/switch-branch",
+            json={"branch": "version-16-hotfix", "force": True},
+        )
+
+    body = response.get_json()
+    assert response.status_code == 202
+    assert body["command"] == "switch-branch"
+    assert body["args"] == {"name": "suite", "branch": "version-16-hotfix", "force": True}
+
+
+def test_switch_branch_rejects_invalid_branch(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    _make_cloned_app(bench_root, "suite")
+    client = _client(bench_root)
+
+    response = client.post(
+        "/api/v1/apps/suite/actions/switch-branch",
+        json={"branch": "../unsafe"},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["error"]["code"] == "invalid_branch"
+
+
 def test_delete_app_queues_removal(tmp_path: Path) -> None:
     bench_root = tmp_path / "benches" / "current"
     _make_cloned_app(bench_root, "suite")
