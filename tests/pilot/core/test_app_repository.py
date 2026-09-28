@@ -367,6 +367,7 @@ def test_restore_revision_uses_local_commit_when_old_branch_was_deleted_from_ori
     repo.app.is_cloned = True
     previous_sha = GitRepo(tmp_path / "app").head_sha
     repo.switch_branch("version-16-hotfix")
+    _git(remote, "checkout", "version-16-hotfix")
     _git(remote, "branch", "-D", "main")
 
     repo.restore_revision("main", previous_sha, "main")
