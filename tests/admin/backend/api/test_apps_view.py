@@ -171,6 +171,19 @@ def test_switch_branch_queues_branch_task(tmp_path: Path) -> None:
     assert body["args"] == {"name": "suite", "branch": "version-16-hotfix", "force": True}
 
 
+def test_switch_branch_rejects_invalid_app_name_before_path_access(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    client = _client(bench_root)
+
+    response = client.post(
+        "/api/v1/apps/..%2Foutside/actions/switch-branch",
+        json={"branch": "develop"},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["error"]["code"] == "invalid_app"
+
+
 def test_switch_branch_rejects_invalid_branch(tmp_path: Path) -> None:
     bench_root = tmp_path / "benches" / "current"
     _make_cloned_app(bench_root, "suite")
