@@ -176,7 +176,7 @@ def test_switch_branch_rejects_invalid_app_name_before_path_access(tmp_path: Pat
     client = _client(bench_root)
 
     response = client.post(
-        "/api/v1/apps/..%2Foutside/actions/switch-branch",
+        "/api/v1/apps/bad%2Fname/actions/switch-branch",
         json={"branch": "develop"},
     )
 
