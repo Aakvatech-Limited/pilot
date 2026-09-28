@@ -353,3 +353,61 @@ def test_switch_branch_keeps_wildcard_fetch_refspec(tmp_path: Path) -> None:
     assert "+refs/heads/*:refs/remotes/origin/*" in fetches
     assert clone._text("config", "branch.version-16-hotfix.remote") == "origin"
     assert clone._text("config", "branch.version-16-hotfix.merge") == "refs/heads/version-16-hotfix"
+
+
+def test_restore_revision_uses_local_commit_when_old_branch_was_deleted_from_origin(tmp_path: Path) -> None:
+    remote, original_sha = _repo_with_two_commits(tmp_path / "remote")
+    _git(remote, "branch", "version-16-hotfix")
+    subprocess.run(
+        ["git", "clone", "-q", "--single-branch", "--branch", "main", remote.as_uri(), str(tmp_path / "app")],
+        check=True,
+    )
+
+    repo = _repository_of(remote, tmp_path / "app")
+    repo.app.is_cloned = True
+    previous_sha = GitRepo(tmp_path / "app").head_sha
+    repo.switch_branch("version-16-hotfix")
+    _git(remote, "branch", "-D", "main")
+
+    repo.restore_revision("main", previous_sha, "main")
+
+    clone = GitRepo(tmp_path / "app")
+    assert clone.branch == "main"
+    assert clone.head_sha == previous_sha == original_sha
+    assert repo.app.config.branch == "main"
+
+
+def test_tracking_config_failure_restores_previous_checkout_and_stash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+    _git(remote, "branch", "version-16-hotfix")
+    subprocess.run(
+        ["git", "clone", "-q", "--single-branch", "--branch", "main", remote.as_uri(), str(tmp_path / "app")],
+        check=True,
+    )
+    app_path = tmp_path / "app"
+    previous_sha = GitRepo(app_path).head_sha
+    (app_path / "file").write_text("local edit")
+
+    calls = {"count": 0}
+    original = GitRepo.configure_tracking_branch
+
+    def fail_once(self, branch: str) -> bool:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return False
+        return original(self, branch)
+
+    monkeypatch.setattr(GitRepo, "configure_tracking_branch", fail_once)
+    repo = _repository_of(remote, app_path)
+    repo.app.is_cloned = True
+
+    with pytest.raises(BenchError, match="previous revision was restored"):
+        repo.switch_branch("version-16-hotfix")
+
+    clone = GitRepo(app_path)
+    assert clone.branch == "main"
+    assert clone.head_sha == previous_sha
+    assert (app_path / "file").read_text() == "local edit"
+    assert clone._run("stash", "list").stdout.strip() == ""
