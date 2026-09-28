@@ -183,11 +183,7 @@ def switch_branch(name: str):
     if not (bench_root / "apps" / name / ".git").exists():
         return error_response("app_not_found", f"App '{name}' not found.", 404)
 
-    try:
-        task_id = SwitchBranchTask.queue(Bench(bench_root), name=name, branch=branch, force=force)
-    except Exception:
-        return error_response("branch_switch_failed", "Could not start branch switch.", 500)
-
+    task_id = SwitchBranchTask.queue(Bench(bench_root), name=name, branch=branch, force=force)
     return accepted_task_response(bench_root, task_id)
 
 
