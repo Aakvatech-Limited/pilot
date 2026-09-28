@@ -27,8 +27,14 @@ class SwitchBranchTask(Task):
             self.install(env, app)
             self.build_assets(env, app)
             app.record_branch()
-        except Exception:
-            self.rollback(app, env, previous_branch, previous_sha, previous_configured_branch)
+        except Exception as task_error:
+            try:
+                self.rollback(app, env, previous_branch, previous_sha, previous_configured_branch)
+            except Exception as rollback_error:
+                raise ExceptionGroup(
+                    "Branch switch failed and rollback did not complete.",
+                    [task_error, rollback_error],
+                ) from rollback_error
             raise
 
         print(f"'{self.name}' switched to '{self.branch}' successfully.")
@@ -63,15 +69,16 @@ class SwitchBranchTask(Task):
         previous_sha: str,
         previous_configured_branch: str,
     ) -> None:
-        """Best-effort restoration of the exact checkout and environment that
-        were live before the switch."""
-        try:
-            app.restore_revision(previous_branch, previous_sha, previous_configured_branch)
-            app.record_branch()
-            env.install_app(app)
-            env.build_assets_for_app(app)
-        except Exception as rollback_error:
-            print(f"Branch switch rollback failed: {rollback_error}")
+        """Restore the exact checkout and environment that were live before the switch.
+
+        Rollback failures deliberately propagate to the caller so the task can
+        report both the original failure and the incomplete restoration with
+        their full tracebacks.
+        """
+        app.restore_revision(previous_branch, previous_sha, previous_configured_branch)
+        app.record_branch()
+        env.install_app(app)
+        env.build_assets_for_app(app)
 
 
 if __name__ == "__main__":
