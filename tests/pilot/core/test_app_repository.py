@@ -411,3 +411,29 @@ def test_tracking_config_failure_restores_previous_checkout_and_stash(
     assert clone.head_sha == previous_sha
     assert (app_path / "file").read_text() == "local edit"
     assert clone._run("stash", "list").stdout.strip() == ""
+
+
+def test_restore_revision_cleans_dirty_failed_checkout(tmp_path: Path) -> None:
+    remote, _ = _repo_with_two_commits(tmp_path / "remote")
+    _git(remote, "branch", "version-16-hotfix")
+    subprocess.run(
+        ["git", "clone", "-q", "--single-branch", "--branch", "main", remote.as_uri(), str(tmp_path / "app")],
+        check=True,
+    )
+
+    repo = _repository_of(remote, tmp_path / "app")
+    repo.app.is_cloned = True
+    previous_sha = GitRepo(tmp_path / "app").head_sha
+    repo.switch_branch("version-16-hotfix")
+
+    app_path = tmp_path / "app"
+    (app_path / "file").write_text("generated build output")
+    (app_path / "generated.tmp").write_text("generated untracked output")
+
+    repo.restore_revision("main", previous_sha, "main")
+
+    clone = GitRepo(app_path)
+    assert clone.branch == "main"
+    assert clone.head_sha == previous_sha
+    assert not (app_path / "generated.tmp").exists()
+    assert not clone.has_local_changes
