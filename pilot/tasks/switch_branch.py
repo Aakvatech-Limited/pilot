@@ -1,4 +1,3 @@
-import sys
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -17,15 +16,21 @@ class SwitchBranchTask(Task):
         from pilot.managers.environment import PythonEnvManager
 
         app = self.bench.app(self.name)
-        previous_branch, previous_sha = app.current_branch, app.head_sha
-        self.checkout(app)
-        self.validate(app, previous_branch, previous_sha)
-
+        previous_branch = app.current_branch
+        previous_sha = app.head_sha
+        previous_configured_branch = app.config.branch
         env = PythonEnvManager(self.bench)
-        self.install(env, app)
-        self.build_assets(env, app)
 
-        app.record_branch()
+        try:
+            self.checkout(app)
+            self.validate(app)
+            self.install(env, app)
+            self.build_assets(env, app)
+            app.record_branch()
+        except BaseException:
+            self.rollback(app, env, previous_branch, previous_sha, previous_configured_branch)
+            raise
+
         print(f"'{self.name}' switched to '{self.branch}' successfully.")
 
     @on_success
@@ -36,33 +41,11 @@ class SwitchBranchTask(Task):
 
     @step("checkout", lambda self: f"Switch to branch '{self.branch}'")
     def checkout(self, app) -> None:
-        from pilot.exceptions import BenchError
-
-        try:
-            app.switch_branch(self.branch, force=self.force)
-        except BenchError as exc:
-            print(str(exc))
-            sys.exit(1)
+        app.switch_branch(self.branch, force=self.force)
 
     @step("validate", lambda self: f"Validate {self.name} on '{self.branch}'")
-    def validate(self, app, previous_branch: str, previous_sha: str) -> None:
-        """The env installs the app editable, so the branch is live the moment it's
-        checked out - a branch that fails the checks has to go back.
-
-        Restore the branch rather than its commit: a detached HEAD would disagree
-        with the branch bench.toml records. Any BenchError rolls back, not just a
-        validation failure - uv falling over leaves the same live bad branch.
-        """
-        from pilot.exceptions import BenchError
-
-        try:
-            app.validate()
-        except BenchError:
-            if previous_branch:
-                app.switch_branch(previous_branch)
-            else:
-                app.checkout_commit(previous_sha)  # it was already detached
-            raise
+    def validate(self, app) -> None:
+        app.validate()
 
     @step("install", lambda self: f"Reinstall {self.name}")
     def install(self, env, app) -> None:
@@ -71,6 +54,23 @@ class SwitchBranchTask(Task):
     @step("assets", "Build assets")
     def build_assets(self, env, app) -> None:
         env.build_assets_for_app(app)
+
+    def rollback(
+        self,
+        app,
+        env,
+        previous_branch: str,
+        previous_sha: str,
+        previous_configured_branch: str,
+    ) -> None:
+        """Best-effort restoration of the exact checkout and environment that were live before the switch."""
+        try:
+            app.restore_revision(previous_branch, previous_sha, previous_configured_branch)
+            app.record_branch()
+            env.install_app(app)
+            env.build_assets_for_app(app)
+        except Exception as rollback_error:
+            print(f"Branch switch rollback failed: {rollback_error}")
 
 
 if __name__ == "__main__":
