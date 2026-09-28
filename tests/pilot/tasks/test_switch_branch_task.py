@@ -179,3 +179,26 @@ def test_switch_branch_rolls_back_when_asset_build_fails(tmp_path: Path) -> None
         _task(bench).run()
 
     mock_restore.assert_called_once_with("main", "abc1234", ANY)
+
+
+def test_switch_branch_preserves_original_and_rollback_failures(tmp_path: Path) -> None:
+    bench = make_bench(tmp_path)
+    bench.create_directories()
+    _write_app(bench, '[{"doctype": "Role"}]\n')
+
+    task_error = CommandError("validation exploded")
+    rollback_error = CommandError("rollback exploded")
+
+    with (
+        patch.object(App, "head_sha", "abc1234"),
+        patch.object(App, "current_branch", "main"),
+        patch.object(App, "switch_branch"),
+        patch.object(App, "validate", side_effect=task_error),
+        patch.object(App, "restore_revision", side_effect=rollback_error),
+        pytest.raises(ExceptionGroup) as raised,
+    ):
+        _task(bench).run()
+
+    group = raised.value
+    assert "rollback did not complete" in str(group)
+    assert group.exceptions == (task_error, rollback_error)
