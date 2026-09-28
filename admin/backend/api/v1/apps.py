@@ -163,6 +163,10 @@ def update(name: str):
 
 @apps_bp.post("/<name>/actions/switch-branch")
 def switch_branch(name: str):
+    err = validate_app_name(name)
+    if err:
+        return error_response("invalid_app", err, 422)
+
     bench_root = Path(current_app.config["BENCH_ROOT"])
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
