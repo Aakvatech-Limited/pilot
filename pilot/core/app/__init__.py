@@ -226,6 +226,9 @@ class App:
         """Check out a specific commit SHA, refetching it from origin if needed."""
         self._repository.checkout_pinned_commit(sha)
 
+    def restore_revision(self, branch: str, sha: str, configured_branch: str) -> None:
+        self._repository.restore_revision(branch, sha, configured_branch)
+
     def _pyproject(self) -> dict:
         """Parsed pyproject.toml, or an empty dict when it is missing or malformed."""
         import tomllib
