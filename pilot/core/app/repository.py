@@ -298,6 +298,23 @@ class AppRepository:
             )
         self.app.config.branch = branch
 
+    def restore_revision(self, branch: str, sha: str, configured_branch: str) -> None:
+        """Restore the exact pre-switch checkout and branch tracking without network access."""
+        repo = self.repo
+        restored = repo.checkout_new_branch(branch, sha) if branch else repo.checkout_detached(sha)
+        if not restored:
+            raise BenchError(
+                f"Could not restore '{self.app.config.name}' to its previous revision {sha[:8]}."
+            )
+
+        tracking_branch = branch or configured_branch
+        if tracking_branch and not self.is_commit_hash(tracking_branch):
+            if not repo.configure_tracking_branch(tracking_branch):
+                raise BenchError(
+                    f"Restored '{self.app.config.name}' checkout but could not restore its Git tracking configuration."
+                )
+        self.app.config.branch = configured_branch
+
     def checkout_pinned_target(self, pin: RevisionPin) -> None:
         if pin.kind == "tag":
             self._sync_remote_url()
