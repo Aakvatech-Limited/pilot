@@ -60,7 +60,7 @@ const loadBranches = async () => {
     loadedFor.value = target
     branch.value =
       (branches.value.includes(app.branch) && app.branch) ||
-      result.default_branch ||
+      (branches.value.includes(result.default_branch) && result.default_branch) ||
       branches.value[0] ||
       ''
   } catch (caught) {
