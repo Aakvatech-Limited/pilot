@@ -137,6 +137,10 @@ class GitRepo:
         """Create (or reset) `branch` to start at `start_point` and check it out."""
         return self._run("checkout", "-B", branch, start_point).returncode == 0
 
+    def checkout_detached(self, ref: str) -> bool:
+        """Check out an exact revision without attaching it to a branch."""
+        return self._run("checkout", "--detach", ref).returncode == 0
+
     def set_remote_url(self, url: str) -> bool:
         """Point origin at *url*; returns False instead of raising on failure."""
         return self._run("remote", "set-url", "origin", url).returncode == 0
