@@ -27,7 +27,7 @@ class SwitchBranchTask(Task):
             self.install(env, app)
             self.build_assets(env, app)
             app.record_branch()
-        except BaseException:
+        except Exception:
             self.rollback(app, env, previous_branch, previous_sha, previous_configured_branch)
             raise
 
@@ -63,7 +63,8 @@ class SwitchBranchTask(Task):
         previous_sha: str,
         previous_configured_branch: str,
     ) -> None:
-        """Best-effort restoration of the exact checkout and environment that were live before the switch."""
+        """Best-effort restoration of the exact checkout and environment that
+        were live before the switch."""
         try:
             app.restore_revision(previous_branch, previous_sha, previous_configured_branch)
             app.record_branch()
