@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import ANY, call, patch
 
 import pytest
 
@@ -50,9 +50,7 @@ def test_switch_branch_installs_a_branch_that_validates(tmp_path: Path) -> None:
     mock_build.assert_called_once()
 
 
-def test_switch_branch_returns_to_the_old_branch_when_the_new_one_is_broken(tmp_path: Path) -> None:
-    """Back to the branch, not its commit - a detached HEAD would disagree with
-    the branch bench.toml records."""
+def test_switch_branch_returns_to_the_exact_old_branch_when_the_new_one_is_broken(tmp_path: Path) -> None:
     bench = make_bench(tmp_path)
     bench.create_directories()
     _write_app(bench, "{not json\n")
@@ -61,16 +59,19 @@ def test_switch_branch_returns_to_the_old_branch_when_the_new_one_is_broken(tmp_
         patch.object(App, "head_sha", "abc1234"),
         patch.object(App, "current_branch", "main"),
         patch.object(App, "switch_branch") as mock_switch,
-        patch.object(PythonEnvManager, "install_app") as mock_install,
+        patch.object(App, "restore_revision") as mock_restore,
+        patch.object(App, "record_branch"),
+        patch.object(PythonEnvManager, "install_app"),
+        patch.object(PythonEnvManager, "build_assets_for_app"),
         pytest.raises(AppValidationError, match=r"fixtures/role\.json"),
     ):
         _task(bench).run()
 
-    assert mock_switch.call_args_list == [call("develop", force=False), call("main")]
-    mock_install.assert_not_called()
+    mock_switch.assert_called_once_with("develop", force=False)
+    mock_restore.assert_called_once_with("main", "abc1234", ANY)
 
 
-def test_switch_branch_returns_to_the_old_commit_when_head_was_detached(tmp_path: Path) -> None:
+def test_switch_branch_returns_to_the_exact_old_commit_when_head_was_detached(tmp_path: Path) -> None:
     bench = make_bench(tmp_path)
     bench.create_directories()
     _write_app(bench, "{not json\n")
@@ -79,17 +80,18 @@ def test_switch_branch_returns_to_the_old_commit_when_head_was_detached(tmp_path
         patch.object(App, "head_sha", "abc1234"),
         patch.object(App, "current_branch", ""),
         patch.object(App, "switch_branch"),
-        patch.object(App, "checkout_commit") as mock_checkout,
+        patch.object(App, "restore_revision") as mock_restore,
+        patch.object(App, "record_branch"),
+        patch.object(PythonEnvManager, "install_app"),
+        patch.object(PythonEnvManager, "build_assets_for_app"),
         pytest.raises(AppValidationError, match=r"fixtures/role\.json"),
     ):
         _task(bench).run()
 
-    mock_checkout.assert_called_once_with("abc1234")
+    mock_restore.assert_called_once_with("", "abc1234", ANY)
 
 
 def test_switch_branch_rolls_back_when_a_check_itself_fails(tmp_path: Path) -> None:
-    """A check can die on its own tooling - uv falling over leaves the same live
-    bad branch as a validation failure does."""
     bench = make_bench(tmp_path)
     bench.create_directories()
     _write_app(bench, '[{"doctype": "Role"}]\n')
@@ -97,15 +99,17 @@ def test_switch_branch_rolls_back_when_a_check_itself_fails(tmp_path: Path) -> N
     with (
         patch.object(App, "head_sha", "abc1234"),
         patch.object(App, "current_branch", "main"),
-        patch.object(App, "switch_branch") as mock_switch,
+        patch.object(App, "switch_branch"),
         patch.object(App, "validate", side_effect=CommandError("uv exploded")),
-        patch.object(PythonEnvManager, "install_app") as mock_install,
+        patch.object(App, "restore_revision") as mock_restore,
+        patch.object(App, "record_branch"),
+        patch.object(PythonEnvManager, "install_app"),
+        patch.object(PythonEnvManager, "build_assets_for_app"),
         pytest.raises(CommandError),
     ):
         _task(bench).run()
 
-    assert mock_switch.call_args_list == [call("develop", force=False), call("main")]
-    mock_install.assert_not_called()
+    mock_restore.assert_called_once_with("main", "abc1234", ANY)
 
 
 def test_switch_branch_passes_force_to_checkout(tmp_path: Path) -> None:
@@ -131,3 +135,47 @@ def test_switch_branch_passes_force_to_checkout(tmp_path: Path) -> None:
         task.run()
 
     mock_switch.assert_called_once_with("develop", force=True)
+
+
+def test_switch_branch_rolls_back_when_install_fails(tmp_path: Path) -> None:
+    bench = make_bench(tmp_path)
+    bench.create_directories()
+    _write_app(bench, '[{"doctype": "Role"}]\n')
+
+    with (
+        patch.object(App, "head_sha", "abc1234"),
+        patch.object(App, "current_branch", "main"),
+        patch.object(App, "switch_branch"),
+        patch.object(App, "restore_revision") as mock_restore,
+        patch.object(App, "record_branch"),
+        patch.object(PythonEnvManager, "install_app", side_effect=[CommandError("install failed"), None]),
+        patch.object(PythonEnvManager, "build_assets_for_app"),
+        pytest.raises(CommandError, match="install failed"),
+    ):
+        _task(bench).run()
+
+    mock_restore.assert_called_once_with("main", "abc1234", ANY)
+
+
+def test_switch_branch_rolls_back_when_asset_build_fails(tmp_path: Path) -> None:
+    bench = make_bench(tmp_path)
+    bench.create_directories()
+    _write_app(bench, '[{"doctype": "Role"}]\n')
+
+    with (
+        patch.object(App, "head_sha", "abc1234"),
+        patch.object(App, "current_branch", "main"),
+        patch.object(App, "switch_branch"),
+        patch.object(App, "restore_revision") as mock_restore,
+        patch.object(App, "record_branch"),
+        patch.object(PythonEnvManager, "install_app"),
+        patch.object(
+            PythonEnvManager,
+            "build_assets_for_app",
+            side_effect=[CommandError("build failed"), None],
+        ),
+        pytest.raises(CommandError, match="build failed"),
+    ):
+        _task(bench).run()
+
+    mock_restore.assert_called_once_with("main", "abc1234", ANY)
