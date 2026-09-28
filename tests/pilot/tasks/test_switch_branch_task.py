@@ -112,6 +112,27 @@ def test_switch_branch_rolls_back_when_a_check_itself_fails(tmp_path: Path) -> N
     mock_restore.assert_called_once_with("main", "abc1234", ANY)
 
 
+def test_same_commit_failure_still_rolls_back_after_completed_checkout(tmp_path: Path) -> None:
+    bench = make_bench(tmp_path)
+    bench.create_directories()
+    _write_app(bench, '[{"doctype": "Role"}]\n')
+
+    with (
+        patch.object(App, "head_sha", "abc1234"),
+        patch.object(App, "current_branch", "main"),
+        patch.object(App, "switch_branch"),
+        patch.object(App, "validate"),
+        patch.object(App, "restore_revision") as mock_restore,
+        patch.object(App, "record_branch"),
+        patch.object(PythonEnvManager, "install_app", side_effect=[CommandError("install failed"), None]),
+        patch.object(PythonEnvManager, "build_assets_for_app"),
+        pytest.raises(CommandError, match="install failed"),
+    ):
+        _task(bench).run()
+
+    mock_restore.assert_called_once_with("main", "abc1234", ANY)
+
+
 def test_switch_branch_passes_force_to_checkout(tmp_path: Path) -> None:
     bench = make_bench(tmp_path)
     bench.create_directories()
