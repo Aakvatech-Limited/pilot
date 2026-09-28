@@ -28,13 +28,19 @@ class SwitchBranchTask(Task):
             self.build_assets(env, app)
             app.record_branch()
         except Exception as task_error:
-            try:
-                self.rollback(app, env, previous_branch, previous_sha, previous_configured_branch)
-            except Exception as rollback_error:
-                raise ExceptionGroup(
-                    "Branch switch failed and rollback did not complete.",
-                    [task_error, rollback_error],
-                ) from rollback_error
+            if self._checkout_changed(
+                app,
+                previous_branch,
+                previous_sha,
+                previous_configured_branch,
+            ):
+                try:
+                    self.rollback(app, env, previous_branch, previous_sha, previous_configured_branch)
+                except Exception as rollback_error:
+                    raise ExceptionGroup(
+                        "Branch switch failed and rollback did not complete.",
+                        [task_error, rollback_error],
+                    ) from rollback_error
             raise
 
         print(f"'{self.name}' switched to '{self.branch}' successfully.")
@@ -60,6 +66,20 @@ class SwitchBranchTask(Task):
     @step("assets", "Build assets")
     def build_assets(self, env, app) -> None:
         env.build_assets_for_app(app)
+
+    @staticmethod
+    def _checkout_changed(
+        app,
+        previous_branch: str,
+        previous_sha: str,
+        previous_configured_branch: str,
+    ) -> bool:
+        """Whether the failed operation changed the live app checkout/config."""
+        return (
+            app.current_branch != previous_branch
+            or app.head_sha != previous_sha
+            or app.config.branch != previous_configured_branch
+        )
 
     def rollback(
         self,
