@@ -202,3 +202,26 @@ def test_switch_branch_preserves_original_and_rollback_failures(tmp_path: Path) 
     group = raised.value
     assert "rollback did not complete" in str(group)
     assert group.exceptions == (task_error, rollback_error)
+
+
+def test_switch_branch_fetch_failure_skips_rollback_reinstall_and_assets(tmp_path: Path) -> None:
+    bench = make_bench(tmp_path)
+    bench.create_directories()
+    _write_app(bench, '[{"doctype": "Role"}]\n')
+
+    fetch_error = CommandError("fetch failed")
+
+    with (
+        patch.object(App, "head_sha", "abc1234"),
+        patch.object(App, "current_branch", "main"),
+        patch.object(App, "switch_branch", side_effect=fetch_error),
+        patch.object(App, "restore_revision") as mock_restore,
+        patch.object(PythonEnvManager, "install_app") as mock_install,
+        patch.object(PythonEnvManager, "build_assets_for_app") as mock_build,
+        pytest.raises(CommandError, match="fetch failed"),
+    ):
+        _task(bench).run()
+
+    mock_restore.assert_not_called()
+    mock_install.assert_not_called()
+    mock_build.assert_not_called()
