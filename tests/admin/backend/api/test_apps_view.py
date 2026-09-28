@@ -184,6 +184,22 @@ def test_switch_branch_rejects_invalid_app_name_before_path_access(tmp_path: Pat
     assert response.get_json()["error"]["code"] == "invalid_app"
 
 
+def test_switch_branch_rejects_traversal_app_name(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    client = _client(bench_root)
+
+    with patch("admin.backend.api.v1.apps.SwitchBranchTask.queue") as queue:
+        response = client.post(
+            "/api/v1/apps/..%2Foutside/actions/switch-branch",
+            json={"branch": "develop"},
+        )
+
+    # Werkzeug may reject the decoded slash at routing level before the view is
+    # reached. Either way, traversal must never reach task queueing.
+    assert response.status_code in {404, 405, 422}
+    queue.assert_not_called()
+
+
 def test_switch_branch_rejects_invalid_branch(tmp_path: Path) -> None:
     bench_root = tmp_path / "benches" / "current"
     _make_cloned_app(bench_root, "suite")
