@@ -273,6 +273,10 @@ class AppRepository:
             raise BenchError(f"'{self.app.config.name}' is not cloned at {self.app.path}")
 
         repo = self.repo
+        previous_branch = repo.branch
+        previous_sha = repo.head_sha
+        previous_configured_branch = self.app.config.branch
+
         self._sync_remote_url()
         if not repo.fetch(f"+refs/heads/{branch}:refs/remotes/origin/{branch}"):
             raise BenchError(
@@ -292,10 +296,26 @@ class AppRepository:
             if stashed:
                 repo.stash_pop()
             raise BenchError(f"Could not switch '{self.app.config.name}' to branch '{branch}'.")
+
         if not repo.configure_tracking_branch(branch):
+            try:
+                self.restore_revision(
+                    previous_branch,
+                    previous_sha,
+                    previous_configured_branch,
+                )
+                if stashed:
+                    repo.stash_pop()
+            except Exception as rollback_error:
+                raise BenchError(
+                    f"Switched '{self.app.config.name}' to '{branch}', but could not update its Git "
+                    f"tracking configuration or restore the previous revision: {rollback_error}"
+                ) from rollback_error
             raise BenchError(
-                f"Switched '{self.app.config.name}' to '{branch}', but could not update its Git tracking configuration."
+                f"Could not update Git tracking for '{self.app.config.name}' on branch '{branch}'. "
+                "The previous revision was restored."
             )
+
         self.app.config.branch = branch
 
     def restore_revision(self, branch: str, sha: str, configured_branch: str) -> None:
