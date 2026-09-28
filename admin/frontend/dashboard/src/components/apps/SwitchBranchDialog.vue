@@ -30,37 +30,62 @@ const force = ref(false)
 const loadingBranches = ref(false)
 const submitting = ref(false)
 const error = ref('')
+const loadedFor = ref('')
+let branchRequest = 0
 
 const branchOptions = computed(() => branches.value.map((value) => ({ label: value, value })))
+const currentTarget = computed(() => (props.app ? `${props.app.name}\n${props.app.repo}` : ''))
+const canSubmit = computed(
+  () =>
+    Boolean(props.app) &&
+    !loadingBranches.value &&
+    loadedFor.value === currentTarget.value &&
+    branches.value.includes(branch.value),
+)
 
 const loadBranches = async () => {
-  if (!props.app?.repo) return
+  const app = props.app
+  if (!app?.repo) return
+  const requestId = ++branchRequest
+  const target = `${app.name}\n${app.repo}`
   loadingBranches.value = true
   error.value = ''
+  loadedFor.value = ''
+  branches.value = []
+  branch.value = ''
   try {
-    const result = await gitApi.branches(props.app.repo)
+    const result = await gitApi.branches(app.repo)
+    if (requestId !== branchRequest || target !== currentTarget.value || !open.value) return
     branches.value = result.branches || []
-    branch.value = props.app.branch || result.default_branch || branches.value[0] || ''
+    loadedFor.value = target
+    branch.value =
+      (branches.value.includes(app.branch) && app.branch) ||
+      result.default_branch ||
+      branches.value[0] ||
+      ''
   } catch (caught) {
+    if (requestId !== branchRequest || target !== currentTarget.value || !open.value) return
     error.value = errorMessage(caught, 'Could not load repository branches.')
   } finally {
-    loadingBranches.value = false
+    if (requestId === branchRequest) loadingBranches.value = false
   }
 }
 
 watch(
   () => [open.value, props.app] as const,
   ([isOpen]) => {
-    if (!isOpen) return
+    branchRequest += 1
     force.value = false
     branches.value = []
-    branch.value = props.app?.branch || ''
-    loadBranches()
+    branch.value = ''
+    loadedFor.value = ''
+    error.value = ''
+    if (isOpen) loadBranches()
   },
 )
 
 const submit = async () => {
-  if (!props.app || !branch.value || submitting.value) return
+  if (!props.app || !canSubmit.value || submitting.value) return
   submitting.value = true
   error.value = ''
   try {
@@ -105,7 +130,7 @@ const submit = async () => {
 
       <div class="flex justify-end gap-2 mt-2">
         <Button @click="open = false">Cancel</Button>
-        <Button type="submit" variant="solid" :loading="submitting" :disabled="!branch">
+        <Button type="submit" variant="solid" :loading="submitting" :disabled="!canSubmit">
           Switch branch
         </Button>
       </div>
