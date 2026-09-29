@@ -734,6 +734,7 @@ class MariaDBManager(UserOwnedDBManager):
             "Description=MariaDB (pilot, user-owned)\n\n"
             "[Service]\n"
             "Type=simple\n"
+            f"ExecStartPre=-{cli_root() / 'bin' / 'pilot'} admin database-tune\n"
             # --defaults-file must be the first argument; it makes mariadbd
             # skip every system default file instead of layering over them.
             f"ExecStart={mariadbd} --defaults-file={self.my_cnf_path}\n"
@@ -749,6 +750,17 @@ class MariaDBManager(UserOwnedDBManager):
         unit_dir.mkdir(parents=True, exist_ok=True)
         self.unit_path.write_text(content)
         run_command(self._systemctl("daemon-reload"), env=self._systemctl_env())
+
+    def tune_to_host(self) -> MariaDBMemorySizing:
+        """Resize my.cnf and the unit memory limits for this host's memory.
+
+        Runs as the unit's ExecStartPre, so it takes no action lock: a quick action
+        holds that lock while it restarts MariaDB.
+        """
+        self._require_linux_managed_server()
+        sizing = self._write_config()
+        self._install_unit(sizing)
+        return sizing
 
     def is_reachable(self) -> bool:
         if not self.is_running():
