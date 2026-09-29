@@ -5,8 +5,12 @@ import logging
 import threading
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from flask import Flask
+
+if TYPE_CHECKING:
+    from pilot.config import BenchConfig
 
 _POLL_SECONDS = 0.1
 
@@ -84,6 +88,27 @@ def install_central_bootstrap_watcher(app: Flask, bench_root: Path) -> CentralBo
     return watcher
 
 
+def tune_database(config: "BenchConfig") -> None:
+    """Size Pilot's MariaDB for this VM once: the image was built on a host with other memory.
+
+    A failure is logged, not raised, so the credential still lands.
+    """
+    from pilot.exceptions import DatabaseError
+    from pilot.managers.database.mariadb import MariaDBManager
+
+    if config.db_type != "mariadb":
+        return
+    try:
+        sizing = MariaDBManager(config.mariadb).tune_to_host()
+    except DatabaseError as error:
+        logging.warning("Skipped sizing MariaDB for this host: %s", error)
+        return
+    except Exception:
+        logging.exception("Could not size MariaDB for this host")
+        return
+    logging.info("Sized MariaDB for %s MiB of host memory.", sizing.total_memory_mb)
+
+
 def main() -> None:
     """Apply the Central credential at boot."""
     parser = argparse.ArgumentParser(description="Apply this host's Central credential.")
@@ -98,6 +123,7 @@ def main() -> None:
         logging.info("This host is not awaiting a Central credential.")
         return
 
+    tune_database(config)
     CentralBootstrapWatcher(args.bench_root).run_until_applied()
     logging.info("Central bootstrap applied; this host is configured.")
 
