@@ -11,6 +11,7 @@ from admin.backend.central_bootstrap import (
     CentralBootstrapWatcher,
     install_central_bootstrap_watcher,
     main,
+    tune_database,
 )
 from admin.backend.internal.jwks_cache import JwksCache
 from pilot.config import BenchConfig
@@ -289,33 +290,32 @@ def test_boot_run_leaves_mariadb_alone_once_bootstrapped(tmp_path: Path, mariadb
     mariadb_manager.return_value.tune_to_host.assert_not_called()
 
 
-def test_a_mariadb_pilot_cannot_manage_is_skipped(tmp_path: Path, mariadb_manager, caplog) -> None:
+@pytest.mark.parametrize(
+    "error",
+    [
+        DatabaseError("MariaDB did not become healthy within 30s."),
+        RuntimeError("systemctl failed"),
+    ],
+)
+def test_a_failed_sizing_blocks_the_credential(tmp_path: Path, mariadb_manager, error: Exception) -> None:
     bench_root = _awaiting_host(tmp_path)
-    mariadb_manager.return_value.tune_to_host.side_effect = DatabaseError(
-        "Pilot cannot change an external MariaDB server."
-    )
+    mariadb_manager.return_value.tune_to_host.side_effect = error
 
     with (
-        caplog.at_level("WARNING"),
         _staged(json.dumps(_ATTRIBUTE)),
         patch("sys.argv", ["central_bootstrap", "--bench-root", str(bench_root)]),
+        pytest.raises(type(error)),
     ):
         main()
 
-    assert "Skipped sizing MariaDB for this host: Pilot cannot change an external MariaDB server." in caplog.text
-    assert BenchConfig.read(bench_root).central.bootstrapped is True
+    assert BenchConfig.read(bench_root).central.bootstrapped is False
 
 
-def test_a_failed_sizing_still_applies_the_credential(tmp_path: Path, mariadb_manager, caplog) -> None:
+def test_a_postgres_bench_needs_no_sizing(tmp_path: Path, mariadb_manager) -> None:
     bench_root = _awaiting_host(tmp_path)
-    mariadb_manager.return_value.tune_to_host.side_effect = RuntimeError("restart failed")
+    config = BenchConfig.read(bench_root, validate=False)
+    config.db_type = "postgres"
 
-    with (
-        caplog.at_level("ERROR"),
-        _staged(json.dumps(_ATTRIBUTE)),
-        patch("sys.argv", ["central_bootstrap", "--bench-root", str(bench_root)]),
-    ):
-        main()
+    tune_database(config)
 
-    assert "Could not size MariaDB" in caplog.text
-    assert BenchConfig.read(bench_root).central.bootstrapped is True
+    mariadb_manager.assert_not_called()

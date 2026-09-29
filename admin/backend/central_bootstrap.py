@@ -91,21 +91,13 @@ def install_central_bootstrap_watcher(app: Flask, bench_root: Path) -> CentralBo
 def tune_database(config: "BenchConfig") -> None:
     """Size Pilot's MariaDB for this VM once: the image was built on a host with other memory.
 
-    A failure is logged, not raised, so the credential still lands.
+    A failure is raised, so the credential never lands on a host without a working database.
     """
-    from pilot.exceptions import DatabaseError
     from pilot.managers.database.mariadb import MariaDBManager
 
     if config.db_type != "mariadb":
         return
-    try:
-        sizing = MariaDBManager(config.mariadb).tune_to_host()
-    except DatabaseError as error:
-        logging.warning("Skipped sizing MariaDB for this host: %s", error)
-        return
-    except Exception:
-        logging.exception("Could not size MariaDB for this host")
-        return
+    sizing = MariaDBManager(config.mariadb).tune_to_host()
     logging.info("Sized MariaDB for %s MiB of host memory.", sizing.total_memory_mb)
 
 
