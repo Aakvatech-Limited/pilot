@@ -319,3 +319,16 @@ def test_a_postgres_bench_needs_no_sizing(tmp_path: Path, mariadb_manager) -> No
     tune_database(config)
 
     mariadb_manager.assert_not_called()
+
+
+def test_an_external_mariadb_does_not_block_the_credential(tmp_path: Path, mariadb_manager) -> None:
+    bench_root = _awaiting_host(tmp_path)
+    common = CommonConfig.read(bench_root.parent)
+    common.mariadb.existing = True
+    common.write(bench_root.parent)
+
+    with _staged(json.dumps(_ATTRIBUTE)), patch("sys.argv", ["central_bootstrap", "--bench-root", str(bench_root)]):
+        main()
+
+    mariadb_manager.assert_not_called()
+    assert BenchConfig.read(bench_root).central.bootstrapped is True

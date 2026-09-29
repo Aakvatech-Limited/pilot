@@ -95,7 +95,7 @@ def tune_database(config: "BenchConfig") -> None:
     """
     from pilot.managers.database.mariadb import MariaDBManager
 
-    if config.db_type != "mariadb":
+    if config.db_type != "mariadb" or config.mariadb.existing:
         return
     sizing = MariaDBManager(config.mariadb).tune_to_host()
     logging.info("Sized MariaDB for %s MiB of host memory.", sizing.total_memory_mb)
