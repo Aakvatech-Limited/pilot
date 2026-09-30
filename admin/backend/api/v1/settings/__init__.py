@@ -124,7 +124,7 @@ def build_settings_response(config: BenchConfig, bench_root: Path | None = None)
         },
         "letsencrypt": {"email": config.letsencrypt.email},
         "s3": s3_payload(config),
-        "s3_providers": s3_provider_options(),
+        "s3_providers": s3_provider_options(config),
         "llm": {
             **llm_payload(config),
             "system_prompt": read_system_prompt(bench_root) if bench_root else "",
@@ -139,13 +139,26 @@ def build_settings_response(config: BenchConfig, bench_root: Path | None = None)
     }
 
 
-def s3_provider_options() -> list[dict]:
+def s3_provider_options(config: BenchConfig) -> list[dict]:
+    from pilot.integrations.central import CentralClient, CentralClientError
     from pilot.integrations.s3.base import PROVIDER_LABELS, SUPPORTED_REGIONS
 
-    return [
+    options = [
         {"value": provider, "label": PROVIDER_LABELS[provider], "regions": regions}
         for provider, regions in SUPPORTED_REGIONS.items()
     ]
+    if not config.central.enabled:
+        return options
+
+    # Central is asked on each load, so the list follows the regions serving storage now.
+    try:
+        regions = list(CentralClient().storage_regions())
+    except CentralClientError:
+        current_app.logger.warning("Could not read Frappe storage regions from Central.", exc_info=True)
+        return options
+
+    # First, so a new form on a Central bench defaults to Frappe storage.
+    return [{"value": "frappe", "label": PROVIDER_LABELS["frappe"], "regions": regions}, *options]
 
 
 def llm_provider_options() -> list[dict]:

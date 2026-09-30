@@ -1,9 +1,12 @@
 from unittest.mock import Mock
 
-from admin.backend.api.v1.settings import ConfigPatcher
+from flask import Flask
+
+from admin.backend.api.v1.settings import ConfigPatcher, s3_provider_options
 from pilot.config import S3Config
 from pilot.config.bench import BenchConfig
 from pilot.core.bench.settings import s3_payload
+from pilot.integrations.central import CentralClient, CentralClientError
 from pilot.integrations.s3 import base
 
 
@@ -97,3 +100,75 @@ def test_s3_payload_tracks_the_custom_endpoint() -> None:
     config.s3.endpoint_url = "https://s3.in-mumbai.example.test"
 
     assert s3_payload(config)["endpoint_url"] == "https://s3.in-mumbai.example.test"
+
+
+FRAPPE_REGIONS = {"Aradhya-Local": "https://s3.aradhya-local.example.test"}
+
+
+def frappe_s3_update(region: str) -> dict:
+    return {
+        "s3": {
+            "access_key": "garage-access",
+            "secret_key": "garage-secret",
+            "bucket": "3836-aradhya-local-media",
+            "provider": "frappe",
+            "region": region,
+            "endpoint_url": "https://elsewhere.example.test",
+        }
+    }
+
+
+def test_frappe_storage_takes_its_endpoint_from_central(monkeypatch) -> None:
+    monkeypatch.setattr(CentralClient, "storage_regions", lambda self: FRAPPE_REGIONS)
+    config = bench_config()
+
+    error = ConfigPatcher(config, frappe_s3_update("Aradhya-Local")).apply()
+
+    assert error is None
+    assert config.s3.endpoint_url == "https://s3.aradhya-local.example.test"
+
+
+def test_frappe_storage_refuses_a_region_central_does_not_serve(monkeypatch) -> None:
+    monkeypatch.setattr(CentralClient, "storage_regions", lambda self: FRAPPE_REGIONS)
+
+    error = ConfigPatcher(bench_config(), frappe_s3_update("elsewhere")).apply()
+
+    assert error == "s3.region 'elsewhere' does not serve Frappe object storage."
+
+
+def test_frappe_storage_reports_an_unreachable_central(monkeypatch) -> None:
+    def unreachable(self):
+        raise CentralClientError("Cannot reach Central")
+
+    monkeypatch.setattr(CentralClient, "storage_regions", unreachable)
+
+    error = ConfigPatcher(bench_config(), frappe_s3_update("Aradhya-Local")).apply()
+
+    assert error == "Could not read Frappe storage regions from Central: Cannot reach Central"
+
+
+def test_frappe_is_offered_only_on_a_central_bench(monkeypatch) -> None:
+    monkeypatch.setattr(CentralClient, "storage_regions", lambda self: FRAPPE_REGIONS)
+    config = bench_config()
+
+    with Flask(__name__).app_context():
+        assert "frappe" not in [option["value"] for option in s3_provider_options(config)]
+
+        config.central.enabled = True
+        options = s3_provider_options(config)
+
+    assert options[0] == {"value": "frappe", "label": "Frappe Cloud", "regions": ["Aradhya-Local"]}
+
+
+def test_an_unreachable_central_leaves_the_other_providers(monkeypatch) -> None:
+    def unreachable(self):
+        raise CentralClientError("Cannot reach Central")
+
+    monkeypatch.setattr(CentralClient, "storage_regions", unreachable)
+    config = bench_config()
+    config.central.enabled = True
+
+    with Flask(__name__).app_context():
+        options = s3_provider_options(config)
+
+    assert [option["value"] for option in options] == list(base.SUPPORTED_REGIONS)
