@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from functools import lru_cache
 from typing import Any
 
 from pilot.exceptions import BenchError
@@ -52,9 +53,12 @@ class CentralClient:
         id and this region's endpoint. Datum tells the two apart by route, not by token."""
         return self.forward("central.api.pilot.datum_token", "GET")
 
-    def storage_regions(self) -> dict[str, str]:
-        """Each region Frappe object storage serves now, mapped to its S3 endpoint."""
-        return self.forward("central.api.pilot.storage_regions", "GET")
+    @classmethod
+    @lru_cache(maxsize=1)
+    def storage_regions(cls) -> dict[str, str]:
+        """Each region Frappe object storage serves, mapped to its S3 endpoint. Cached per
+        class, since the Admin makes a new client per request; a failed call is not cached."""
+        return cls().forward("central.api.pilot.storage_regions", "GET")
 
     def notify_central(self, event: str, message: str, context: dict | None = None) -> Any:
         """Report a bench event to Central."""

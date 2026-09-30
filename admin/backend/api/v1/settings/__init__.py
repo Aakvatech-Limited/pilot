@@ -150,7 +150,7 @@ def s3_provider_options(config: BenchConfig) -> list[dict]:
     if not config.central.enabled:
         return options
 
-    # Central is asked on each load, so the list follows the regions serving storage now.
+    # Cached until the Admin restarts, so a new Central region needs a restart to show.
     try:
         regions = list(CentralClient().storage_regions())
     except CentralClientError:
