@@ -319,12 +319,7 @@ class AppRepository:
         self.app.config.branch = branch
 
     def restore_revision(self, branch: str, sha: str, configured_branch: str) -> None:
-        """Restore the exact pre-switch checkout and branch tracking without network access.
-
-        Validation and asset builds may dirty the failed target branch. Discard only
-        that working-tree state before checkout; any user's pre-switch work remains
-        preserved in the stash created by switch_branch().
-        """
+        """Restore the previous checkout and branch tracking."""
         repo = self.repo
         repo.abort_merge_rebase()
         if not repo.discard_local_changes():
