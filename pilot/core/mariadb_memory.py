@@ -76,17 +76,14 @@ def calculate_mariadb_memory(total_memory_mb: int) -> MariaDBMemorySizing:
         host_share_cap_mb,
         max(_MIN_MEMORY_MAX_MB, round(mariadb_memory_mb)),
     )
-    # Keep MemoryHigh close enough to MemoryMax that normal MariaDB peaks do
-    # not trigger sustained cgroup throttling while retaining a safety margin.
+    legacy_memory_high_mb = round(max(mariadb_memory_mb - 1024, 1024))
     memory_high_mb = max(
         1,
         min(
             memory_max_mb - _MIN_MEMORY_LIMIT_GAP_MB,
-            round(memory_max_mb * _MEMORY_HIGH_SHARE),
+            max(legacy_memory_high_mb, round(memory_max_mb * _MEMORY_HIGH_SHARE)),
         ),
     )
-    # Give MariaDB bounded swap headroom that scales with its service budget.
-    # A fixed 100 MB ceiling can be exhausted during short-lived memory peaks.
     memory_swap_max_mb = min(
         _MAX_MEMORY_SWAP_MB,
         max(_MIN_MEMORY_SWAP_MB, round(memory_max_mb * _MEMORY_SWAP_SHARE)),
