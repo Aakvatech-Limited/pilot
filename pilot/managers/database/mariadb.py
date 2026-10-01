@@ -820,9 +820,9 @@ class MariaDBManager(UserOwnedDBManager):
             # skip every system default file instead of layering over them.
             f"ExecStart={mariadbd} --defaults-file={self.my_cnf_path}\n"
             "LimitNOFILE=65535\n"
-            f"MemoryHigh={sizing.memory_high_mb}M\n"
+            f"MemoryHigh={self._memory_high_mb(sizing)}M\n"
             f"MemoryMax={sizing.memory_max_mb}M\n"
-            f"MemorySwapMax={sizing.memory_swap_max_mb}M\n"
+            f"MemorySwapMax={self._memory_swap_max_mb()}M\n"
             "Restart=on-failure\n\n"
             "[Install]\n"
             "WantedBy=default.target\n"
@@ -831,6 +831,20 @@ class MariaDBManager(UserOwnedDBManager):
         unit_dir.mkdir(parents=True, exist_ok=True)
         self.unit_path.write_text(content)
         run_command(self._systemctl("daemon-reload"), env=self._systemctl_env())
+
+    def _memory_high_mb(self, sizing: MariaDBMemorySizing) -> int:
+        value = self.config.memory_high_mb or sizing.memory_high_mb
+        if value <= 0 or value > sizing.memory_max_mb:
+            raise DatabaseError(
+                f"MariaDB MemoryHigh must be between 1 and {sizing.memory_max_mb} MB."
+            )
+        return value
+
+    def _memory_swap_max_mb(self) -> int:
+        value = self.config.memory_swap_max_mb
+        if value < 0:
+            raise DatabaseError("MariaDB MemorySwapMax cannot be negative.")
+        return value
 
     def is_reachable(self) -> bool:
         if not self.is_running():
