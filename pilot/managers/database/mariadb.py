@@ -278,16 +278,67 @@ class MariaDBManager(UserOwnedDBManager):
             self._restart_and_wait_healthy()
 
     def tune_to_host(self) -> MariaDBMemorySizing:
-        """Rewrite my.cnf and the unit memory limits for this host's memory, then restart.
+        """Rewrite my.cnf and the unit memory limits for this host's memory, and apply them live.
 
         A server copied from a snapshot or moved to a resized VM keeps the old host's sizing.
+        Every sized variable is dynamic, so the running server needs no restart.
         """
         self._require_linux_managed_server()
         with self.database_action_lock():
             sizing = self._write_config()
             self._install_unit(sizing)
-            self._restart_and_wait_healthy()
+            self._wait_until_healthy()
+            self._apply_live_sizing(sizing)
+            run_command(
+                self._systemctl(
+                    "set-property",
+                    "--runtime",
+                    self._UNIT_NAME,
+                    f"MemoryHigh={sizing.memory_high_mb}M",
+                    f"MemoryMax={sizing.memory_max_mb}M",
+                ),
+                env=self._systemctl_env(),
+            )
         return sizing
+
+    def _apply_live_sizing(self, sizing: MariaDBMemorySizing) -> None:
+        """Set the sized variables on the running server. A managed.cnf option wins, as at startup."""
+        limits = calculate_mariadb_variable_limits(sizing.total_memory_mb)
+        overrides = self._read_managed_options()
+        connection = self.connect()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT @@GLOBAL.innodb_buffer_pool_size, @@GLOBAL.innodb_buffer_pool_size_max"
+                )
+                current_pool, pool_max = cursor.fetchone()
+                # innodb_buffer_pool_size_max is read-only, so a larger pool waits for the next start.
+                pool = min(sizing.innodb_buffer_pool_mb * _MEBIBYTE, pool_max)
+                pool_values = [
+                    (
+                        "innodb_buffer_pool_size_auto_min",
+                        min(limits.innodb_buffer_pool_min_mb * _MEBIBYTE, pool),
+                    ),
+                    ("innodb_buffer_pool_size", pool),
+                ]
+                # The automatic minimum stays at or below the pool size during the change.
+                if pool >= current_pool:
+                    pool_values.reverse()
+                if "innodb-buffer-pool-size" in overrides:
+                    pool_values = []
+                values = [
+                    *pool_values,
+                    ("innodb_log_file_size", sizing.innodb_log_file_mb * _MEBIBYTE),
+                    ("key_buffer_size", sizing.key_buffer_mb * _MEBIBYTE),
+                    ("max_connections", sizing.max_connections),
+                ]
+                for name, value in values:
+                    if name.replace("_", "-") not in overrides:
+                        cursor.execute(f"SET GLOBAL {name} = %s", (value,))
+        except Exception as exc:
+            raise DatabaseError("Could not apply the MariaDB sizing to the running server.") from exc
+        finally:
+            connection.close()
 
     def performance_schema_enabled(self) -> bool:
         connection = None

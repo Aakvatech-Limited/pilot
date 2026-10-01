@@ -269,7 +269,7 @@ def test_performance_schema_change_preserves_other_managed_options(tmp_path) -> 
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     (config_dir / "managed.cnf").write_text(
-        "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "max-connections = 50\n"
+        "# Managed by Pilot's database variable editor.\n[mysqld]\nmax-connections = 50\n"
     )
 
     with (
@@ -342,7 +342,7 @@ def test_failed_performance_schema_change_restores_exact_previous_config(tmp_pat
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
-    previous = "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "max-connections = 50\n"
+    previous = "# Managed by Pilot's database variable editor.\n[mysqld]\nmax-connections = 50\n"
     managed_file.write_text(previous)
 
     with (
@@ -473,7 +473,7 @@ def test_max_connections_change_applies_live_and_preserves_other_options(tmp_pat
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
     managed_file.write_text(
-        "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = ON\n"
+        "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = ON\n"
     )
     state = {"max_connections": 50}
 
@@ -503,7 +503,7 @@ def test_failed_dynamic_variable_change_restores_exact_config_and_runtime(tmp_pa
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
-    previous = "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = OFF\n"
+    previous = "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = OFF\n"
     managed_file.write_text(previous)
 
     with (
@@ -593,7 +593,7 @@ def test_safe_configuration_change_applies_live_and_persists(tmp_path) -> None:
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
     managed_file.write_text(
-        "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = OFF\n"
+        "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = OFF\n"
     )
     state = {"connect_timeout": 10}
 
@@ -656,7 +656,7 @@ def test_failed_catalog_change_restores_exact_config_and_runtime(tmp_path) -> No
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
-    previous = "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = OFF\n"
+    previous = "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = OFF\n"
     managed_file.write_text(previous)
 
     with (
@@ -775,7 +775,7 @@ def test_linux_unit_starts_with_option_file_and_memory_limits(tmp_path) -> None:
     assert "MemorySwapMax=100M" in content
 
 
-def test_tune_to_host_resizes_for_current_memory_and_restarts(tmp_path) -> None:
+def test_tune_to_host_applies_the_sizing_live_without_a_restart(tmp_path) -> None:
     manager = _manager()
     with (
         patch(f"{MODULE}.is_macos", return_value=False),
@@ -784,7 +784,10 @@ def test_tune_to_host_resizes_for_current_memory_and_restarts(tmp_path) -> None:
         patch.object(manager, "is_provisioned", return_value=True),
         patch.object(manager, "_total_memory_mb", return_value=1024),
         patch.object(manager, "_install_unit") as install_unit,
+        patch.object(manager, "_wait_until_healthy"),
+        patch.object(manager, "_apply_live_sizing") as apply_live_sizing,
         patch.object(manager, "_restart_and_wait_healthy") as restart,
+        patch(f"{MODULE}.run_command") as run,
     ):
         sizing = manager.tune_to_host()
         config = manager.my_cnf_path.read_text()
@@ -793,7 +796,63 @@ def test_tune_to_host_resizes_for_current_memory_and_restarts(tmp_path) -> None:
     assert sizing == expected
     assert f"innodb-buffer-pool-size = {expected.innodb_buffer_pool_mb}M" in config
     install_unit.assert_called_once_with(expected)
-    restart.assert_called_once()
+    apply_live_sizing.assert_called_once_with(expected)
+    restart.assert_not_called()
+    command = run.call_args.args[0]
+    assert "set-property" in command and "--runtime" in command
+    assert f"MemoryMax={expected.memory_max_mb}M" in command
+
+
+def _sizing_cursor(current_pool: int, pool_max: int) -> tuple[MagicMock, MagicMock]:
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (current_pool, pool_max)
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    return connection, cursor
+
+
+def _set_statements(cursor: MagicMock) -> list[tuple[str, int]]:
+    return [
+        (executed.args[0].split()[2], executed.args[1][0])
+        for executed in cursor.execute.call_args_list
+        if executed.args[0].startswith("SET GLOBAL")
+    ]
+
+
+def test_apply_live_sizing_lowers_the_minimum_before_it_shrinks_the_pool(tmp_path) -> None:
+    manager = _manager()
+    sizing = calculate_mariadb_memory(2048)
+    connection, cursor = _sizing_cursor(current_pool=4096 * 1024 * 1024, pool_max=8192 * 1024 * 1024)
+    with (
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        patch.object(manager, "connect", return_value=connection),
+    ):
+        manager.config_dir.mkdir(parents=True)
+        manager._ensure_managed_cnf()
+        manager._apply_live_sizing(sizing)
+
+    names = [name for name, _value in _set_statements(cursor)]
+    assert names.index("innodb_buffer_pool_size_auto_min") < names.index("innodb_buffer_pool_size")
+    assert dict(_set_statements(cursor))["max_connections"] == sizing.max_connections
+    connection.close.assert_called_once_with()
+
+
+def test_apply_live_sizing_keeps_managed_options_and_the_pool_maximum(tmp_path) -> None:
+    manager = _manager()
+    sizing = calculate_mariadb_memory(8192)
+    pool_max = 256 * 1024 * 1024
+    connection, cursor = _sizing_cursor(current_pool=128 * 1024 * 1024, pool_max=pool_max)
+    with (
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        patch.object(manager, "connect", return_value=connection),
+    ):
+        manager.config_dir.mkdir(parents=True)
+        manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")
+        manager._apply_live_sizing(sizing)
+
+    values = dict(_set_statements(cursor))
+    assert "max_connections" not in values
+    assert values["innodb_buffer_pool_size"] == pool_max
 
 
 def test_tune_to_host_keeps_manual_options(tmp_path) -> None:
@@ -805,7 +864,9 @@ def test_tune_to_host_keeps_manual_options(tmp_path) -> None:
         patch.object(manager, "is_provisioned", return_value=True),
         patch.object(manager, "_total_memory_mb", return_value=1024),
         patch.object(manager, "_install_unit"),
-        patch.object(manager, "_restart_and_wait_healthy"),
+        patch.object(manager, "_wait_until_healthy"),
+        patch.object(manager, "_apply_live_sizing"),
+        patch(f"{MODULE}.run_command"),
     ):
         manager.config_dir.mkdir(parents=True)
         manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")
