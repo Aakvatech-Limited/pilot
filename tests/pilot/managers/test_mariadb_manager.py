@@ -1026,41 +1026,45 @@ def test_wait_until_reachable_raises_after_timeout() -> None:
         m._wait_until_reachable(timeout=0.01)
 
 
-def test_provision_resets_failed_state_before_restarting_stopped_unit() -> None:
+def test_provision_resizes_config_and_unit_before_starting_stopped_server() -> None:
     m = _manager()
+    sizing = calculate_mariadb_memory(2048)
     with (
         patch(f"{MODULE}.is_macos", return_value=False),
         patch.object(m, "install"),
         patch.object(m, "is_provisioned", return_value=True),
         patch.object(m, "is_running", return_value=False),
+        patch.object(m, "_write_config", return_value=sizing) as write_config,
+        patch.object(m, "_install_unit") as install_unit,
         patch.object(m, "_wait_until_reachable"),
         patch.object(m, "secure_installation"),
         patch(f"{MODULE}.run_command") as rc,
         patch(f"{BASE_MODULE}.subprocess.run") as reset_run,
     ):
         m.provision()
+
+    write_config.assert_called_once_with()
+    install_unit.assert_called_once_with(sizing)
     reset_run.assert_called_once()
     assert reset_run.call_args.args[0] == ["systemctl", "--user", "reset-failed", "pilot-mariadb.service"]
     assert rc.call_args.args[0] == ["systemctl", "--user", "start", "pilot-mariadb.service"]
 
 
-def test_provision_refreshes_unit_for_already_provisioned_server_without_restart() -> None:
+def test_provision_tunes_running_server_to_host_without_restart() -> None:
     m = _manager()
     with (
         patch(f"{MODULE}.is_macos", return_value=False),
         patch.object(m, "install"),
         patch.object(m, "is_provisioned", return_value=True),
         patch.object(m, "is_running", return_value=True),
-        patch.object(m, "_total_memory_mb", return_value=32768),
-        patch.object(m, "_write_config") as write_config,
-        patch.object(m, "_install_unit") as install_unit,
+        patch.object(m, "tune_to_host") as tune_to_host,
         patch.object(m, "_wait_until_reachable"),
         patch.object(m, "secure_installation") as secure,
         patch(f"{MODULE}.run_command") as rc,
     ):
         m.provision()
-    install_unit.assert_called_once_with(calculate_mariadb_memory(32768))
-    write_config.assert_not_called()
+
+    tune_to_host.assert_called_once_with()
     rc.assert_not_called()
     secure.assert_called_once()
 
