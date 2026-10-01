@@ -87,6 +87,25 @@ The cap applies only to hosts with `systemd-run` and cgroup memory delegation av
 
 To set a fixed cap instead, add `memory_limit_mb` under `[build]` in `bench.toml`. Leave it unset (or 0) to keep the automatic 85% sizing.
 
+## MariaDB Memory Limits
+
+On Linux, Pilot's managed MariaDB systemd unit sets `MemoryHigh`, `MemoryMax`, and
+`MemorySwapMax` from detected host RAM. `MemoryMax` remains the hard cgroup
+ceiling and is capped at half of host memory. `MemoryHigh` is the throttling
+threshold: Pilot uses the higher of 85% of `MemoryMax` and the previous
+MariaDB threshold, while preserving at least 128 MB between `MemoryHigh` and
+`MemoryMax`. This avoids lowering the throttling threshold on larger hosts
+while giving smaller hosts more usable headroom before reclaim throttling.
+
+`MemorySwapMax` is 20% of the MariaDB service memory budget, bounded between
+100 MB and 1 GB. The bound provides transient swap headroom without allowing
+unlimited swap growth.
+
+When Pilot provisions an already-managed MariaDB installation it rewrites the
+managed systemd unit and runs `daemon-reload` without restarting a running
+database. Updated limits therefore apply on the next normal MariaDB restart or
+start. Fresh installations receive the calculated limits immediately.
+
 ## Operational Notes
 
 - Production changes may need non-interactive sudo.
