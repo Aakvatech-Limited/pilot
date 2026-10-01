@@ -55,17 +55,8 @@ def test_press_unified_memory_sizing_is_adapted_for_pilot() -> None:
     assert sizing.max_connections == 50
     assert sizing.key_buffer_mb == 32
     assert sizing.innodb_log_file_mb == 512
-    assert sizing.memory_high_mb == 2696
+    assert sizing.memory_high_mb == 2148
     assert sizing.memory_max_mb == 3172
-    assert sizing.memory_swap_max_mb == 634
-
-
-def test_memory_high_stays_close_to_memory_max_on_8gb_host() -> None:
-    sizing = calculate_mariadb_memory(8192)
-
-    assert sizing.memory_high_mb >= round(sizing.memory_max_mb * 0.84)
-    assert sizing.memory_high_mb <= round(sizing.memory_max_mb * 0.86)
-    assert sizing.memory_max_mb - sizing.memory_high_mb >= 128
 
 
 def test_memory_high_does_not_regress_on_32gb_host() -> None:
@@ -73,18 +64,7 @@ def test_memory_high_does_not_regress_on_32gb_host() -> None:
 
     assert sizing.memory_max_mb == 15116
     assert sizing.memory_high_mb == 14092
-    assert sizing.memory_high_mb > round(sizing.memory_max_mb * 0.85)
-    assert sizing.memory_max_mb - sizing.memory_high_mb >= 128
-
-
-def test_swap_headroom_scales_with_mariadb_budget() -> None:
-    small = calculate_mariadb_memory(2048)
-    medium = calculate_mariadb_memory(8192)
-    large = calculate_mariadb_memory(32768)
-
-    assert small.memory_swap_max_mb == 102
-    assert medium.memory_swap_max_mb == 634
-    assert large.memory_swap_max_mb == 1024
+    assert sizing.memory_high_mb == round(max(sizing.mariadb_memory_mb - 1024, 1024))
 
 
 def test_small_vm_limits_leave_memory_for_other_pilot_processes() -> None:
@@ -95,7 +75,6 @@ def test_small_vm_limits_leave_memory_for_other_pilot_processes() -> None:
     assert sizing.innodb_log_file_mb == 48
     assert sizing.memory_high_mb == 384
     assert sizing.memory_max_mb == 512
-    assert sizing.memory_swap_max_mb == 102
     assert sizing.memory_max_mb < sizing.total_memory_mb
 
 
@@ -138,7 +117,6 @@ def test_memory_limits_never_claim_more_than_half_the_host(total_memory_mb: int)
 
     assert 0 < sizing.memory_high_mb <= sizing.memory_max_mb
     assert sizing.memory_max_mb <= total_memory_mb // 2
-    assert 100 <= sizing.memory_swap_max_mb <= 1024
 
 
 @pytest.mark.parametrize(
@@ -803,7 +781,7 @@ def test_linux_unit_starts_with_option_file_and_memory_limits(tmp_path) -> None:
     assert "LimitNOFILE=65535" in content
     assert f"MemoryHigh={sizing.memory_high_mb}M" in content
     assert f"MemoryMax={sizing.memory_max_mb}M" in content
-    assert f"MemorySwapMax={sizing.memory_swap_max_mb}M" in content
+    assert "MemorySwapMax=100M" in content
 
 
 def _tune(manager, tmp_path, current_max_mb):
@@ -974,6 +952,35 @@ def test_tune_to_host_refuses_external_server_before_writing(tmp_path) -> None:
 
     assert not manager.my_cnf_path.exists()
     restart.assert_not_called()
+
+
+def test_linux_unit_honors_memory_pressure_overrides(tmp_path) -> None:
+    manager = MariaDBManager(
+        MariaDBConfig(memory_high_mb=2500, memory_swap_max_mb=0)
+    )
+    sizing = calculate_mariadb_memory(8192)
+    unit_dir = tmp_path / "units"
+    with (
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        patch.object(type(manager), "user_unit_dir", new_callable=PropertyMock, return_value=unit_dir),
+        patch(f"{MODULE}.which", return_value="/usr/sbin/mariadbd"),
+        patch(f"{MODULE}.run_command"),
+    ):
+        manager._install_unit(sizing)
+
+    content = (unit_dir / "pilot-mariadb.service").read_text()
+    assert "MemoryHigh=2500M" in content
+    assert "MemorySwapMax=0M" in content
+
+
+def test_linux_unit_rejects_memory_high_above_memory_max(tmp_path) -> None:
+    manager = MariaDBManager(MariaDBConfig(memory_high_mb=4000))
+    sizing = calculate_mariadb_memory(8192)
+    with (
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        pytest.raises(DatabaseError, match="MemoryHigh must be between"),
+    ):
+        manager._install_unit(sizing)
 
 
 def test_is_provisioned_on_macos_checks_live_server_not_a_marker_file() -> None:
