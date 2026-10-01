@@ -776,8 +776,8 @@ def test_linux_unit_starts_with_option_file_and_memory_limits(tmp_path) -> None:
     assert "MemorySwapMax=100M" in content
 
 
-def test_tune_to_host_applies_the_sizing_live_without_a_restart(tmp_path) -> None:
-    manager = _manager()
+def _tune(manager, tmp_path, current_max_mb):
+    order = Mock()
     with (
         patch(f"{MODULE}.is_macos", return_value=False),
         patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
@@ -786,20 +786,37 @@ def test_tune_to_host_applies_the_sizing_live_without_a_restart(tmp_path) -> Non
         patch.object(manager, "_total_memory_mb", return_value=1024),
         patch.object(manager, "_install_unit") as install_unit,
         patch.object(manager, "_wait_until_healthy"),
-        patch.object(manager, "_apply_live_sizing") as apply_live_sizing,
-        patch.object(manager, "_apply_runtime_memory_limits") as apply_limits,
+        patch.object(manager, "_unit_memory_mb", return_value=current_max_mb),
+        patch.object(manager, "_apply_live_sizing", order.live_sizing),
+        patch.object(manager, "_set_runtime_memory_limits", order.set_limits),
+        patch.object(manager, "_lower_runtime_memory_limits", order.lower_limits),
         patch.object(manager, "_restart_and_wait_healthy") as restart,
     ):
         sizing = manager.tune_to_host()
         config = manager.my_cnf_path.read_text()
+    restart.assert_not_called()
+    install_unit.assert_called_once_with(sizing)
+    return sizing, config, [name for name, _args, _kwargs in order.mock_calls]
+
+
+def test_tune_to_host_applies_the_sizing_live_without_a_restart(tmp_path) -> None:
+    sizing, config, _calls = _tune(_manager(), tmp_path, current_max_mb=None)
 
     expected = calculate_mariadb_memory(1024)
     assert sizing == expected
     assert f"innodb-buffer-pool-size = {expected.innodb_buffer_pool_mb}M" in config
-    install_unit.assert_called_once_with(expected)
-    apply_live_sizing.assert_called_once_with(expected)
-    apply_limits.assert_called_once_with(expected)
-    restart.assert_not_called()
+
+
+def test_tune_to_host_raises_the_limits_before_the_server_grows(tmp_path) -> None:
+    _sizing, _config, calls = _tune(_manager(), tmp_path, current_max_mb=1)
+
+    assert calls == ["set_limits", "live_sizing"]
+
+
+def test_tune_to_host_lowers_the_limits_after_the_server_shrinks(tmp_path) -> None:
+    _sizing, _config, calls = _tune(_manager(), tmp_path, current_max_mb=1_000_000)
+
+    assert calls == ["live_sizing", "lower_limits"]
 
 
 MIB = 1024 * 1024
@@ -854,11 +871,11 @@ def test_runtime_memory_limits_wait_until_the_memory_is_released() -> None:
     sizing = calculate_mariadb_memory(2048)
     usage = [sizing.memory_high_mb + 100, sizing.memory_high_mb - 1]
     with (
-        patch.object(manager, "_memory_current_mb", side_effect=usage),
+        patch.object(manager, "_unit_memory_mb", side_effect=usage),
         patch(f"{MODULE}.time.sleep"),
         patch(f"{MODULE}.run_command") as run,
     ):
-        manager._apply_runtime_memory_limits(sizing)
+        manager._lower_runtime_memory_limits(sizing)
 
     command = run.call_args.args[0]
     assert "set-property" in command and "--runtime" in command
@@ -869,12 +886,12 @@ def test_runtime_memory_limits_wait_for_the_next_start_while_memory_stays_high()
     manager = _manager()
     sizing = calculate_mariadb_memory(2048)
     with (
-        patch.object(manager, "_memory_current_mb", return_value=sizing.memory_high_mb + 100),
+        patch.object(manager, "_unit_memory_mb", return_value=sizing.memory_high_mb + 100),
         patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 61]),
         patch(f"{MODULE}.time.sleep"),
         patch(f"{MODULE}.run_command") as run,
     ):
-        manager._apply_runtime_memory_limits(sizing)
+        manager._lower_runtime_memory_limits(sizing)
 
     run.assert_not_called()
 
@@ -883,12 +900,12 @@ def test_runtime_memory_limits_wait_for_the_next_start_when_memory_is_unknown() 
     manager = _manager()
     sizing = calculate_mariadb_memory(2048)
     with (
-        patch.object(manager, "_memory_current_mb", return_value=None),
+        patch.object(manager, "_unit_memory_mb", return_value=None),
         patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 61]),
         patch(f"{MODULE}.time.sleep"),
         patch(f"{MODULE}.run_command") as run,
     ):
-        manager._apply_runtime_memory_limits(sizing)
+        manager._lower_runtime_memory_limits(sizing)
 
     run.assert_not_called()
 
@@ -903,8 +920,9 @@ def test_tune_to_host_keeps_manual_options(tmp_path) -> None:
         patch.object(manager, "_total_memory_mb", return_value=1024),
         patch.object(manager, "_install_unit"),
         patch.object(manager, "_wait_until_healthy"),
+        patch.object(manager, "_unit_memory_mb", return_value=None),
         patch.object(manager, "_apply_live_sizing"),
-        patch.object(manager, "_apply_runtime_memory_limits"),
+        patch.object(manager, "_lower_runtime_memory_limits"),
     ):
         manager.config_dir.mkdir(parents=True)
         manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")

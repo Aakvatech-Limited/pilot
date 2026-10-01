@@ -291,8 +291,14 @@ class MariaDBManager(UserOwnedDBManager):
             sizing = self._write_config()
             self._install_unit(sizing)
             self._wait_until_healthy()
-            self._apply_live_sizing(sizing)
-            self._apply_runtime_memory_limits(sizing)
+            current_max = self._unit_memory_mb("MemoryMax")
+            # Raise the limits before MariaDB grows, and lower them only after it shrinks.
+            if current_max is not None and sizing.memory_max_mb >= current_max:
+                self._set_runtime_memory_limits(sizing)
+                self._apply_live_sizing(sizing)
+            else:
+                self._apply_live_sizing(sizing)
+                self._lower_runtime_memory_limits(sizing)
         return sizing
 
     def _apply_live_sizing(self, sizing: MariaDBMemorySizing) -> None:
@@ -311,15 +317,15 @@ class MariaDBManager(UserOwnedDBManager):
         finally:
             connection.close()
 
-    def _apply_runtime_memory_limits(self, sizing: MariaDBMemorySizing) -> None:
-        """Set the unit memory limits once MariaDB uses less than the new soft limit.
+    def _lower_runtime_memory_limits(self, sizing: MariaDBMemorySizing) -> None:
+        """Lower the unit memory limits once MariaDB uses less than the new soft limit.
 
         A smaller buffer pool releases its memory gradually, and the hard limit must not kill
         the server first. If the memory stays high or cannot be read, the limits apply at the
         next start.
         """
         deadline = time.monotonic() + _MEMORY_RELEASE_TIMEOUT
-        while (usage := self._memory_current_mb()) is None or usage >= sizing.memory_high_mb:
+        while (usage := self._unit_memory_mb("MemoryCurrent")) is None or usage >= sizing.memory_high_mb:
             if time.monotonic() >= deadline:
                 logging.getLogger(__name__).warning(
                     "MariaDB memory use is unknown or above %s MiB; its new memory limits apply at the next start.",
@@ -327,6 +333,9 @@ class MariaDBManager(UserOwnedDBManager):
                 )
                 return
             time.sleep(1)
+        self._set_runtime_memory_limits(sizing)
+
+    def _set_runtime_memory_limits(self, sizing: MariaDBMemorySizing) -> None:
         run_command(
             self._systemctl(
                 "set-property",
@@ -338,13 +347,13 @@ class MariaDBManager(UserOwnedDBManager):
             env=self._systemctl_env(),
         )
 
-    def _memory_current_mb(self) -> int | None:
+    def _unit_memory_mb(self, name: str) -> int | None:
         result = run_command(
-            self._systemctl("show", self._UNIT_NAME, "--property=MemoryCurrent", "--value"),
+            self._systemctl("show", self._UNIT_NAME, f"--property={name}", "--value"),
             env=self._systemctl_env(),
         )
         value = result.stdout.strip()
-        # systemd prints "[not set]" when it cannot measure the unit.
+        # systemd prints "[not set]" for an unknown value and "infinity" for no limit.
         return int(value) // _MEBIBYTE if value.isdigit() else None
 
     def performance_schema_enabled(self) -> bool:
