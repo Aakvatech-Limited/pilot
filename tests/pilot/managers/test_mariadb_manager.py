@@ -839,12 +839,13 @@ def test_apply_live_sizing_sets_each_value_and_closes_the_connection(tmp_path) -
         patch.object(manager, "connect", return_value=connection),
     ):
         manager.config_dir.mkdir(parents=True)
-        manager._ensure_managed_cnf()
+        manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")
         manager._apply_live_sizing(sizing)
 
     statements = [executed.args for executed in cursor.execute.call_args_list[1:]]
-    expected = live_sizing_values(sizing, 128 * MIB, 8192 * MIB, set())
+    expected = live_sizing_values(sizing, 128 * MIB, 8192 * MIB, {"max-connections"})
     assert statements == [(f"SET GLOBAL {name} = %s", (value,)) for name, value in expected]
+    assert not any("max_connections" in statement for statement, _value in statements)
     connection.close.assert_called_once_with()
 
 
@@ -869,6 +870,20 @@ def test_runtime_memory_limits_wait_for_the_next_start_while_memory_stays_high()
     sizing = calculate_mariadb_memory(2048)
     with (
         patch.object(manager, "_memory_current_mb", return_value=sizing.memory_high_mb + 100),
+        patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 61]),
+        patch(f"{MODULE}.time.sleep"),
+        patch(f"{MODULE}.run_command") as run,
+    ):
+        manager._apply_runtime_memory_limits(sizing)
+
+    run.assert_not_called()
+
+
+def test_runtime_memory_limits_wait_for_the_next_start_when_memory_is_unknown() -> None:
+    manager = _manager()
+    sizing = calculate_mariadb_memory(2048)
+    with (
+        patch.object(manager, "_memory_current_mb", return_value=None),
         patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 61]),
         patch(f"{MODULE}.time.sleep"),
         patch(f"{MODULE}.run_command") as run,

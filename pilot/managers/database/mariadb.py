@@ -315,13 +315,14 @@ class MariaDBManager(UserOwnedDBManager):
         """Set the unit memory limits once MariaDB uses less than the new soft limit.
 
         A smaller buffer pool releases its memory gradually, and the hard limit must not kill
-        the server first. If the memory stays high, the limits apply at the next start.
+        the server first. If the memory stays high or cannot be read, the limits apply at the
+        next start.
         """
         deadline = time.monotonic() + _MEMORY_RELEASE_TIMEOUT
-        while self._memory_current_mb() >= sizing.memory_high_mb:
+        while (usage := self._memory_current_mb()) is None or usage >= sizing.memory_high_mb:
             if time.monotonic() >= deadline:
                 logging.getLogger(__name__).warning(
-                    "MariaDB still uses more than %s MiB; its new memory limits apply at the next start.",
+                    "MariaDB memory use is unknown or above %s MiB; its new memory limits apply at the next start.",
                     sizing.memory_high_mb,
                 )
                 return
@@ -337,14 +338,14 @@ class MariaDBManager(UserOwnedDBManager):
             env=self._systemctl_env(),
         )
 
-    def _memory_current_mb(self) -> int:
+    def _memory_current_mb(self) -> int | None:
         result = run_command(
             self._systemctl("show", self._UNIT_NAME, "--property=MemoryCurrent", "--value"),
             env=self._systemctl_env(),
         )
         value = result.stdout.strip()
-        # systemd prints "[not set]" when the unit has no memory accounting.
-        return int(value) // _MEBIBYTE if value.isdigit() else 0
+        # systemd prints "[not set]" when it cannot measure the unit.
+        return int(value) // _MEBIBYTE if value.isdigit() else None
 
     def performance_schema_enabled(self) -> bool:
         connection = None
