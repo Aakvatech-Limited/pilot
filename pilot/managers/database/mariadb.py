@@ -126,12 +126,13 @@ class MariaDBManager(UserOwnedDBManager):
             self._reset_failed_state()
             run_command(self._systemctl("enable", "--now", self._UNIT_NAME), env=self._systemctl_env())
 
+        elif self.is_running():
+            self.tune_to_host()
         else:
-            sizing = calculate_mariadb_memory(self._total_memory_mb())
+            sizing = self._write_config()
             self._install_unit(sizing)
-            if not self.is_running():
-                self._reset_failed_state()
-                run_command(self._systemctl("start", self._UNIT_NAME), env=self._systemctl_env())
+            self._reset_failed_state()
+            run_command(self._systemctl("start", self._UNIT_NAME), env=self._systemctl_env())
 
         self._wait_until_reachable()
         self.secure_installation()
