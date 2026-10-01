@@ -8,6 +8,7 @@ _MARIADB_OPERATING_RESERVE_MB = 700
 _MEMORY_PER_CONNECTION_MB = 35
 _MIN_BUFFER_POOL_MB = 128
 _MIN_MEMORY_MAX_MB = 512
+_MIN_MEMORY_LIMIT_GAP_MB = 128
 _MAX_HOST_MEMORY_SHARE = 0.5
 _MIN_MAX_CONNECTIONS = 10
 _MIN_BUFFER_POOL_SHARE = 0.2
@@ -73,7 +74,7 @@ def calculate_mariadb_memory(total_memory_mb: int) -> MariaDBMemorySizing:
     memory_high_mb = max(
         1,
         min(
-            memory_max_mb,
+            memory_max_mb - _MIN_MEMORY_LIMIT_GAP_MB,
             round(max(mariadb_memory_mb - 1024, 1024)),
         ),
     )
