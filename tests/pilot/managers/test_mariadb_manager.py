@@ -68,6 +68,15 @@ def test_memory_high_stays_close_to_memory_max_on_8gb_host() -> None:
     assert sizing.memory_max_mb - sizing.memory_high_mb >= 128
 
 
+def test_memory_high_does_not_regress_on_32gb_host() -> None:
+    sizing = calculate_mariadb_memory(32768)
+
+    assert sizing.memory_max_mb == 15116
+    assert sizing.memory_high_mb == 14092
+    assert sizing.memory_high_mb > round(sizing.memory_max_mb * 0.85)
+    assert sizing.memory_max_mb - sizing.memory_high_mb >= 128
+
+
 def test_swap_headroom_scales_with_mariadb_budget() -> None:
     small = calculate_mariadb_memory(2048)
     medium = calculate_mariadb_memory(8192)
@@ -1028,13 +1037,14 @@ def test_provision_resets_failed_state_before_restarting_stopped_unit() -> None:
     assert rc.call_args.args[0] == ["systemctl", "--user", "start", "pilot-mariadb.service"]
 
 
-def test_provision_reuses_already_provisioned_server() -> None:
+def test_provision_refreshes_unit_for_already_provisioned_server_without_restart() -> None:
     m = _manager()
     with (
         patch(f"{MODULE}.is_macos", return_value=False),
         patch.object(m, "install"),
         patch.object(m, "is_provisioned", return_value=True),
         patch.object(m, "is_running", return_value=True),
+        patch.object(m, "_total_memory_mb", return_value=32768),
         patch.object(m, "_write_config") as write_config,
         patch.object(m, "_install_unit") as install_unit,
         patch.object(m, "_wait_until_reachable"),
@@ -1042,7 +1052,7 @@ def test_provision_reuses_already_provisioned_server() -> None:
         patch(f"{MODULE}.run_command") as rc,
     ):
         m.provision()
-    install_unit.assert_not_called()
+    install_unit.assert_called_once_with(calculate_mariadb_memory(32768))
     write_config.assert_not_called()
     rc.assert_not_called()
     secure.assert_called_once()
