@@ -10,6 +10,7 @@ from pilot.config import MariaDBConfig
 from pilot.core.mariadb_memory import (
     calculate_mariadb_memory,
     calculate_mariadb_variable_limits,
+    live_sizing_values,
 )
 from pilot.exceptions import DatabaseError
 from pilot.managers.database.mariadb import MariaDBManager
@@ -786,8 +787,8 @@ def test_tune_to_host_applies_the_sizing_live_without_a_restart(tmp_path) -> Non
         patch.object(manager, "_install_unit") as install_unit,
         patch.object(manager, "_wait_until_healthy"),
         patch.object(manager, "_apply_live_sizing") as apply_live_sizing,
+        patch.object(manager, "_apply_runtime_memory_limits") as apply_limits,
         patch.object(manager, "_restart_and_wait_healthy") as restart,
-        patch(f"{MODULE}.run_command") as run,
     ):
         sizing = manager.tune_to_host()
         config = manager.my_cnf_path.read_text()
@@ -797,32 +798,42 @@ def test_tune_to_host_applies_the_sizing_live_without_a_restart(tmp_path) -> Non
     assert f"innodb-buffer-pool-size = {expected.innodb_buffer_pool_mb}M" in config
     install_unit.assert_called_once_with(expected)
     apply_live_sizing.assert_called_once_with(expected)
+    apply_limits.assert_called_once_with(expected)
     restart.assert_not_called()
-    command = run.call_args.args[0]
-    assert "set-property" in command and "--runtime" in command
-    assert f"MemoryMax={expected.memory_max_mb}M" in command
 
 
-def _sizing_cursor(current_pool: int, pool_max: int) -> tuple[MagicMock, MagicMock]:
+MIB = 1024 * 1024
+
+
+def test_live_sizing_lowers_the_minimum_before_it_shrinks_the_pool() -> None:
+    sizing = calculate_mariadb_memory(2048)
+    names = [name for name, _value in live_sizing_values(sizing, 4096 * MIB, 8192 * MIB, set())]
+
+    assert names.index("innodb_buffer_pool_size_auto_min") < names.index("innodb_buffer_pool_size")
+
+
+def test_live_sizing_grows_the_pool_before_it_raises_the_minimum() -> None:
+    sizing = calculate_mariadb_memory(8192)
+    names = [name for name, _value in live_sizing_values(sizing, 128 * MIB, 8192 * MIB, set())]
+
+    assert names.index("innodb_buffer_pool_size") < names.index("innodb_buffer_pool_size_auto_min")
+
+
+def test_live_sizing_keeps_managed_options_and_the_pool_maximum() -> None:
+    sizing = calculate_mariadb_memory(8192)
+    values = dict(live_sizing_values(sizing, 128 * MIB, 256 * MIB, {"max-connections"}))
+
+    assert "max_connections" not in values
+    assert values["innodb_buffer_pool_size"] == 256 * MIB
+
+
+def test_apply_live_sizing_sets_each_value_and_closes_the_connection(tmp_path) -> None:
+    manager = _manager()
     cursor = MagicMock()
-    cursor.fetchone.return_value = (current_pool, pool_max)
+    cursor.fetchone.return_value = (128 * MIB, 8192 * MIB)
     connection = MagicMock()
     connection.cursor.return_value.__enter__.return_value = cursor
-    return connection, cursor
-
-
-def _set_statements(cursor: MagicMock) -> list[tuple[str, int]]:
-    return [
-        (executed.args[0].split()[2], executed.args[1][0])
-        for executed in cursor.execute.call_args_list
-        if executed.args[0].startswith("SET GLOBAL")
-    ]
-
-
-def test_apply_live_sizing_lowers_the_minimum_before_it_shrinks_the_pool(tmp_path) -> None:
-    manager = _manager()
-    sizing = calculate_mariadb_memory(2048)
-    connection, cursor = _sizing_cursor(current_pool=4096 * 1024 * 1024, pool_max=8192 * 1024 * 1024)
+    sizing = calculate_mariadb_memory(4096)
     with (
         patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
         patch.object(manager, "connect", return_value=connection),
@@ -831,28 +842,40 @@ def test_apply_live_sizing_lowers_the_minimum_before_it_shrinks_the_pool(tmp_pat
         manager._ensure_managed_cnf()
         manager._apply_live_sizing(sizing)
 
-    names = [name for name, _value in _set_statements(cursor)]
-    assert names.index("innodb_buffer_pool_size_auto_min") < names.index("innodb_buffer_pool_size")
-    assert dict(_set_statements(cursor))["max_connections"] == sizing.max_connections
+    statements = [executed.args for executed in cursor.execute.call_args_list[1:]]
+    expected = live_sizing_values(sizing, 128 * MIB, 8192 * MIB, set())
+    assert statements == [(f"SET GLOBAL {name} = %s", (value,)) for name, value in expected]
     connection.close.assert_called_once_with()
 
 
-def test_apply_live_sizing_keeps_managed_options_and_the_pool_maximum(tmp_path) -> None:
+def test_runtime_memory_limits_wait_until_the_memory_is_released() -> None:
     manager = _manager()
-    sizing = calculate_mariadb_memory(8192)
-    pool_max = 256 * 1024 * 1024
-    connection, cursor = _sizing_cursor(current_pool=128 * 1024 * 1024, pool_max=pool_max)
+    sizing = calculate_mariadb_memory(2048)
+    usage = [sizing.memory_high_mb + 100, sizing.memory_high_mb - 1]
     with (
-        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
-        patch.object(manager, "connect", return_value=connection),
+        patch.object(manager, "_memory_current_mb", side_effect=usage),
+        patch(f"{MODULE}.time.sleep"),
+        patch(f"{MODULE}.run_command") as run,
     ):
-        manager.config_dir.mkdir(parents=True)
-        manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")
-        manager._apply_live_sizing(sizing)
+        manager._apply_runtime_memory_limits(sizing)
 
-    values = dict(_set_statements(cursor))
-    assert "max_connections" not in values
-    assert values["innodb_buffer_pool_size"] == pool_max
+    command = run.call_args.args[0]
+    assert "set-property" in command and "--runtime" in command
+    assert f"MemoryMax={sizing.memory_max_mb}M" in command
+
+
+def test_runtime_memory_limits_wait_for_the_next_start_while_memory_stays_high() -> None:
+    manager = _manager()
+    sizing = calculate_mariadb_memory(2048)
+    with (
+        patch.object(manager, "_memory_current_mb", return_value=sizing.memory_high_mb + 100),
+        patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 61]),
+        patch(f"{MODULE}.time.sleep"),
+        patch(f"{MODULE}.run_command") as run,
+    ):
+        manager._apply_runtime_memory_limits(sizing)
+
+    run.assert_not_called()
 
 
 def test_tune_to_host_keeps_manual_options(tmp_path) -> None:
@@ -866,7 +889,7 @@ def test_tune_to_host_keeps_manual_options(tmp_path) -> None:
         patch.object(manager, "_install_unit"),
         patch.object(manager, "_wait_until_healthy"),
         patch.object(manager, "_apply_live_sizing"),
-        patch(f"{MODULE}.run_command"),
+        patch.object(manager, "_apply_runtime_memory_limits"),
     ):
         manager.config_dir.mkdir(parents=True)
         manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")

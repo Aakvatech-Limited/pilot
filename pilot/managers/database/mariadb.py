@@ -1,4 +1,5 @@
 import configparser
+import logging
 import os
 import re
 import subprocess
@@ -20,6 +21,7 @@ from pilot.core.mariadb_memory import (
     MariaDBVariableLimits,
     calculate_mariadb_memory,
     calculate_mariadb_variable_limits,
+    live_sizing_values,
 )
 from pilot.exceptions import DatabaseError
 from pilot.internal.atomic_file import (
@@ -31,6 +33,7 @@ from pilot.managers.platform import is_macos, which
 from pilot.utils import cli_root, run_command
 
 _CLIENT_TIMEOUT = 5
+_MEMORY_RELEASE_TIMEOUT = 60
 _MANAGED_CONFIG_HEADER = "# Managed by Pilot's database variable editor.\n"
 _OPTION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _MEBIBYTE = 1024 * 1024
@@ -289,22 +292,11 @@ class MariaDBManager(UserOwnedDBManager):
             self._install_unit(sizing)
             self._wait_until_healthy()
             self._apply_live_sizing(sizing)
-            run_command(
-                self._systemctl(
-                    "set-property",
-                    "--runtime",
-                    self._UNIT_NAME,
-                    f"MemoryHigh={sizing.memory_high_mb}M",
-                    f"MemoryMax={sizing.memory_max_mb}M",
-                ),
-                env=self._systemctl_env(),
-            )
+            self._apply_runtime_memory_limits(sizing)
         return sizing
 
     def _apply_live_sizing(self, sizing: MariaDBMemorySizing) -> None:
-        """Set the sized variables on the running server. A managed.cnf option wins, as at startup."""
-        limits = calculate_mariadb_variable_limits(sizing.total_memory_mb)
-        overrides = self._read_managed_options()
+        overrides = set(self._read_managed_options())
         connection = self.connect()
         try:
             with connection.cursor() as cursor:
@@ -312,33 +304,47 @@ class MariaDBManager(UserOwnedDBManager):
                     "SELECT @@GLOBAL.innodb_buffer_pool_size, @@GLOBAL.innodb_buffer_pool_size_max"
                 )
                 current_pool, pool_max = cursor.fetchone()
-                # innodb_buffer_pool_size_max is read-only, so a larger pool waits for the next start.
-                pool = min(sizing.innodb_buffer_pool_mb * _MEBIBYTE, pool_max)
-                pool_values = [
-                    (
-                        "innodb_buffer_pool_size_auto_min",
-                        min(limits.innodb_buffer_pool_min_mb * _MEBIBYTE, pool),
-                    ),
-                    ("innodb_buffer_pool_size", pool),
-                ]
-                # The automatic minimum stays at or below the pool size during the change.
-                if pool >= current_pool:
-                    pool_values.reverse()
-                if "innodb-buffer-pool-size" in overrides:
-                    pool_values = []
-                values = [
-                    *pool_values,
-                    ("innodb_log_file_size", sizing.innodb_log_file_mb * _MEBIBYTE),
-                    ("key_buffer_size", sizing.key_buffer_mb * _MEBIBYTE),
-                    ("max_connections", sizing.max_connections),
-                ]
-                for name, value in values:
-                    if name.replace("_", "-") not in overrides:
-                        cursor.execute(f"SET GLOBAL {name} = %s", (value,))
+                for name, value in live_sizing_values(sizing, current_pool, pool_max, overrides):
+                    cursor.execute(f"SET GLOBAL {name} = %s", (value,))
         except Exception as exc:
             raise DatabaseError("Could not apply the MariaDB sizing to the running server.") from exc
         finally:
             connection.close()
+
+    def _apply_runtime_memory_limits(self, sizing: MariaDBMemorySizing) -> None:
+        """Set the unit memory limits once MariaDB uses less than the new soft limit.
+
+        A smaller buffer pool releases its memory gradually, and the hard limit must not kill
+        the server first. If the memory stays high, the limits apply at the next start.
+        """
+        deadline = time.monotonic() + _MEMORY_RELEASE_TIMEOUT
+        while self._memory_current_mb() >= sizing.memory_high_mb:
+            if time.monotonic() >= deadline:
+                logging.getLogger(__name__).warning(
+                    "MariaDB still uses more than %s MiB; its new memory limits apply at the next start.",
+                    sizing.memory_high_mb,
+                )
+                return
+            time.sleep(1)
+        run_command(
+            self._systemctl(
+                "set-property",
+                "--runtime",
+                self._UNIT_NAME,
+                f"MemoryHigh={sizing.memory_high_mb}M",
+                f"MemoryMax={sizing.memory_max_mb}M",
+            ),
+            env=self._systemctl_env(),
+        )
+
+    def _memory_current_mb(self) -> int:
+        result = run_command(
+            self._systemctl("show", self._UNIT_NAME, "--property=MemoryCurrent", "--value"),
+            env=self._systemctl_env(),
+        )
+        value = result.stdout.strip()
+        # systemd prints "[not set]" when the unit has no memory accounting.
+        return int(value) // _MEBIBYTE if value.isdigit() else 0
 
     def performance_schema_enabled(self) -> bool:
         connection = None
