@@ -47,6 +47,7 @@ PROVIDER_LABELS = {
     "aws": "Amazon S3",
     "digitalocean": "DigitalOcean Spaces",
     "hetzner": "Hetzner Object Storage",
+    "frappe": "Frappe Cloud",
 }
 
 SUPPORTED_REGIONS = {
@@ -86,7 +87,7 @@ class S3:
     region_name: str
     provider: str
     bucket_name: str
-    endpoint_url: str = field(init=False)
+    endpoint_url: str = ""
     client: Any = field(init=False)
 
     def __post_init__(self):
@@ -94,10 +95,11 @@ class S3:
             load_boto3()
         except ImportError as error:
             raise RuntimeError("boto3 is not installed. Run: pip install boto3") from error
-        try:
-            self.endpoint_url = build_endpoint_url(self.provider, self.region_name)
-        except ValueError as error:
-            raise S3IntegrationError(str(error)) from error
+        if not self.endpoint_url:
+            try:
+                self.endpoint_url = build_endpoint_url(self.provider, self.region_name)
+            except ValueError as error:
+                raise S3IntegrationError(str(error)) from error
         addressing_style = "virtual" if self.provider == "aws" else "path"
 
         self.client = boto3.client(
@@ -120,6 +122,7 @@ class S3:
             region_name=config.region,
             provider=config.provider,
             bucket_name=config.bucket,
+            endpoint_url=config.endpoint_url,
         )
         client.create_bucket_if_not_present(config.bucket)
         return client
