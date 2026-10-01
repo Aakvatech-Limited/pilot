@@ -19,10 +19,6 @@ if TYPE_CHECKING:
     from pilot.managers.environment import PythonEnvManager
 
 _BUNDLE_RE = re.compile(r"^(.+)\.bundle\.[A-Z0-9]{8}\.(js|css)$")
-_NODE_HEAP_MIN_MB = 2048
-_NODE_HEAP_MAX_MB = 6144
-_NODE_HEAP_AVAILABLE_RATIO = 0.60
-_NODE_HEAP_OVERRIDE = "PILOT_NODE_MAX_OLD_SPACE_SIZE"
 
 
 class PythonAssetBuilder:
@@ -106,22 +102,7 @@ class PythonAssetBuilder:
     def node_build_env(self) -> dict[str, str]:
         """Return the normal build environment with a safe Node.js heap limit."""
         env = self.manager._build_env()
-        override = env.get(_NODE_HEAP_OVERRIDE)
-
-        if override:
-            try:
-                heap_mb = int(override)
-                if heap_mb <= 0:
-                    raise ValueError
-            except ValueError:
-                logging.warning(
-                    "Ignoring invalid %s=%r; using automatic Node heap sizing.",
-                    _NODE_HEAP_OVERRIDE,
-                    override,
-                )
-                heap_mb = self.auto_node_heap_mb
-        else:
-            heap_mb = self.auto_node_heap_mb
+        heap_mb = self.bench.config.build.node_heap_limit_mb or self.auto_node_heap_mb
 
         node_options = env.get("NODE_OPTIONS", "").strip()
         heap_option = f"--max-old-space-size={heap_mb}"
@@ -130,9 +111,10 @@ class PythonAssetBuilder:
 
     @property
     def auto_node_heap_mb(self) -> int:
-        """Use 60% of currently available memory, bounded for predictable builds."""
-        heap_mb = int(self.available_memory_mb * _NODE_HEAP_AVAILABLE_RATIO)
-        return max(_NODE_HEAP_MIN_MB, min(heap_mb, _NODE_HEAP_MAX_MB))
+        """Size Node heap from available memory within configured bounds."""
+        build = self.bench.config.build
+        heap_mb = int(self.available_memory_mb * build.node_heap_available_percent / 100)
+        return max(build.node_heap_min_mb, min(heap_mb, build.node_heap_max_mb))
 
     @property
     def available_memory_mb(self) -> int:
@@ -151,7 +133,7 @@ class PythonAssetBuilder:
             except (ValueError, OSError):
                 pass
 
-        return _NODE_HEAP_MIN_MB
+        return self.bench.config.build.node_heap_min_mb
 
     def ensure_frontend_dependencies(self, app: "App") -> None:
         """frappe's own `bench build` shells into `frontend`/`roster`, so node_modules must
