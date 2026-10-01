@@ -119,24 +119,23 @@ class PythonAssetBuilder:
                     _NODE_HEAP_OVERRIDE,
                     override,
                 )
-                heap_mb = self.auto_node_heap_mb()
+                heap_mb = self.auto_node_heap_mb
         else:
-            heap_mb = self.auto_node_heap_mb()
+            heap_mb = self.auto_node_heap_mb
 
         node_options = env.get("NODE_OPTIONS", "").strip()
         heap_option = f"--max-old-space-size={heap_mb}"
         env["NODE_OPTIONS"] = f"{node_options} {heap_option}".strip()
         return env
 
-    @classmethod
-    def auto_node_heap_mb(cls) -> int:
+    @property
+    def auto_node_heap_mb(self) -> int:
         """Use 60% of currently available memory, bounded for predictable builds."""
-        available_mb = cls.available_memory_mb()
-        heap_mb = int(available_mb * _NODE_HEAP_AVAILABLE_RATIO)
+        heap_mb = int(self.available_memory_mb * _NODE_HEAP_AVAILABLE_RATIO)
         return max(_NODE_HEAP_MIN_MB, min(heap_mb, _NODE_HEAP_MAX_MB))
 
-    @staticmethod
-    def available_memory_mb() -> int:
+    @property
+    def available_memory_mb(self) -> int:
         """Return currently available system memory in MiB."""
         meminfo = Path("/proc/meminfo")
         if meminfo.exists():
