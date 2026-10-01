@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from pilot.managers.python_assets import PythonAssetBuilder
 
@@ -30,7 +30,7 @@ def test_build_assets_passes_node_heap_env_to_frappe_build(tmp_path: Path) -> No
     builder = PythonAssetBuilder(manager)
 
     with (
-        patch.object(builder, "auto_node_heap_mb", return_value=4096),
+        patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock, return_value=4096),
         patch("pilot.managers.python_assets.run_command") as run_command,
     ):
         builder.build_assets()
@@ -87,7 +87,7 @@ def test_build_assets_for_app_passes_node_heap_env_to_all_node_builds(tmp_path: 
     with (
         patch("pilot.managers.python_assets.git_has_local_changes", return_value=True),
         patch.object(builder, "ensure_yarn_install"),
-        patch.object(builder, "auto_node_heap_mb", return_value=4096),
+        patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock, return_value=4096),
         patch("pilot.managers.python_assets.get_yarn_bin", return_value="yarn"),
         patch("pilot.managers.python_assets.run_command") as run_command,
     ):
@@ -107,20 +107,20 @@ def test_build_assets_for_app_passes_node_heap_env_to_all_node_builds(tmp_path: 
 
 def test_auto_node_heap_uses_sixty_percent_of_available_memory() -> None:
     builder = make_builder()
-    with patch.object(builder, "available_memory_mb", return_value=8192):
-        assert builder.auto_node_heap_mb() == 4915
+    with patch.object(type(builder), "available_memory_mb", new_callable=PropertyMock, return_value=8192):
+        assert builder.auto_node_heap_mb == 4915
 
 
 def test_auto_node_heap_enforces_minimum() -> None:
     builder = make_builder()
-    with patch.object(builder, "available_memory_mb", return_value=1024):
-        assert builder.auto_node_heap_mb() == 2048
+    with patch.object(type(builder), "available_memory_mb", new_callable=PropertyMock, return_value=1024):
+        assert builder.auto_node_heap_mb == 2048
 
 
 def test_auto_node_heap_enforces_maximum() -> None:
     builder = make_builder()
-    with patch.object(builder, "available_memory_mb", return_value=32768):
-        assert builder.auto_node_heap_mb() == 6144
+    with patch.object(type(builder), "available_memory_mb", new_callable=PropertyMock, return_value=32768):
+        assert builder.auto_node_heap_mb == 6144
 
 
 def test_node_build_env_uses_admin_override() -> None:
@@ -131,7 +131,7 @@ def test_node_build_env_uses_admin_override() -> None:
     }
     builder = PythonAssetBuilder(manager)
 
-    with patch.object(builder, "auto_node_heap_mb") as auto_heap:
+    with patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock) as auto_heap:
         env = builder.node_build_env()
 
     auto_heap.assert_not_called()
@@ -143,7 +143,7 @@ def test_node_build_env_preserves_existing_node_options() -> None:
     manager._build_env.return_value = {"NODE_OPTIONS": "--trace-warnings"}
     builder = PythonAssetBuilder(manager)
 
-    with patch.object(builder, "auto_node_heap_mb", return_value=3072):
+    with patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock, return_value=3072):
         env = builder.node_build_env()
 
     assert env["NODE_OPTIONS"] == "--trace-warnings --max-old-space-size=3072"
@@ -154,7 +154,7 @@ def test_node_build_env_invalid_override_falls_back_to_auto() -> None:
     manager._build_env.return_value = {"PILOT_NODE_MAX_OLD_SPACE_SIZE": "invalid"}
     builder = PythonAssetBuilder(manager)
 
-    with patch.object(builder, "auto_node_heap_mb", return_value=3584) as auto_heap:
+    with patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock, return_value=3584) as auto_heap:
         env = builder.node_build_env()
 
     auto_heap.assert_called_once_with()
