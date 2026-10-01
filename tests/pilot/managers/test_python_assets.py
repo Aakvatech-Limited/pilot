@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, patch
 
+from pilot.config.build import BuildConfig
 from pilot.managers.python_assets import PythonAssetBuilder
 
 
@@ -18,6 +19,7 @@ def make_app(app_path: Path, name: str = "gameplan") -> MagicMock:
 
 def make_builder() -> PythonAssetBuilder:
     manager = MagicMock()
+    manager.bench.config.build = BuildConfig()
     return PythonAssetBuilder(manager)
 
 
@@ -27,6 +29,7 @@ def test_build_assets_passes_node_heap_env_to_frappe_build(tmp_path: Path) -> No
     manager.bench.frappe_call = ["python"]
     manager.bench.sites_path = tmp_path / "sites"
     manager._build_env.return_value = {"PATH": "/usr/bin"}
+    manager.bench.config.build = BuildConfig()
     builder = PythonAssetBuilder(manager)
 
     with (
@@ -82,6 +85,7 @@ def test_build_assets_for_app_passes_node_heap_env_to_all_node_builds(tmp_path: 
     manager.bench.frappe_call = ["python"]
     manager.bench.sites_path = tmp_path / "sites"
     manager._build_env.return_value = {"PATH": "/usr/bin"}
+    manager.bench.config.build = BuildConfig()
     builder = PythonAssetBuilder(manager)
 
     with (
@@ -123,12 +127,10 @@ def test_auto_node_heap_enforces_maximum() -> None:
         assert builder.auto_node_heap_mb == 6144
 
 
-def test_node_build_env_uses_admin_override() -> None:
+def test_node_build_env_uses_bench_config_override() -> None:
     manager = MagicMock()
-    manager._build_env.return_value = {
-        "PATH": "/usr/bin",
-        "PILOT_NODE_MAX_OLD_SPACE_SIZE": "4096",
-    }
+    manager._build_env.return_value = {"PATH": "/usr/bin"}
+    manager.bench.config.build = BuildConfig(node_heap_limit_mb=4096)
     builder = PythonAssetBuilder(manager)
 
     with patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock) as auto_heap:
@@ -141,6 +143,7 @@ def test_node_build_env_uses_admin_override() -> None:
 def test_node_build_env_preserves_existing_node_options() -> None:
     manager = MagicMock()
     manager._build_env.return_value = {"NODE_OPTIONS": "--trace-warnings"}
+    manager.bench.config.build = BuildConfig()
     builder = PythonAssetBuilder(manager)
 
     with patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock, return_value=3072):
@@ -149,17 +152,15 @@ def test_node_build_env_preserves_existing_node_options() -> None:
     assert env["NODE_OPTIONS"] == "--trace-warnings --max-old-space-size=3072"
 
 
-def test_node_build_env_invalid_override_falls_back_to_auto() -> None:
-    manager = MagicMock()
-    manager._build_env.return_value = {"PILOT_NODE_MAX_OLD_SPACE_SIZE": "invalid"}
-    builder = PythonAssetBuilder(manager)
-
-    with patch.object(type(builder), "auto_node_heap_mb", new_callable=PropertyMock, return_value=3584) as auto_heap:
-        env = builder.node_build_env()
-
-    auto_heap.assert_called_once_with()
-    assert env["NODE_OPTIONS"] == "--max-old-space-size=3584"
-
+def test_auto_node_heap_uses_configured_thresholds() -> None:
+    builder = make_builder()
+    builder.bench.config.build = BuildConfig(
+        node_heap_min_mb=1024,
+        node_heap_max_mb=8192,
+        node_heap_available_percent=50,
+    )
+    with patch.object(type(builder), "available_memory_mb", new_callable=PropertyMock, return_value=10000):
+        assert builder.auto_node_heap_mb == 5000
 
 def test_ensure_yarn_install_uses_frozen_lockfile_first(tmp_path: Path) -> None:
     """A healthy lockfile should keep the reproducible frozen install path."""
