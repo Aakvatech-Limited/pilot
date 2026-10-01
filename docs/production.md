@@ -90,16 +90,25 @@ To set a fixed cap instead, add `memory_limit_mb` under `[build]` in `bench.toml
 ## MariaDB Memory Limits
 
 On Linux, Pilot's managed MariaDB systemd unit sets `MemoryHigh`, `MemoryMax`, and
-`MemorySwapMax` from detected host RAM. `MemoryMax` remains the hard cgroup
-ceiling and is capped at half of host memory. `MemoryHigh` is the throttling
-threshold: Pilot uses the higher of 85% of `MemoryMax` and the previous
-MariaDB threshold, while preserving at least 128 MB between `MemoryHigh` and
-`MemoryMax`. This avoids lowering the throttling threshold on larger hosts
-while giving smaller hosts more usable headroom before reclaim throttling.
+`MemorySwapMax`. The automatic `MemoryHigh` calculation remains unchanged so
+an upgrade does not silently move the cgroup throttling threshold. `MemoryMax`
+remains the hard cgroup ceiling and is capped at half of host memory.
 
-`MemorySwapMax` is 20% of the MariaDB service memory budget, bounded between
-100 MB and 1 GB. The bound provides transient swap headroom without allowing
-unlimited swap growth.
+The default `MemorySwapMax` also remains 100 MB. Pilot does not automatically
+increase database swap because sustained swapping can turn memory pressure into
+latency and CPU pressure. Operators can override the two pressure controls in
+the shared host configuration when workload measurements justify it:
+
+```toml
+[mariadb]
+memory_high_mb = 0
+memory_swap_max_mb = 100
+```
+
+`memory_high_mb = 0` keeps automatic sizing. Set an explicit positive MB value
+to override the throttling threshold; it may not exceed Pilot's calculated
+`MemoryMax`. `memory_swap_max_mb` accepts zero to disable MariaDB swap or a
+non-negative MB value to set a deliberate swap ceiling.
 
 When Pilot provisions an already-managed MariaDB installation it rewrites the
 managed systemd unit and runs `daemon-reload` without restarting a running
