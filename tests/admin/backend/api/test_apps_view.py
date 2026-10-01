@@ -176,15 +176,12 @@ def test_switch_branch_rejects_invalid_app_name_before_path_access(tmp_path: Pat
     client = _client(bench_root)
 
     response = client.post(
-        "/api/v1/apps/bad%2Fname/actions/switch-branch",
+        "/api/v1/apps/1bad/actions/switch-branch",
         json={"branch": "develop"},
     )
 
-    # Werkzeug may reject the decoded slash at routing level before the view is
-    # reached. If the view is reached, app-name validation must reject it.
-    assert response.status_code in {405, 422}
-    if response.status_code == 422:
-        assert response.get_json()["error"]["code"] == "invalid_app"
+    assert response.status_code == 422
+    assert response.get_json()["error"]["code"] == "invalid_app"
 
 
 def test_switch_branch_rejects_traversal_app_name(tmp_path: Path) -> None:
