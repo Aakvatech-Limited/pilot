@@ -72,12 +72,7 @@ class SwitchBranchTask(Task):
         previous_sha: str,
         previous_configured_branch: str,
     ) -> None:
-        """Restore the exact checkout and environment that were live before the switch.
-
-        Rollback failures deliberately propagate to the caller so the task can
-        report both the original failure and the incomplete restoration with
-        their full tracebacks.
-        """
+        """Restore the previous checkout and environment."""
         app.restore_revision(previous_branch, previous_sha, previous_configured_branch)
         app.record_branch()
         env.install_app(app)
