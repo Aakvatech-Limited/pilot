@@ -54,6 +54,7 @@ def test_build_assets_for_app_installs_js_deps_before_frappe_build_runs(tmp_path
     manager = MagicMock()
     manager.bench.frappe_call = ["python"]
     manager.bench.sites_path = tmp_path / "sites"
+    manager.bench.config.build = BuildConfig()
     builder = PythonAssetBuilder(manager)
 
     events: list[str] = []
