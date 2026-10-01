@@ -33,6 +33,7 @@ from pilot.managers.platform import is_macos, which
 from pilot.utils import cli_root, run_command
 
 _CLIENT_TIMEOUT = 5
+_DATABASE_ACTION_BUSY = "Another database action is already running on this server."
 _MEMORY_RELEASE_TIMEOUT = 60
 _MANAGED_CONFIG_HEADER = "# Managed by Pilot's database variable editor.\n"
 _OPTION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -127,7 +128,12 @@ class MariaDBManager(UserOwnedDBManager):
             run_command(self._systemctl("enable", "--now", self._UNIT_NAME), env=self._systemctl_env())
 
         elif self.is_running():
-            self.tune_to_host()
+            try:
+                self.tune_to_host()
+            except DatabaseError as exc:
+                if str(exc) != _DATABASE_ACTION_BUSY:
+                    raise
+                logging.getLogger(__name__).info("MariaDB host tuning deferred: %s", exc)
         else:
             sizing = self._write_config()
             self._install_unit(sizing)
@@ -275,7 +281,7 @@ class MariaDBManager(UserOwnedDBManager):
         try:
             stack.enter_context(exclusive_file_lock(self.action_lock_path, blocking=False))
         except BlockingIOError as exc:
-            raise DatabaseError("Another database action is already running on this server.") from exc
+            raise DatabaseError(_DATABASE_ACTION_BUSY) from exc
         with stack:
             yield
 
@@ -329,11 +335,12 @@ class MariaDBManager(UserOwnedDBManager):
         next start.
         """
         deadline = time.monotonic() + _MEMORY_RELEASE_TIMEOUT
-        while (usage := self._unit_memory_mb("MemoryCurrent")) is None or usage >= sizing.memory_high_mb:
+        memory_high_mb = self._memory_high_mb(sizing)
+        while (usage := self._unit_memory_mb("MemoryCurrent")) is None or usage >= memory_high_mb:
             if time.monotonic() >= deadline:
                 logging.getLogger(__name__).warning(
                     "MariaDB memory use is unknown or above %s MiB; its new memory limits apply at the next start.",
-                    sizing.memory_high_mb,
+                    memory_high_mb,
                 )
                 return
             time.sleep(1)
@@ -345,7 +352,7 @@ class MariaDBManager(UserOwnedDBManager):
                 "set-property",
                 "--runtime",
                 self._UNIT_NAME,
-                f"MemoryHigh={sizing.memory_high_mb}M",
+                f"MemoryHigh={self._memory_high_mb(sizing)}M",
                 f"MemoryMax={sizing.memory_max_mb}M",
             ),
             env=self._systemctl_env(),
