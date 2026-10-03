@@ -134,6 +134,10 @@ Use this flow when a change needs more than one commit.
 5. If a pre-commit hook changes files and stops the commit, stage the changed files and commit again.
 6. After the last commit, confirm that the working tree has no unstaged change. Push only when the user asks.
 
+## Issues
+
+When you draft an issue, use the forms in `.github/ISSUE_TEMPLATE` (bug report or feature request) and their title format. Do not include real hostnames, IP addresses, tokens or customer data.
+
 ## Pull Requests
 
 - Use the Conventional Commit format for the pull request title.

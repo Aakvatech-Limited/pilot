@@ -77,6 +77,12 @@ Messages:
 - Screenshots for Admin UI changes. No validation or ops sections. Keep removals out of the title.
 - On request, watch CI and bots until clean ("keep checking and make it 5/5").
 
+## Issues
+
+- Draft issues with the forms in `.github/ISSUE_TEMPLATE`: bug report (`fix(<scope>): ...`) or feature request (`feat(<scope>): ...`).
+- Fill every required field. Reuse the issue sections in the PR.
+- No real hostnames, IP addresses, tokens or customer data. Security reports go through the private security page, never a public issue.
+
 ## Tests
 
 - Test behavior that can regress. No constant-echo tests, no mock-heavy tests that catch nothing. Delete tests with their feature. Merge scattered test files.
