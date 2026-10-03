@@ -2,6 +2,11 @@
 
 This repo is a Python CLI plus Flask Admin backend for managing Frappe benches. Prefer small, direct changes that keep the object model easy to use.
 
+## Session Continuity
+
+- Mandatory: Follow the [engineering playbook](llm/engineering-playbook/SKILL.md) for every task. Read `SKILL.md` at the start of a session and the references that the task needs. This file wins on conflict.
+- Mandatory: After context compaction, summarization, restart, or a resumed session, read this file and `SKILL.md` again before you continue. Keep a reference to both in a handover or context summary.
+
 ## Main Rules
 
 - Put real behavior in `pilot.core`, managers, or tasks.
@@ -12,6 +17,23 @@ This repo is a Python CLI plus Flask Admin backend for managing Frappe benches. 
 - Keep comments short. Remove comments that restate the code.
 - Do not put comments at the top of a file. Use a short, terse class or method docstring instead.
 - Do not create or commit plan/planning markdown files (e.g. `plan_*.md`); keep them out of git.
+- When the user states a problem without a solution direction, investigate first, ask focused questions, and offer options with a recommendation before you build.
+- Follow the existing pattern for the same job. Do not add a second way. If a better way exists, change every existing use, or propose that change first.
+- Make code safe when a CLI call, an Admin request and task workers act on one bench at once. Read-modify-write config under its file lock with atomic writes, keep task submission idempotent, and do not hold a lock during long work.
+- Get user approval with a mockup before you add an Admin UI page or change a page, dialog or form layout.
+
+## Compatibility
+
+Existing benches, scripts and clients must keep working after every change.
+
+- Keep public surfaces backward compatible: CLI commands and flags, `bench.toml` and `common_config.toml` keys, the Admin API, task `command` names and records, and callbacks. Add only optional fields and flags. Do not rename, remove or retype existing ones, or change a default that users rely on.
+- Do not add a new API version. Change the current contract so that old clients keep working.
+- Add a patch in `pilot/patches` when stored config or state changes shape.
+- When a break cannot be avoided, explain the break and the upgrade path to the user before you implement it.
+
+## Environments
+
+Act freely in development. Ask the user before each write in staging. Never act on production or on a resource that is not declared. See [environments and access](llm/engineering-playbook/references/environments.md).
 
 ## Useful Entry Points
 
@@ -76,6 +98,14 @@ These rules are mandatory for agents changing this repo:
 - Run `uv run ruff check admin pilot tests` after Python changes.
 - Run targeted tests for narrow behavior changes and `uv run pytest` before committing broad refactors.
 - For bug fixes, identify the root cause before attempting a fix.
+
+## Commits and Pull Requests
+
+- Never commit or push unless the user asks. Plan the commit list, stage one commit at a time, show a per-file summary, and commit on approval.
+- Use a short Conventional Commit subject: `type(scope): Sentence case`. Do not add an AI co-author, session data, or agent data.
+- When an external document explains the change, add its link on a `Refs:` line at the end of the body.
+- Put each linked issue on the first line of the PR description as `Closes #<issue>`. Keep the description short: `Summary`, `Why`, `What changed` (bug fixes start with `Issue`).
+- Write "What changed" for the reviewer: behavior, CLI, config, API or task changes, risky areas and rollout steps. Do not list file names, renames, formatting, comment, test or doc edits, or lint fixes.
 
 ## Docs
 
