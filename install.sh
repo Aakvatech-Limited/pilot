@@ -276,13 +276,12 @@ waf_packages() {
 install_node() {
     if command -v node >/dev/null 2>&1; then
         NODE_VERSION=$(node -v | tr -d 'v' | cut -d'.' -f1)
-        if [ "$NODE_VERSION" = "24" ]; then
+        if [ "$NODE_VERSION" -ge 24 ] 2>/dev/null; then
             return 0
-        else
-            echo "❌ Error: Found Node.js version $NODE_VERSION, but Pilot strictly requires Node.js 24."
-            echo "Please manually install Node.js 24 and retry."
-            exit 1
         fi
+        echo "❌ Error: Pilot needs Node.js 24 or later, but found $(node -v)."
+        echo "Please install Node.js 24 or later and retry."
+        exit 1
     fi
     # An unknown distro only gets Node when apt is there to install it.
     if [ "$DISTRO" = "unknown" ] && ! command -v apt-get >/dev/null 2>&1; then

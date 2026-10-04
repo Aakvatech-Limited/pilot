@@ -322,3 +322,19 @@ services_to_disable
     assert result.returncode == 0, result.stderr
     assert "nginx" not in result.stdout.split()
     assert "mariadb" in result.stdout.split()
+
+
+@pytest.mark.parametrize(("version", "is_accepted"), [("v18.20.3", False), ("v24.1.0", True), ("v26.0.0", True)])
+def test_node_24_or_later_is_accepted(version: str, is_accepted: bool, tmp_path: Path) -> None:
+    """Frappe needs Node 24 or later, and Arch and Homebrew install the current release."""
+    result = run_installer_functions(
+        f"""
+DISTRO=ubuntu
+node() {{ echo "{version}"; }}
+install_node
+echo reached_the_end
+""",
+        tmp_path,
+    )
+    assert ("reached_the_end" in result.stdout) is is_accepted
+    assert ("Node.js 24 or later" in result.stdout) is not is_accepted
