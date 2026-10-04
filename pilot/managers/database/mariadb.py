@@ -784,6 +784,8 @@ class MariaDBManager(UserOwnedDBManager):
         raise DatabaseError(f"MariaDB did not become healthy within {timeout:.0f}s.")
 
     def is_healthy(self) -> bool:
+        import pymysql
+
         try:
             connection = self.connect()
             try:
@@ -792,7 +794,7 @@ class MariaDBManager(UserOwnedDBManager):
                     return cursor.fetchone() is not None
             finally:
                 connection.close()
-        except Exception:
+        except (pymysql.Error, OSError):
             return False
 
     def _total_memory_mb(self) -> int:
