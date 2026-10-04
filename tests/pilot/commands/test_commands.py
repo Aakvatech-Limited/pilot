@@ -1206,6 +1206,31 @@ def test_write_common_site_config_preserves_custom_keys(tmp_path: Path) -> None:
     assert config["redis_cache"] == "redis://localhost:13000"
 
 
+def test_write_common_site_config_enables_server_scripts_by_default(tmp_path: Path) -> None:
+    import json
+
+    bench = make_bench(tmp_path)
+    bench.sites_path.mkdir(parents=True)
+
+    bench.write_common_site_config()
+
+    config = json.loads((bench.sites_path / "common_site_config.json").read_text())
+    assert config["server_script_enabled"] is True
+
+
+def test_write_common_site_config_keeps_a_disabled_server_script_setting(tmp_path: Path) -> None:
+    import json
+
+    bench = make_bench(tmp_path)
+    bench.sites_path.mkdir(parents=True)
+    config_path = bench.sites_path / "common_site_config.json"
+    config_path.write_text('{"server_script_enabled": false}')
+
+    bench.write_common_site_config()
+
+    assert json.loads(config_path.read_text())["server_script_enabled"] is False
+
+
 def test_write_common_site_config_leaves_developer_mode_to_sites(tmp_path: Path) -> None:
     import json
 
