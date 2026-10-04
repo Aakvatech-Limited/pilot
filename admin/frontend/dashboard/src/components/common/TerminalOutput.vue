@@ -68,7 +68,6 @@ defineExpose({ scrollToBottom })
   background: var(--terminal-bg);
   color: var(--terminal-fg);
 }
-/* The terminal stays dark in both app themes, so the global ::selection is invisible here. */
 .terminal ::selection {
   background: rgb(255 255 255 / 0.25);
 }

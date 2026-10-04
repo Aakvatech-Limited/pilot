@@ -1,7 +1,7 @@
-/** A selection counts as inside the container when either end is in it, so a drag
- * that starts outside and lands in the container still suppresses autoscroll. */
+type SelectionLike = Pick<Selection, 'isCollapsed' | 'containsNode'>
 
-export const isSelectionInside = (selection, container) => {
+/** True when a non-empty selection overlaps the container, including drags that start, end or pass through it. */
+export const isSelectionInside = (selection: SelectionLike | null, container: Node | null): boolean => {
   if (!selection || !container || selection.isCollapsed) return false
-  return container.contains(selection.anchorNode) || container.contains(selection.focusNode)
+  return selection.containsNode(container, true)
 }
