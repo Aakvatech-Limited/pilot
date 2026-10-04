@@ -227,8 +227,9 @@ class NginxConfigRenderer:
 
     @staticmethod
     def _unrouted_scheme(client_ip_source: str) -> str:
-        """Trust the edge's scheme only where it terminates TLS, never on PROXY-protocol passthrough."""
-        return "$http_x_forwarded_proto" if client_ip_source == "x_forwarded_for" else "$scheme"
+        """Trust the edge's scheme only where it terminates TLS, never on PROXY-protocol passthrough.
+        $pilot_scheme falls back to $scheme when the edge sends no X-Forwarded-Proto."""
+        return "$pilot_scheme" if client_ip_source == "x_forwarded_for" else "$scheme"
 
     def _site_vhost(
         self,

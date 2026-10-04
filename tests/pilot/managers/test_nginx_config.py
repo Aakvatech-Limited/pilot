@@ -102,7 +102,7 @@ def test_canonical_redirect_preserves_edge_proxy_scheme(tmp_path: Path) -> None:
     )
     config = _site_config(tmp_path, site, proxy_servers=["203.0.113.5"])
 
-    assert "return 301 $http_x_forwarded_proto://www.example.com$request_uri;" in config
+    assert "return 301 $pilot_scheme://www.example.com$request_uri;" in config
 
 
 def test_proxy_headers_and_error_pages_present(tmp_path: Path) -> None:
@@ -229,11 +229,18 @@ def test_trusted_proxy_accepts_ipv4_and_ipv6_networks(tmp_path: Path) -> None:
     assert "set_real_ip_from   2001:db8::/48;" in config
     assert "X-Forwarded-For    $http_x_forwarded_for" in config
     assert "$proxy_add_x_forwarded_for" not in config
-    assert "X-Forwarded-Proto  $http_x_forwarded_proto" in config
+    assert "X-Forwarded-Proto  $pilot_scheme" in config
     assert "set $pilot_socketio_origin $http_origin;" in config
     assert 'if ($pilot_socketio_origin = "") {' in config
-    assert "set $pilot_socketio_origin $http_x_forwarded_proto://$http_host;" in config
+    assert "set $pilot_socketio_origin $pilot_scheme://$http_host;" in config
     assert "proxy_set_header   Origin $pilot_socketio_origin;" in config
+
+
+def test_trusted_proxy_scheme_falls_back_to_the_local_scheme(tmp_path: Path) -> None:
+    config = _site_config(tmp_path, _BASE_SITE, proxy_servers=["203.0.113.5"])
+
+    assert "set $pilot_scheme $http_x_forwarded_proto;" in config
+    assert 'if ($pilot_scheme = "") { set $pilot_scheme $scheme; }' in config
 
 
 def test_direct_site_builds_socketio_origin_from_local_scheme(tmp_path: Path) -> None:
@@ -1037,8 +1044,8 @@ def test_proxy_protocol_vhost_uses_local_scheme_while_edge_terminated_vhost_forw
     edge_terminated = config.split("server_name site-a1b2c3.zone.example;")[1].split("server {")[0]
     assert "X-Forwarded-Proto  $scheme" in passthrough
     assert "set $pilot_socketio_origin $scheme://$http_host;" in passthrough
-    assert "X-Forwarded-Proto  $http_x_forwarded_proto" in edge_terminated
-    assert "set $pilot_socketio_origin $http_x_forwarded_proto://$http_host;" in edge_terminated
+    assert "X-Forwarded-Proto  $pilot_scheme" in edge_terminated
+    assert "set $pilot_socketio_origin $pilot_scheme://$http_host;" in edge_terminated
 
 
 def test_without_proxy_protocol_the_https_listener_is_plain(tmp_path: Path) -> None:

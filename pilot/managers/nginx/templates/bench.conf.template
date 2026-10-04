@@ -108,6 +108,8 @@ server {
     set $bench_from_proxy {{ proxy_gate_variable }};
     if ($request_uri ~ "^/\.well-known/acme-challenge/") { set $bench_from_proxy 1; }
     if ($bench_from_proxy = 0) { return 403; }
+    set $pilot_scheme $http_x_forwarded_proto;
+    if ($pilot_scheme = "") { set $pilot_scheme $scheme; }
 
     {% endif %}
     {# firewall: first-match allow / deny #}
@@ -188,6 +190,8 @@ server {
     set $bench_from_proxy {{ proxy_gate_variable }};
     if ($request_uri ~ "^/\.well-known/acme-challenge/") { set $bench_from_proxy 1; }
     if ($bench_from_proxy = 0) { return 403; }
+    set $pilot_scheme $http_x_forwarded_proto;
+    if ($pilot_scheme = "") { set $pilot_scheme $scheme; }
 
     {% endif %}
     {# firewall: first-match allow / deny #}
