@@ -44,6 +44,9 @@ export const useBackupUpload = (siteName: () => string) => {
     try {
       const started = await sitesApi.uploads.start(siteName(), described)
       uploadId = started.upload_id
+      // Closed while the upload was starting: the catch removes it from the server.
+      if (controller.signal.aborted)
+        throw new DOMException('The upload was cancelled.', 'AbortError')
       for (const [part, file] of Object.entries(files))
         await sendFile(part, file, started.chunk_size, controller.signal)
     } catch (error) {

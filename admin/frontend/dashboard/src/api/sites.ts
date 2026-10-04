@@ -131,6 +131,8 @@ export const sitesApi = {
       signal: AbortSignal,
     ): Promise<number> =>
       new Promise((resolve, reject) => {
+        if (signal.aborted)
+          return reject(new DOMException('The upload was cancelled.', 'AbortError'))
         const xhr = new XMLHttpRequest()
         xhr.open(
           'PUT',

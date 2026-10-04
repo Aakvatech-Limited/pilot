@@ -8,6 +8,7 @@ import { formatBytes } from '@/utils/format'
 import { fmtDateTime } from '@/utils/taskFormat'
 
 const POLL_MS = 3_000
+const MAX_BACKUP_CHECK_FAILURES = 5
 // Frappe Cloud sends backups in pages of this size.
 const PAGE_LENGTH = 5
 
@@ -25,6 +26,7 @@ const hasMoreBackups = ref(false)
 const loadingMore = ref(false)
 const backupJobUrl = ref('')
 let timer: ReturnType<typeof setTimeout> | undefined
+let backupCheckFailures = 0
 
 const run = async (action: () => Promise<void>, fallback: string) => {
   error.value = ''
@@ -79,16 +81,31 @@ const connect = () => {
   }, 'Could not reach Frappe Cloud.').finally(() => (connecting.value = false))
 }
 
-const followBackup = async () => {
-  const { status, job_url } = await sitesApi.frappeCloud.backup(props.siteName, pendingBackup.value)
-  backupJobUrl.value = job_url ?? ''
-  if (status === 'Pending' || status === 'Running') {
-    timer = setTimeout(() => run(followBackup, 'Could not check the backup.'), POLL_MS)
-    return
-  }
+const checkBackupLater = () => {
+  timer = setTimeout(() => run(followBackup, 'Could not check the backup.'), POLL_MS)
+}
+
+const stopFollowingBackup = () => {
   pendingBackup.value = ''
   backupJobUrl.value = ''
-  if (status !== 'Success') throw new Error('Frappe Cloud could not take the backup.')
+  backupCheckFailures = 0
+}
+
+const followBackup = async () => {
+  let result: { status: string; job_url: string | null }
+  try {
+    result = await sitesApi.frappeCloud.backup(props.siteName, pendingBackup.value)
+  } catch (failure) {
+    // A short outage keeps the backup followed; a lasting one frees the button.
+    if (++backupCheckFailures > MAX_BACKUP_CHECK_FAILURES) stopFollowingBackup()
+    else checkBackupLater()
+    throw failure
+  }
+  backupCheckFailures = 0
+  backupJobUrl.value = result.job_url ?? ''
+  if (result.status === 'Pending' || result.status === 'Running') return checkBackupLater()
+  stopFollowingBackup()
+  if (result.status !== 'Success') throw new Error('Frappe Cloud could not take the backup.')
   await loadBackups()
 }
 
