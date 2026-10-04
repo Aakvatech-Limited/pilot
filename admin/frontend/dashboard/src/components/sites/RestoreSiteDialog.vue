@@ -92,11 +92,11 @@ const isReady = computed(() => {
 })
 
 watch(open, (isOpen) => {
+  password.value = ''
   if (!isOpen) return
   source.value = 'upload'
   sourceSite.value = ''
   remoteSite.value = ''
-  password.value = ''
   chosen.value = { database: true, public: true, private: true }
   uploads.value = {}
   error.value = ''
@@ -231,7 +231,15 @@ const restore = async () => {
 
         <div v-else class="space-y-3">
           <TextInput v-model="remoteSite" label="Site" placeholder="erp.example.com" />
-          <TextInput v-model="password" label="Administrator password" type="password" />
+          <TextInput
+            v-model="password"
+            label="Administrator password"
+            type="password"
+            autocomplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
+          />
           <Select
             v-if="remoteBackups"
             v-model="remoteBackup"
