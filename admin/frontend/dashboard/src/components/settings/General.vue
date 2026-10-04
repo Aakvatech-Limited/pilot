@@ -2,7 +2,6 @@
 import { ErrorMessage, Spinner, Switch, toast } from 'frappe-ui'
 import { onMounted, ref } from 'vue'
 import { settingsApi } from '@/api/settings'
-import BenchActions from '@/components/settings/BenchActions.vue'
 import Git from '@/components/settings/Git.vue'
 import LLM from '@/components/settings/LLM.vue'
 import Mail from '@/components/settings/Mail.vue'
@@ -127,8 +126,6 @@ onMounted(async () => {
       >
         <span class="size-4 text-ink-gray-5 lucide-chevron-right" aria-hidden="true" />
       </SettingsRow>
-
-      <BenchActions />
 
       <Version />
     </div>
