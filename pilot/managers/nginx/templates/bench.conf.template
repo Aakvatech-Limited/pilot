@@ -223,9 +223,11 @@ server {
     {# document root #}
     {% if vhost.kind == "site" %}
     root {{ sites_root }};
-    client_max_body_size {{ client_max_body_size }};
 
     {% endif %}
+    {# the admin takes backup uploads, so it gets the same limit as a site #}
+    client_max_body_size {{ client_max_body_size }};
+
     {# ACME http-01 challenge, kept reachable so cert issuance never 403s #}
     {% if not vhost.ssl %}
     location /.well-known/acme-challenge/ {

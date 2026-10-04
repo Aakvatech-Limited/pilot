@@ -348,11 +348,10 @@ def test_app_has_marketplace_update_false_when_advertised_commit_is_checked_out(
     assert app.has_marketplace_update() is False
 
 
-def test_app_has_marketplace_update_true_when_advertised_commit_is_unrelated(
+def test_app_has_marketplace_update_false_when_advertised_commit_is_unrelated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """git can't relate a commit this clone has never seen and can't fetch, so the
-    advertised release wins - the registry only ever advertises newer code."""
+    """A commit git cannot fetch or relate to HEAD is not proof of an update."""
     app = _app_on_branch(tmp_path, "https://github.com/frappe/myapp")
     monkeypatch.setattr("pilot.core.app.installed_app_version", lambda *_: "1.0.0")
     entry = {
@@ -363,7 +362,55 @@ def test_app_has_marketplace_update_true_when_advertised_commit_is_unrelated(
 
     _publish(entry)
 
-    assert app.has_marketplace_update() is True
+    assert app.has_marketplace_update() is False
+
+
+def _shallow_app(tmp_path: Path) -> tuple[App, Path, list[str]]:
+    """A depth-1 clone of the third of four upstream commits, as Pilot clones releases."""
+    import subprocess
+
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    _init_git_repo(remote)
+    shas = []
+    for message in ("c1", "c2", "c3"):
+        _commit(remote, message)
+        shas.append(GitRepo(remote).head_sha)
+
+    app = App(AppConfig(name="myapp", repo="https://github.com/frappe/myapp", branch="main"), make_bench(tmp_path))
+    subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{remote}", str(app.path)], check=True)
+    subprocess.run(["git", "-C", str(app.path), "checkout", "-q", "-B", "main"], check=True)
+    _commit(remote, "c4")
+    shas.append(GitRepo(remote).head_sha)
+    return app, remote, shas
+
+
+def test_shallow_clone_does_not_offer_an_older_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _, shas = _shallow_app(tmp_path)
+    monkeypatch.setattr("pilot.core.app.installed_app_version", lambda *_: "1.0.0")
+    _publish(
+        {
+            "name": "myapp",
+            "repo": "https://github.com/frappe/myapp",
+            "releases": [{"version": "0.9.0", "branch": "main", "commit": shas[0]}],
+        }
+    )
+
+    assert app.update_target() is None
+
+
+def test_shallow_clone_offers_a_newer_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _, shas = _shallow_app(tmp_path)
+    monkeypatch.setattr("pilot.core.app.installed_app_version", lambda *_: "1.0.0")
+    _publish(
+        {
+            "name": "myapp",
+            "repo": "https://github.com/frappe/myapp",
+            "releases": [{"version": "1.1.0", "branch": "main", "commit": shas[3]}],
+        }
+    )
+
+    assert app.update_target() == RevisionPin(kind="commit", ref=shas[3])
 
 
 def test_app_is_marketplace_matches_the_registry_entry_for_its_repository(tmp_path: Path) -> None:
@@ -397,18 +444,19 @@ def test_app_update_target_prefers_the_release_on_the_apps_branch(
 ) -> None:
     app = _app_on_branch(tmp_path, "https://github.com/frappe/myapp", branch="version-15")
     monkeypatch.setattr("pilot.core.app.installed_app_version", lambda *_: "1.0.0")
+    ahead = _commit_ahead_of_head(app)
     entry = {
         "name": "myapp",
         "repo": "https://github.com/frappe/myapp",
         "releases": [
             {"version": "1.0.0", "branch": "main", "commit": "a" * 40},
-            {"version": "1.0.0", "branch": "version-15", "commit": "b" * 40},
+            {"version": "1.0.0", "branch": "version-15", "commit": ahead},
         ],
     }
 
     _publish(entry)
 
-    assert app.update_target() == RevisionPin(kind="commit", ref="b" * 40)
+    assert app.update_target() == RevisionPin(kind="commit", ref=ahead)
 
 
 def test_app_install_checks_out_the_pinned_commit_before_validating(tmp_path: Path) -> None:
@@ -1074,3 +1122,25 @@ def test_bench_db_root_args_postgres(tmp_path: Path) -> None:
 def test_bench_db_root_args_mariadb(tmp_path: Path) -> None:
     bench = make_bench(tmp_path)
     assert bench.db_root_args == ["--db-root-username", "root", "--db-root-password", "root"]
+
+
+def test_after_a_revert_a_disconnected_newer_release_is_still_offered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A depth-1 revert leaves the newer release in the clone with no history between them."""
+    import subprocess
+
+    app, _, shas = _shallow_app(tmp_path)
+    subprocess.run(["git", "-C", str(app.path), "fetch", "-q", "--depth", "1", "origin", shas[3]], check=True)
+    subprocess.run(["git", "-C", str(app.path), "fetch", "-q", "--depth", "1", "origin", shas[1]], check=True)
+    subprocess.run(["git", "-C", str(app.path), "checkout", "-q", "-B", "main", shas[1]], check=True)
+    monkeypatch.setattr("pilot.core.app.installed_app_version", lambda *_: "1.0.0")
+    _publish(
+        {
+            "name": "myapp",
+            "repo": "https://github.com/frappe/myapp",
+            "releases": [{"version": "1.1.0", "branch": "main", "commit": shas[3]}],
+        }
+    )
+
+    assert app.update_target() == RevisionPin(kind="commit", ref=shas[3])
