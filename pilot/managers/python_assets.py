@@ -72,10 +72,13 @@ class PythonAssetBuilder:
         dist_dir = app_public_dir / "dist"
 
         if not force and not git_has_local_changes(app.path):
-            if self.try_download_prebuilt_assets(app, app_public_dir, dist_dir):
-                return
-            if self.has_prebuilt_assets(dist_dir):
+            from pilot.core.app.prebuilt_assets import PrebuiltAssets
+
+            if PrebuiltAssets(app).install():
                 self.setup_prebuilt_assets(app.config.name, app_public_dir, dist_dir)
+                return
+            # Deprecated branch-keyed archive. Remove in the next release.
+            if self.try_download_prebuilt_assets(app, app_public_dir, dist_dir):
                 return
 
         if (app.path / "package.json").exists():
@@ -199,11 +202,6 @@ class PythonAssetBuilder:
         finally:
             tmp_path.unlink(missing_ok=True)
 
-    @staticmethod
-    def has_prebuilt_assets(dist_dir: Path) -> bool:
-        js_dir = dist_dir / "js"
-        return js_dir.is_dir() and any(_BUNDLE_RE.match(f.name) for f in js_dir.iterdir())
-
     def setup_prebuilt_assets(self, app_name: str, app_public_dir: Path, dist_dir: Path) -> None:
         assets_dir = self.bench.sites_path / "assets"
         assets_dir.mkdir(exist_ok=True)
@@ -258,9 +256,13 @@ class PythonAssetBuilder:
 
     @staticmethod
     def merge_json(path: Path, new_entries: dict) -> None:
-        existing: dict = {}
-        if path.exists():
-            with contextlib.suppress(json.JSONDecodeError):
-                existing = json.loads(path.read_text())
-        existing.update(new_entries)
-        path.write_text(json.dumps(existing, indent="\t", sort_keys=True) + "\n")
+        """Merge under the lock: several apps' builds write this file at once."""
+        from pilot.internal.atomic_file import exclusive_file_lock, replace_private_text_locked
+
+        with exclusive_file_lock(path):
+            existing: dict = {}
+            if path.exists():
+                with contextlib.suppress(json.JSONDecodeError):
+                    existing = json.loads(path.read_text())
+            existing.update(new_entries)
+            replace_private_text_locked(path, json.dumps(existing, indent="\t", sort_keys=True) + "\n")

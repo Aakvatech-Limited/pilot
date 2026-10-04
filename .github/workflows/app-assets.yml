@@ -1,0 +1,71 @@
+name: App assets
+
+on:
+  workflow_call:
+    inputs:
+      frappe-branch:
+        description: Frappe branch to build against. Defaults to the pushed branch for version-* branches, else develop.
+        type: string
+        required: false
+        default: ""
+      keep:
+        description: How many commits' assets to keep on the branch's release.
+        type: number
+        required: false
+        default: 30
+
+permissions:
+  contents: write
+
+# Pushes in quick succession would race on creating the release.
+concurrency:
+  group: app-assets-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  assets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+
+      - uses: actions/checkout@v4
+        with:
+          repository: frappe/pilot
+          path: pilot
+          sparse-checkout: scripts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Build
+        env:
+          FRAPPE_BRANCH: ${{ inputs.frappe-branch }}
+        run: |
+          if [ -z "$FRAPPE_BRANCH" ]; then
+            case "$GITHUB_REF_NAME" in
+              version-*) FRAPPE_BRANCH="${GITHUB_REF_NAME%-hotfix}" ;;
+              *) FRAPPE_BRANCH=develop ;;
+            esac
+          fi
+          pilot/scripts/build-app-assets.sh app "$FRAPPE_BRANCH" dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ inputs.keep }}
+        run: |
+          tag="assets-${GITHUB_REF_NAME//\//-}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
+              --title "Assets for $GITHUB_REF_NAME" --notes "Prebuilt assets that Pilot downloads. Do not edit."
+          fi
+          gh release upload "$tag" dist/* --clobber
+          # Keep the newest $KEEP commits: two files (archive and checksum) per commit.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" \
+            --jq '.assets | sort_by(.created_at) | reverse | .[].id' \
+            | tail -n +"$((KEEP * 2 + 1))" \
+            | xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/{}"

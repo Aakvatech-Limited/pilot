@@ -83,4 +83,5 @@ Use `@step` for visible progress and `@on_success`, `@on_failure`, or `@on_cance
 - [Admin API](docs/admin-api.md)
 - [Admin UI](docs/admin-ui.md)
 - [Production](docs/production.md)
+- [Prebuilt Assets](docs/prebuilt-assets.md)
 - [Domain Provider](docs/domain-provider.md)
