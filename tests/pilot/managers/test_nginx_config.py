@@ -300,11 +300,12 @@ def test_admin_proxy_port_under_systemd(tmp_path: Path) -> None:
 
 
 def test_admin_proxy_port_under_supervisor(tmp_path: Path) -> None:
+    """Supervisor runs the same admin gunicorn config, bound to the internal port."""
     data = copy.deepcopy(_ADMIN_DATA)
     data["production"]["process_manager"] = "supervisor"
     config = _renderer(tmp_path, data).generate_bench_config([], admin_ssl=False)
 
-    assert "proxy_pass         http://127.0.0.1:7000;" in config
+    assert "proxy_pass         http://127.0.0.1:7001;" in config
 
 
 def test_admin_ssl_redirects_http_to_https(tmp_path: Path) -> None:

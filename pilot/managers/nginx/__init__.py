@@ -153,14 +153,12 @@ class NginxConfigRenderer:
         if not admin.domain or admin.domain != mapping.target:
             return None
 
-        socket_activated = self.bench.config.production.process_manager == "systemd"
-        port = admin.internal_port if socket_activated else admin.port
         # Redirect to the scheme nginx is actually serving.
         scheme = "https" if admin_ssl else "http"
         return SimpleNamespace(
             server_name=vm_hostname_pattern(mapping.pattern),
             redirect=f"{scheme}://{mapping.target}" if mapping.redirect else "",
-            proxy_pass=f"http://127.0.0.1:{port}",
+            proxy_pass=f"http://127.0.0.1:{admin.internal_port}",
             site="",
         )
 
@@ -268,7 +266,6 @@ class NginxConfigRenderer:
             else "direct"
         )
         client_ip_source = route.client_ip_source if admin.route else legacy_source
-        socket_activated = self.bench.config.production.process_manager == "systemd"
         return SimpleNamespace(
             kind="admin",
             server_name=admin.domain,
@@ -285,7 +282,7 @@ class NginxConfigRenderer:
             public_scheme=route.public_scheme if admin.route else "$scheme",
             cert=live_cert_path(admin.domain),
             key=live_key_path(admin.domain),
-            port=admin.internal_port if socket_activated else admin.port,
+            port=admin.internal_port,
         )
 
     def _bench_context(
