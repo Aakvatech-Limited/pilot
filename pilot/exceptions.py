@@ -88,6 +88,10 @@ class RemoteSiteError(BenchError):
     pass
 
 
+class FrappeCloudError(BenchError):
+    """Frappe Cloud refused a v1 migration call or could not be reached."""
+
+
 class DatabaseError(BenchError):
     """A database server operation failed (connection, provisioning, credentials)."""
 

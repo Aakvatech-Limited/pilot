@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { apiErrorMessage } from '@/api/client'
 import { sitesApi } from '@/api/sites'
 import ActionDialog from '@/components/common/ActionDialog.vue'
+import FrappeCloudSource from '@/components/sites/FrappeCloudSource.vue'
 import { useSites } from '@/composables/sites/useSites'
 import type { RemoteBackup } from '@/types/siteBackups'
 import type { TaskPayload } from '@/types/tasks'
@@ -22,12 +23,13 @@ const open = defineModel<boolean>('open')
 const router = useRouter()
 const { names: siteNames, load: loadSites } = useSites()
 
-type Source = 'upload' | 'site' | 'remote'
+type Source = 'upload' | 'site' | 'remote' | 'frappe-cloud'
 
 const SOURCES = [
   { value: 'upload', label: 'Upload files' },
   { value: 'site', label: 'Other site' },
   { value: 'remote', label: 'Remote site' },
+  { value: 'frappe-cloud', label: 'Frappe Cloud v1' },
 ]
 const PARTS = [
   { part: 'database', label: 'Database', hint: 'Usually ends in .sql.gz or .sql', accept: '.sql,.gz' },
@@ -38,13 +40,13 @@ const PARTS = [
     hint: 'Usually ends in -private-files.tar',
     accept: '.tar,.tgz',
   },
+  {
+    part: 'config',
+    label: 'Site config',
+    hint: 'Usually ends in -site_config_backup.json',
+    accept: '.json',
+  },
 ]
-const CONFIG = {
-  part: 'config',
-  label: 'Site config',
-  hint: 'Needed when the backup is encrypted. Usually ends in -site_config_backup.json',
-  accept: '.json',
-}
 
 const source = ref<Source>('upload')
 const sourceSite = ref('')
@@ -52,8 +54,11 @@ const remoteSite = ref('')
 const password = ref('')
 const remoteBackups = ref<RemoteBackup[] | null>(null)
 const remoteBackup = ref('')
+const frappeCloudBackup = ref('')
+const isFrappeCloudAuthorized = ref(false)
 const fetchingBackups = ref(false)
 const chosen = ref<Record<string, boolean>>({})
+const skipFailingPatches = ref(false)
 const uploads = ref<Record<string, File | null>>({})
 const inputs: Record<string, HTMLInputElement | null> = {}
 const restoring = ref(false)
@@ -76,7 +81,6 @@ const availableParts = computed(() =>
     ? (selectedRemoteBackup.value?.parts ?? [])
     : PARTS.map(({ part }) => part),
 )
-const uploadRows = computed(() => (uploads.value.database ? [...PARTS, CONFIG] : PARTS))
 const parts = computed(() =>
   PARTS.map(({ part }) => part).filter((part) =>
     source.value === 'upload'
@@ -84,10 +88,17 @@ const parts = computed(() =>
       : chosen.value[part] && availableParts.value.includes(part),
   ),
 )
+// Remote and Frappe Cloud sources show the restore options once a backup is chosen.
+const hasChosenBackup = computed(() => {
+  if (source.value === 'remote') return Boolean(selectedRemoteBackup.value)
+  if (source.value === 'frappe-cloud') return isFrappeCloudAuthorized.value
+  return true
+})
 const isReady = computed(() => {
   if (!parts.value.length) return false
   if (source.value === 'site') return Boolean(sourceSite.value)
   if (source.value === 'remote') return Boolean(selectedRemoteBackup.value)
+  if (source.value === 'frappe-cloud') return Boolean(frappeCloudBackup.value)
   return true
 })
 
@@ -97,7 +108,8 @@ watch(open, (isOpen) => {
   source.value = 'upload'
   sourceSite.value = ''
   remoteSite.value = ''
-  chosen.value = { database: true, public: true, private: true }
+  chosen.value = { database: true, public: true, private: true, config: true }
+  skipFailingPatches.value = false
   uploads.value = {}
   error.value = ''
   loadSites()
@@ -136,27 +148,38 @@ const pickFile = (part: string, event: Event) => {
 
 const removeFile = (part: string) => {
   uploads.value[part] = null
-  if (part === 'database') uploads.value.config = null
 }
 
 const submit = (): Promise<TaskPayload> => {
   if (source.value === 'upload') {
     const form = new FormData()
     for (const part of parts.value) form.append('parts', part)
-    for (const { part } of uploadRows.value) {
+    if (skipFailingPatches.value) form.append('skip_failing_patches', 'true')
+    for (const { part } of PARTS) {
       const file = uploads.value[part]
       if (file) form.append(part, file)
     }
     return sitesApi.restoreUpload(props.siteName, form)
   }
+  if (source.value === 'frappe-cloud')
+    return sitesApi.restore(props.siteName, {
+      parts: parts.value,
+      skip_failing_patches: skipFailingPatches.value,
+      frappe_cloud_backup: frappeCloudBackup.value,
+    })
   if (source.value === 'remote')
     return sitesApi.restore(props.siteName, {
       parts: parts.value,
+      skip_failing_patches: skipFailingPatches.value,
       remote_site: remoteSite.value.trim(),
       password: password.value,
       backup_timestamp: remoteBackup.value,
     })
-  return sitesApi.restore(props.siteName, { parts: parts.value, source_site: sourceSite.value })
+  return sitesApi.restore(props.siteName, {
+    parts: parts.value,
+    skip_failing_patches: skipFailingPatches.value,
+    source_site: sourceSite.value,
+  })
 }
 
 const restore = async () => {
@@ -180,11 +203,13 @@ const restore = async () => {
   <ActionDialog
     v-model:open="open"
     title="Restore Site"
+    size="lg"
     :error="error"
     confirm-label="Restore"
     confirm-theme="red"
     :loading="restoring"
     :disabled="!isReady"
+    :hide-actions="!hasChosenBackup"
     @confirm="restore"
   >
     <div class="space-y-4">
@@ -192,7 +217,7 @@ const restore = async () => {
 
       <div v-if="source === 'upload'" class="divide-y divide-outline-gray-1">
         <div
-          v-for="item in uploadRows"
+          v-for="item in PARTS"
           :key="item.part"
           class="flex justify-between items-center gap-4 py-2.5"
         >
@@ -229,6 +254,14 @@ const restore = async () => {
           placeholder="Choose a site"
         />
 
+        <FrappeCloudSource
+          v-else-if="source === 'frappe-cloud'"
+          v-model:backup="frappeCloudBackup"
+          v-model:error="error"
+          v-model:authorized="isFrappeCloudAuthorized"
+          :site-name="siteName"
+        />
+
         <div v-else class="space-y-3">
           <TextInput v-model="remoteSite" label="Site" placeholder="erp.example.com" />
           <TextInput
@@ -256,7 +289,13 @@ const restore = async () => {
           </Button>
         </div>
 
-        <div v-if="source !== 'remote' || selectedRemoteBackup" class="flex flex-wrap gap-1">
+        <div
+          v-if="
+            (source !== 'remote' || selectedRemoteBackup) &&
+            (source !== 'frappe-cloud' || frappeCloudBackup)
+          "
+          class="flex flex-wrap gap-1"
+        >
           <Checkbox
             v-for="item in PARTS"
             :key="item.part"
@@ -267,6 +306,13 @@ const restore = async () => {
           />
         </div>
       </template>
+
+      <Checkbox
+        v-if="hasChosenBackup && (source !== 'frappe-cloud' || frappeCloudBackup)"
+        v-model="skipFailingPatches"
+        label="Skip failing patches"
+        padded
+      />
     </div>
   </ActionDialog>
 </template>

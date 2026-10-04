@@ -77,3 +77,47 @@ def test_a_newer_remote_backup_stops_the_restore(tmp_path: Path) -> None:
 
     with patch("pilot.integrations.frappe_site.RemoteFrappeSite", return_value=remote), pytest.raises(RemoteSiteError, match="newer backup"):
         task.fetch(tmp_path)
+
+
+def test_a_frappe_cloud_restore_revokes_access_then_streams_the_database_and_downloads_the_config(tmp_path: Path) -> None:
+    links = {
+        "database": "https://s3.example.com/s/2-database.sql.gz?X-Amz-Signature=a",
+        "public": "https://s3.example.com/s/2-files.tar?X-Amz-Signature=b",
+        "private": "https://s3.example.com/s/2-private-files.tar?X-Amz-Signature=c",
+        "config": "https://s3.example.com/s/2-site_config_backup.json?X-Amz-Signature=d",
+    }
+    task, bench = _task(
+        tmp_path, parts=["database", "private"], frappe_cloud_backup="backup-1", frappe_cloud_secret_urls=links
+    )
+
+    with (
+        patch("pilot.integrations.frappe_cloud.download_backup", side_effect=lambda url, directory: directory / url.split("/")[-1].split("?")[0]) as download,
+        patch("pilot.integrations.frappe_cloud.open_download_link") as open_link,
+    ):
+        run, stream = task.fetch(tmp_path)
+        bench.site.return_value.frappe_cloud.disconnect.assert_called_once()
+        assert [call.args[0] for call in download.call_args_list] == [links["private"], links["config"]]
+        open_link.assert_not_called()  # opened only once the local database is ready
+        stream()
+        open_link.assert_called_once_with(links["database"])
+
+    assert set(run.files) == {"private", "config"}
+
+
+def test_a_frappe_cloud_restore_names_its_first_step_with_the_backup_id(tmp_path: Path) -> None:
+    task, _ = _task(tmp_path, parts=["database"], frappe_cloud_backup="backup-1", frappe_cloud_secret_urls={})
+
+    assert task.fetch_label == "Download backup from Frappe Cloud (backup-1)"
+
+
+def test_a_remote_restore_of_only_the_site_config_downloads_only_the_config(tmp_path: Path) -> None:
+    task, _ = _task(tmp_path, parts=["config"], remote_site="old.example.com", remote_password="pw", backup_timestamp="2")
+    remote = MagicMock()
+    remote.get_latest_run.return_value = ("2", {"database": "./s/2-database.sql.gz", "config": "./s/2-site_config_backup.json"})
+    remote.download_backup.side_effect = lambda path, directory: directory / Path(path).name
+
+    with patch("pilot.integrations.frappe_site.RemoteFrappeSite", return_value=remote):
+        run, stream = task.fetch(tmp_path)
+
+    assert [call.args[0] for call in remote.download_backup.call_args_list] == ["./s/2-site_config_backup.json"]
+    assert set(run.files) == {"config"} and stream is None

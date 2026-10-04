@@ -31,7 +31,7 @@ _UPLOAD_NAMES = {
 @sites_bp.post("/<name>/actions/restore")
 @require_scope(site_name)
 def restore_site(name: str):
-    """Restore from a site on this bench (a backup run or a fresh backup) or a remote site."""
+    """Restore from a site on this bench (a backup run or a fresh backup), a remote site or Frappe Cloud."""
     bench_root = Path(current_app.config["BENCH_ROOT"])
     if not site_exists(bench_root, name):
         return site_not_found()
@@ -44,6 +44,8 @@ def restore_site(name: str):
 
     if data.get("remote_site"):
         return _restore_from_remote(bench_root, name, parts, data)
+    if data.get("frappe_cloud_backup"):
+        return _restore_from_frappe_cloud(bench_root, name, parts, data)
     return _restore_from_bench_site(bench_root, name, parts, data)
 
 
@@ -132,6 +134,22 @@ def _restore_from_remote(bench_root: Path, name: str, parts: list[str], data: di
     return _queue(bench_root, name, parts, {name}, **source)
 
 
+def _restore_from_frappe_cloud(bench_root: Path, name: str, parts: list[str], data: dict):
+    """The links are taken here, so the task can revoke the access and still download."""
+    from pilot.exceptions import FrappeCloudError
+
+    if not is_bench_scoped():
+        return error_response("forbidden", "Restoring from Frappe Cloud needs a bench session.", 403)
+    backup = data["frappe_cloud_backup"]
+    if not isinstance(backup, str):
+        return _invalid("Choose a Frappe Cloud backup.")
+    try:
+        links = Bench(bench_root).site(name).frappe_cloud.client.get_download_links(backup)
+    except FrappeCloudError as error:
+        return _invalid(str(error))
+    return _queue(bench_root, name, parts, {name}, frappe_cloud_backup=backup, frappe_cloud_secret_urls=links)
+
+
 def _signed_in_remote(data: dict):
     """The remote site signed in as Administrator, or the response that explains why not."""
     from pilot.exceptions import RemoteSiteError
@@ -162,11 +180,20 @@ def _queue(bench_root: Path, name: str, parts: list[str], sites: set[str], idemp
             parts=parts,
             idempotency_key=request.headers.get("Idempotency-Key") if idempotent else None,
             resource_key=[f"site:{site.lower()}" for site in sorted(sites)],
+            skip_failing_patches=_skips_failing_patches(),
             **source,
         )
     except Exception as error:
         return task_failure(error)
     return accepted_task_response(bench_root, task_id)
+
+
+def _skips_failing_patches() -> bool:
+    """A JSON boolean, or the form field "true" that comes with an upload."""
+    data = request.get_json(silent=True)
+    if isinstance(data, dict):
+        return data.get("skip_failing_patches") is True
+    return request.form.get("skip_failing_patches") == "true"
 
 
 def _parts(value) -> list[str] | None:

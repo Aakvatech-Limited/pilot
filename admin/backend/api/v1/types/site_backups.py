@@ -32,3 +32,21 @@ class RemoteBackupList(TypedDict):
 class BackupSchedule(TypedDict):
     schedule: str | None
     retention: BackupConfig | None
+
+
+class FrappeCloudConnection(TypedDict):
+    status: str
+    remote_site: str
+    approval_url: str
+    code: str
+
+
+class FrappeCloudBackup(TypedDict):
+    name: str
+    created_at: str
+    size_bytes: int
+
+
+class FrappeCloudBackupList(TypedDict):
+    backups: list[FrappeCloudBackup]
+    running_backup: str | None

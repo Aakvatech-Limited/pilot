@@ -102,21 +102,37 @@ Measuring means a `du` per site directory and one schema-size query, so the rout
 
 Pilot writes backup runs to `sites/<site>/backups`. Frappe prunes `private/backups` on every backup and every hour, so Pilot keeps its runs out of that directory and its retention policy is the only pruner.
 
-`POST /sites/<name>/actions/restore` queues `restore-site`. The body has `parts`, a list of `database`, `public`, and `private`, and one source:
+`POST /sites/<name>/actions/restore` queues `restore-site`. The body has `parts`, a list of `database`, `public`, `private`, and `config`, an optional `skip_failing_patches` boolean, and one source:
 
 | Source | Body | Notes |
 |---|---|---|
 | A run of a site on this bench | `source_site`, `backup_timestamp` | A run that only exists offsite is downloaded first. Omit `source_site` to use the target's own run. |
 | A fresh backup of a site on this bench | `source_site` | The source site is backed up first. |
 | The latest backup of a remote Frappe site | `remote_site`, `password`, `backup_timestamp` | Get `backup_timestamp` from `remote-backups`. The restore stops if the remote has a newer backup by then. To restore a newer state, take a backup on the remote site first. |
+| An offsite backup of a Frappe Cloud v1 site | `frappe_cloud_backup` | Connect to Frappe Cloud first. The download links are kept out of the task record. |
 
 A remote source needs a bench session and an `https://` site. The Administrator password is checked before the task is queued and is kept out of the task record.
 
 `POST /sites/<name>/actions/remote-backups` takes `remote_site` and `password` and returns the remote's latest backup as `{"backups": [{"timestamp", "created_at", "parts"}]}`. Frappe exposes only its latest backup, so the list has one entry, or none when the remote has no backup from the last 30 days.
 
-`POST /sites/<name>/actions/restore-upload` takes the same `parts` as multipart form fields, plus the files `database`, `public`, `private`, and the optional `config` (the site config backup, which carries the encryption key). nginx `client_max_body_size` limits the upload size.
+`POST /sites/<name>/actions/restore-upload` takes the same `parts` and `skip_failing_patches` (`"true"`) as multipart form fields, plus the files `database`, `public`, `private`, and `config` (the site config backup). nginx `client_max_body_size` limits the upload size.
 
-A restore puts the site in maintenance mode, restores only the chosen parts, and migrates it. It takes no backup of the site first. A database from another site brings that site's encryption key. If a step fails, the site stays in maintenance mode. Restoring from another site needs a bench session; a site token can only restore its own backups.
+A restore puts the site in maintenance mode, restores only the chosen parts, and migrates it. `skip_failing_patches` passes `--skip-failing` to the migration. It takes no backup of the site first. A database from another site brings that site's encryption key. The `config` part merges the source site config into this site, except the keys that belong to this site: `db_*`, `redis_*`, `pilot_*`, `atlas_*`, `host_name`, `installed_apps`, `maintenance_mode`, and `pause_scheduler`. If a step fails, the site stays in maintenance mode. Restoring from another site needs a bench session; a site token can only restore its own backups.
+
+#### Frappe Cloud v1
+
+A site on Frappe Cloud v1 is restored after its team approves the access. All routes need a bench session. Frappe Cloud is `[frappe_cloud] url` in `common_config.toml`.
+
+| Route | Purpose |
+|---|---|
+| `POST /sites/<name>/actions/frappe-cloud/connect` | Takes `remote_site`, any domain of the site. Returns `status`, `remote_site`, `approval_url`, and an 8-character `code`. |
+| `GET /sites/<name>/frappe-cloud` | The status of the request: `Pending`, `Approved`, `Rejected`, `Revoked`, or `Expired`. |
+| `DELETE /sites/<name>/frappe-cloud` | Revokes the request and deletes the token. |
+| `GET /sites/<name>/frappe-cloud/backups?start=0` | Five offsite backups from `start`, newest first, and `running_backup`. |
+| `POST /sites/<name>/frappe-cloud/backups` | Takes an offsite backup with files. Returns its `name`. |
+| `GET /sites/<name>/frappe-cloud/backups/<backup>` | The backup `status` and the `job_url` of its job on Frappe Cloud. |
+
+A user of the team opens `approval_url` and enters the code within 10 minutes. Five wrong codes reject the request. The approval gives access for 12 hours. Pilot keeps the token in `config/frappe_cloud/<site>.json` with mode 0600. The restore task revokes the token before it downloads the files. The download links stay valid for 24 hours.
 
 ### Site Actions
 

@@ -1,6 +1,12 @@
 import { apiUrl, request, unwrap } from '@/api/client'
 import type { DisabledApp, EnabledApp, SiteApps } from '@/types/siteApps'
-import type { Backup, BackupSchedule, RemoteBackupList } from '@/types/siteBackups'
+import type {
+  Backup,
+  BackupSchedule,
+  FrappeCloudBackupList,
+  FrappeCloudConnection,
+  RemoteBackupList,
+} from '@/types/siteBackups'
 import type { DnsRecords, SiteDomains } from '@/types/siteDomains'
 import type { SiteAnalytics, SiteUptime } from '@/types/siteMonitoring'
 import type { SiteStorageReport } from '@/types/siteStorage'
@@ -62,6 +68,42 @@ export const sitesApi = {
         json: { remote_site: remoteSite, password },
       })
       .json(),
+
+  frappeCloud: {
+    connect: (name: string, remoteSite: string): Promise<FrappeCloudConnection> =>
+      unwrap(
+        request
+          .post(`sites/${encodeURIComponent(name)}/actions/frappe-cloud/connect`, {
+            json: { remote_site: remoteSite },
+          })
+          .json(),
+      ),
+    connection: (name: string): Promise<FrappeCloudConnection> =>
+      unwrap(request.get(`sites/${encodeURIComponent(name)}/frappe-cloud`).json()),
+    disconnect: (name: string): Promise<Record<string, never>> =>
+      unwrap(request.delete(`sites/${encodeURIComponent(name)}/frappe-cloud`).json()),
+    backups: (name: string, start = 0): Promise<FrappeCloudBackupList> =>
+      unwrap(
+        request
+          .get(`sites/${encodeURIComponent(name)}/frappe-cloud/backups`, {
+            searchParams: { start },
+          })
+          .json(),
+      ),
+    takeBackup: (name: string): Promise<{ name: string }> =>
+      unwrap(request.post(`sites/${encodeURIComponent(name)}/frappe-cloud/backups`).json()),
+    backup: (
+      name: string,
+      backup: string,
+    ): Promise<{ name: string; status: string; job_url: string | null }> =>
+      unwrap(
+        request
+          .get(
+            `sites/${encodeURIComponent(name)}/frappe-cloud/backups/${encodeURIComponent(backup)}`,
+          )
+          .json(),
+      ),
+  },
 
   // Large archives take as long as the upload does.
   restoreUpload: (name: string, form: FormData): Promise<TaskPayload> =>
