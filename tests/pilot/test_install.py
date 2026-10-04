@@ -103,6 +103,7 @@ def test_system_packages_present_checks_distro_packages(
         f"""
 DISTRO={distro}
 base_tools_present() {{ return 0; }}
+pkg_available() {{ return 0; }}
 pkg_installed() {{ printf '%s\\n' "$1"; return 0; }}
 system_packages_present
 """,
@@ -257,3 +258,20 @@ install_for_user
     )
     assert result.returncode == 0, result.stderr
     assert "pkg_install" not in result.stdout
+
+
+def test_missing_waf_module_is_skipped_with_a_warning(tmp_path: Path) -> None:
+    """Ubuntu 22.04 does not package the ModSecurity module."""
+    result = run_installer_functions(
+        """
+DISTRO=ubuntu
+pkg_available() { return 1; }
+pkg_install() { echo "pkg_install $*"; }
+install_production_packages
+""",
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "WAF is unavailable" in result.stdout
+    assert "pkg_install nginx certbot supervisor" in result.stdout
+    assert "modsecurity" not in result.stdout.split("pkg_install", 1)[1]

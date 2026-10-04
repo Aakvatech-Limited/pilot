@@ -126,6 +126,13 @@ pkg_installed() {
     esac
 }
 
+pkg_available() {
+    case "$DISTRO" in
+        debian|ubuntu) apt-cache show "$1" >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Vendors (MariaDB, NodeSource, Homebrew) only publish `curl | bash` installers
 # with nothing to pin against, so the content is trusted the way their docs
 # instruct. A truncated transfer or non-HTTPS redirect is still caught here.
@@ -236,10 +243,21 @@ install_production_packages() {
     case "$DISTRO" in
         macos)  pkg_install nginx certbot ;;
         debian|ubuntu)
-            pkg_install nginx certbot supervisor libnginx-mod-http-modsecurity ;;
+            waf=$(waf_packages)
+            [ -n "$waf" ] || echo "Warning: libnginx-mod-http-modsecurity is not packaged for this release, so the WAF is unavailable."
+            # shellcheck disable=SC2086
+            pkg_install nginx certbot supervisor $waf ;;
         fedora) pkg_install nginx certbot supervisor ;;
         arch)   pkg_install nginx certbot supervisor ;;
     esac
+}
+
+# Some releases, such as Ubuntu 22.04, do not package the ModSecurity module.
+waf_packages() {
+    case "$DISTRO" in
+        debian|ubuntu) pkg_available libnginx-mod-http-modsecurity && echo libnginx-mod-http-modsecurity ;;
+    esac
+    return 0
 }
 
 # NodeSource pins Node 24 on deb/rpm distros; Arch ships a current Node itself.
@@ -334,7 +352,7 @@ system_packages_present() {
         macos)
             packages="mariadb@$MARIADB_VERSION postgresql@$POSTGRES_VERSION redis nginx certbot" ;;
         debian|ubuntu)
-            packages="mariadb-server mariadb-client libmariadb-dev postgresql postgresql-client libpq-dev pkg-config redis-server nginx certbot supervisor libnginx-mod-http-modsecurity" ;;
+            packages="mariadb-server mariadb-client libmariadb-dev postgresql postgresql-client libpq-dev pkg-config redis-server nginx certbot supervisor $(waf_packages)" ;;
         fedora)
             packages="mariadb-server mariadb mariadb-connector-c-devel postgresql-server postgresql libpq-devel pkgconf-pkg-config valkey nginx certbot supervisor" ;;
         arch)
