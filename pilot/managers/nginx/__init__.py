@@ -219,12 +219,17 @@ class NginxConfigRenderer:
             server_name=" ".join(domains),
             ssl=ssl,
             proxy_protocol=ssl and self.bench.config.proxy.protocol_v2,
+            forwarded_proto=self._forwarded_proto(ssl and self.bench.config.proxy.protocol_v2),
             cert=live_cert_path(self.bench.certificate_name(site)),
             key=live_key_path(self.bench.certificate_name(site)),
             name=site.name,
             public_root=f"{self.bench.path}/sites/{site.name}/public",
             canonical=canonical,
         )
+
+    def _forwarded_proto(self, proxy_protocol: bool) -> str:
+        """Trust the edge's scheme only where it terminates TLS, never on PROXY-protocol passthrough."""
+        return "$http_x_forwarded_proto" if self._proxy_servers and not proxy_protocol else "$scheme"
 
     def _admin_vhost(self, ssl: bool) -> SimpleNamespace:
         admin = self.bench.config.admin
@@ -233,6 +238,7 @@ class NginxConfigRenderer:
             server_name=admin.domain,
             ssl=ssl,
             proxy_protocol=ssl and self.bench.config.proxy.protocol_v2,
+            forwarded_proto=self._forwarded_proto(ssl and self.bench.config.proxy.protocol_v2),
             cert=live_cert_path(admin.domain),
             key=live_key_path(admin.domain),
             port=admin.internal_port,
@@ -244,10 +250,6 @@ class NginxConfigRenderer:
         config = self.bench.config
         nginx = config.nginx
         proxy_servers = self._proxy_servers
-        # Trust a forwarded scheme only when the edge terminates TLS.
-        forwarded_proto = (
-            "$http_x_forwarded_proto" if proxy_servers and not config.proxy.protocol_v2 else "$scheme"
-        )
         return {
             "upstream_name": config.name,
             "upstream_server": GunicornManager(self.bench).upstream_server,
@@ -262,8 +264,6 @@ class NginxConfigRenderer:
             "error_codes": list(ERROR_PAGES),
             "proxy_servers": proxy_servers,
             "proxy_peers": "|".join(re.escape(ip) for ip in proxy_servers),
-            "forwarded_proto": forwarded_proto,
-            "socketio_origin_fallback": f"{forwarded_proto}://$http_host",
             "firewall": config.firewall,
             "waf_active": self._is_waf_active(),
             "waf_rules_file": self.bench.config_path / "modsecurity" / "main.conf",
