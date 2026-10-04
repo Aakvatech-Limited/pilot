@@ -88,6 +88,15 @@ class Bench:
                 f"`pilot` from a non-editable pip install writes next to its site-packages."
             )
         self._info = self._read_config()
+        self._connect_github()
+
+    def _connect_github(self) -> None:
+        """Save the CI token as the bench's GitHub connection: anonymous GitHub API calls
+        from shared runners hit the rate limit and fail repository checks in the wizard."""
+        from pilot.integrations.git.credentials import GitCredentialStore
+
+        if token := os.environ.get("GITHUB_TOKEN"):
+            GitCredentialStore(self.dir).save("github", token)
 
     def start_wizard(self) -> None:
         """Start the standalone setup-wizard server."""
