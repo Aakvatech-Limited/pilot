@@ -525,14 +525,20 @@ install_sudoers_grants() {
     # written), but each wildcard is anchored between fixed literal text, so no
     # extra flag can be smuggled in before or after the match.
     write_sudoers_file "$1-pilot-certbot" \
-"$1 ALL=(ALL) NOPASSWD: $certbot_bin certonly --webroot -w $webroot * --cert-name * --expand --email * --agree-tos --non-interactive --deploy-hook $hook,$certbot_bin certonly --webroot -w $webroot -d * --email * --agree-tos --non-interactive --deploy-hook $hook,$certbot_bin renew --quiet,$mkdir_bin -p $webroot,$test_bin -f $live/*/fullchain.pem -a -f $live/*/privkey.pem,$openssl_bin x509 -noout -ext subjectAltName -in $live/*/fullchain.pem,$openssl_bin x509 -enddate -noout -in $live/*/fullchain.pem"
+"$1 ALL=(ALL) NOPASSWD: $certbot_bin certonly --webroot -w $webroot * --cert-name * --expand --email * --agree-tos --non-interactive --deploy-hook $hook,$certbot_bin certonly --webroot -w $webroot -d * --email * --agree-tos --non-interactive --deploy-hook $hook,$certbot_bin renew --quiet,$mkdir_bin -p $webroot,$test_bin -f $live/*/fullchain.pem -a -f $live/*/privkey.pem,$openssl_bin x509 -noout -ext subjectAltName -in $live/*/fullchain.pem,$openssl_bin x509 -enddate -noout -in $live/*/fullchain.pem" \
+"$1 ALL=(ALL) NOPASSWD: $certbot_bin,$mkdir_bin,$test_bin,$openssl_bin"
 }
 
 # A malformed file in /etc/sudoers.d breaks sudo for every user, including the
-# recovery path, so validate before installing.
+# recovery path, so validate before installing. sudo-rs (Ubuntu 26.04) rejects
+# wildcards in arguments; the optional third grant names the same commands bare.
 write_sudoers_file() {
     staged="$(mktemp)"
     echo "$2" > "$staged"
+    if [ -n "${3:-}" ] && sudo --version 2>/dev/null | grep -q '^sudo-rs' && ! visudo -cf "$staged" >/dev/null 2>&1; then
+        echo "Warning: this sudo rejects argument wildcards, so $1 grants its commands without argument limits." >&2
+        echo "$3" > "$staged"
+    fi
     if visudo -cf "$staged" >/dev/null 2>&1; then
         install -m 440 "$staged" "/etc/sudoers.d/$1"
     else

@@ -292,6 +292,24 @@ install_database_engines
     assert result.stdout.strip() == "pkg_install postgresql postgresql-libs pkgconf redis"
 
 
+def test_sudoers_grant_falls_back_when_wildcards_are_rejected(tmp_path: Path) -> None:
+    """sudo-rs on Ubuntu 26.04 rejects wildcards in arguments."""
+    result = run_installer_functions(
+        """
+visudo() { ! grep -q '\\*' "$2"; }
+sudo() { echo "sudo-rs 0.2.13"; }
+install() { cp "$3" "$TARGET"; }
+TARGET=$(mktemp)
+write_sudoers_file frappe-pilot-certbot "frappe ALL=(ALL) NOPASSWD: /usr/bin/test -f /a/*/b" "frappe ALL=(ALL) NOPASSWD: /usr/bin/test"
+cat "$TARGET"
+""",
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "frappe ALL=(ALL) NOPASSWD: /usr/bin/test"
+    assert "without argument limits" in result.stderr
+
+
 def test_a_rerun_leaves_enabled_services_running(tmp_path: Path) -> None:
     """Production setup enables nginx; a root rerun must not take every bench down."""
     result = run_installer_functions(
