@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Button, TextInput } from 'frappe-ui'
+import { Button, Radio, RadioGroup, TextInput } from 'frappe-ui'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { sitesApi } from '@/api/sites'
 import type { FrappeCloudBackup, FrappeCloudConnection } from '@/types/siteBackups'
 import { errorMessage } from '@/utils/error'
 import { formatBytes } from '@/utils/format'
-import { relativeTime } from '@/utils/time'
+import { fmtDateTime } from '@/utils/taskFormat'
 
 const POLL_MS = 3_000
 // Frappe Cloud sends backups in pages of this size.
@@ -157,20 +157,22 @@ onBeforeUnmount(() => clearTimeout(timer))
       <p class="text-p-sm text-ink-gray-7">Backups of <b>{{ connection.remote_site }}</b></p>
       <Button size="sm" variant="ghost" @click="cancel">Change site</Button>
     </div>
-    <div class="divide-y divide-outline-gray-1 rounded border border-outline-gray-1">
-      <label
+    <RadioGroup
+      v-model="backup"
+      class="rounded-6 border border-outline-gray-1 [&_[role=radiogroup]]:gap-0"
+    >
+      <div
         v-for="item in backups ?? []"
         :key="item.name"
-        class="flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm hover:bg-surface-gray-1"
+        class="flex items-center gap-3 border-t border-outline-gray-1 px-3 py-2.5 first:border-t-0"
       >
-        <input v-model="backup" type="radio" :value="item.name" />
-        <span class="text-ink-gray-8">{{ relativeTime(item.created_at) }}</span>
-        <span class="ml-auto text-ink-gray-5">{{ formatBytes(item.size_bytes) }}</span>
-      </label>
+        <Radio :value="item.name" :label="fmtDateTime(item.created_at)" class="flex-1" />
+        <span class="text-sm text-ink-gray-5">{{ formatBytes(item.size_bytes) }}</span>
+      </div>
       <p v-if="backups && !backups.length" class="px-3 py-2.5 text-p-sm text-ink-gray-5">
         No backups yet. Take a new backup.
       </p>
-    </div>
+    </RadioGroup>
     <div class="flex items-center gap-2">
       <Button :loading="Boolean(pendingBackup)" @click="takeBackup">
         {{ pendingBackup ? 'Backing up' : 'Take new backup' }}
