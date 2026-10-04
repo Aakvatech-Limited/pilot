@@ -89,6 +89,12 @@ class SiteCommands:
         if result.returncode != 0:
             raise BenchError(f"Failed to clear cache for {self.site.config.name}")
 
+    def enable_scheduler(self) -> None:
+        cmd = self.site._frappe_call("frappe", "--site", self.site.config.name, "enable-scheduler")
+        result = run_command(cmd, cwd=self.site.bench.sites_path, stream_output=True)
+        if result.returncode != 0:
+            raise BenchError(f"Failed to enable the scheduler for {self.site.config.name}")
+
     @contextmanager
     def setup_credentials(self, db_type: str, database: str = "") -> Iterator[list[str]]:
         """Database credential arguments for one frappe setup command.

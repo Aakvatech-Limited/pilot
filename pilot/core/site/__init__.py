@@ -195,6 +195,11 @@ class Site:
 
         SiteCommands(self).clear_cache()
 
+    def enable_scheduler(self) -> None:
+        from pilot.core.site.commands import SiteCommands
+
+        SiteCommands(self).enable_scheduler()
+
     def build_assets(self) -> None:
         """Rebuild the assets of the apps this site runs. Assets are shared by every
         site on the bench that has those apps."""
