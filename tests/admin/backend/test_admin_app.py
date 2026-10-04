@@ -923,7 +923,7 @@ def test_site_actions_return_canonical_task_resources(tmp_path: Path) -> None:
     cases = [
         ("reinstall", "reinstall-site", {}),
         ("clear-cache", "clear-cache", {}),
-        ("migrate", "migration-backup", {}),
+        ("migrate", "migrate", {}),
         ("enable-tls", "setup-letsencrypt", {"email": "ops@example.com"}),
     ]
 

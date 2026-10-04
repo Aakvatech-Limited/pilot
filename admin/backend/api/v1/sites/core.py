@@ -283,7 +283,7 @@ def migrate_site(name: str):
     if not site_exists(bench_root, name):
         return site_not_found()
     bench = Bench(bench_root)
-    operation = bench.migrations.create_site_migrate(name)
+    operation = bench.migrations.create_site_migrate(name, with_safeguards=False)
     try:
         task_id = operation.begin()
     except Exception as error:

@@ -55,8 +55,13 @@ class MigrationStore:
             target_kind=pin.kind if pin else "commit",
         )
 
-    def create_site_migrate(self, *sites: str) -> MigrationOperation:
-        return self._create("site_migrate", apps=[], apps_filter=None, sites=list(sites))
+    def create_site_migrate(self, *sites: str, with_safeguards: bool = True) -> MigrationOperation:
+        """Without safeguards no backup is taken first, so the migration cannot be reverted."""
+        operation = self._create("site_migrate", apps=[], apps_filter=None, sites=list(sites))
+        if not with_safeguards:
+            operation.safeguards_disabled = True
+            self.save(operation)
+        return operation
 
     def save(self, operation: MigrationOperation) -> None:
         make_private_directory(self.root, parents=True)
