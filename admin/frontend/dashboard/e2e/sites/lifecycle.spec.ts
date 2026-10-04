@@ -73,7 +73,13 @@ test('Drop the site', async ({ page }) => {
 
   const dialog = page.getByRole('dialog', { name: 'Drop Site' })
   await dialog.getByRole('textbox').fill(site)
+  await dialog.getByRole('checkbox', { name: 'Take a backup before dropping' }).uncheck()
+
+  const dropRequest = page.waitForRequest(
+    (request) => request.method() === 'DELETE' && request.url().includes(`/api/v1/sites/${site}`),
+  )
   await dialog.getByRole('button', { name: 'Drop site' }).click()
+  expect(new URL((await dropRequest).url()).searchParams.get('no_backup')).toBe('1')
 
   await waitForTask(page, /\/sites$/)
   await expect(page.getByRole('link', { name: new RegExp(site) })).toBeHidden()
