@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Checkbox, Select, TabButtons, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { apiErrorMessage } from '@/api/client'
 import { sitesApi } from '@/api/sites'
 import ActionDialog from '@/components/common/ActionDialog.vue'
@@ -22,6 +22,7 @@ const props = defineProps<Props>()
 const open = defineModel<boolean>('open')
 
 const router = useRouter()
+const route = useRoute()
 const { names: siteNames, load: loadSites } = useSites()
 
 type Source = 'upload' | 'site' | 'remote' | 'frappe-cloud'
@@ -104,19 +105,39 @@ const isReady = computed(() => {
   return true
 })
 
-watch(open, (isOpen) => {
-  password.value = ''
-  if (!isOpen && backupUpload.isUploading.value) backupUpload.cancel()
-  if (!isOpen) return
-  source.value = 'upload'
-  sourceSite.value = ''
-  remoteSite.value = ''
-  chosen.value = { database: true, public: true, private: true, config: true }
-  skipFailingPatches.value = false
-  uploads.value = {}
-  error.value = ''
-  loadSites()
-})
+const sourceInUrl = (): Source => {
+  const value = route.query.restore
+  return SOURCES.some((option) => option.value === value) ? (value as Source) : 'upload'
+}
+
+const setRestoreQuery = (value?: Source) => {
+  const { restore: _, ...query } = route.query
+  router.replace({ query: value ? { ...query, restore: value } : query })
+}
+
+watch(source, (value) => open.value && setRestoreQuery(value))
+
+watch(
+  open,
+  (isOpen) => {
+    password.value = ''
+    if (!isOpen && backupUpload.isUploading.value) backupUpload.cancel()
+    if (!isOpen) {
+      if (route.query.restore) setRestoreQuery()
+      return
+    }
+    source.value = sourceInUrl()
+    setRestoreQuery(source.value)
+    sourceSite.value = ''
+    remoteSite.value = ''
+    chosen.value = { database: true, public: true, private: true, config: true }
+    skipFailingPatches.value = false
+    uploads.value = {}
+    error.value = ''
+    loadSites()
+  },
+  { immediate: true },
+)
 
 watch([remoteSite, password], () => {
   remoteBackups.value = null
