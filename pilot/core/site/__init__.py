@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING
 
 from pilot.config import SiteConfig
 from pilot.utils import run_command
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pilot.core.site.backups import SiteBackups
     from pilot.core.site.domains import SiteDomains
     from pilot.core.site.migration_backup import SiteMigrationBackup
+    from pilot.core.site.restore import BackupRun
 
 
 class Site:
@@ -111,6 +112,24 @@ class Site:
 
         SiteCommands(self).restore(db_file, public_files, private_files)
 
+    def restore_backup(
+        self,
+        run: BackupRun,
+        parts: list[str],
+        on_progress: Callable[[str], None] = print,
+        open_dump: Callable[[], IO[bytes]] | None = None,
+    ) -> None:
+        """Restore `parts` of a backup run in maintenance mode, then migrate."""
+        from pilot.core.site.restore import SiteRestore
+
+        SiteRestore(self).restore(run, parts, on_progress, open_dump)
+
+    def set_config_values(self, values: dict) -> None:
+        """Write keys into site_config.json under its lock."""
+        from pilot.core.site.config import set_site_config_values
+
+        set_site_config_values(self.bench.sites_path, self.config.name, values)
+
     def reinstall(self, admin_password: str) -> None:
         from pilot.core.site.commands import SiteCommands
 
@@ -182,6 +201,16 @@ class Site:
         from pilot.core.site.commands import SiteCommands
 
         SiteCommands(self).clear_cache()
+
+    def enable_scheduler(self) -> None:
+        from pilot.core.site.commands import SiteCommands
+
+        SiteCommands(self).enable_scheduler()
+
+    def build_assets(self) -> None:
+        """Rebuild the assets of the apps this site runs. Assets are shared by every
+        site on the bench that has those apps."""
+        self.bench.rebuild_assets(apps=self.active_apps(), force=True)
 
     def uninstall_apps(
         self,
