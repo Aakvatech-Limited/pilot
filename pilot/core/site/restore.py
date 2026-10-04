@@ -49,7 +49,7 @@ class BackupRun:
 
 
 class SiteRestore:
-    """Restore chosen parts of a backup into this site, keeping a safety backup first."""
+    """Restore chosen parts of a backup into this site, then migrate it."""
 
     def __init__(self, site: Site) -> None:
         self.site = site
@@ -63,19 +63,13 @@ class SiteRestore:
     ) -> None:
         """`open_dump` opens a gzipped SQL dump that streams in, in place of a database file."""
         self.require_parts(run, parts, has_database_stream=open_dump is not None)
-        safety, _ = self.site.backups.take(with_files=True)
-        on_progress(f"Safety backup {safety} taken.")
-
         self.site.set_maintenance_mode(True)
         try:
             self.restore_parts(run, parts, on_progress, open_dump)
             on_progress("Migrating the site...")
             self.site.migrate()
         except Exception:
-            on_progress(
-                f"Restore failed. {self.site.config.name} stays in maintenance mode. "
-                f"Restore safety backup {safety} from the Backups tab to undo it."
-            )
+            on_progress(f"Restore failed. {self.site.config.name} stays in maintenance mode.")
             raise
         # Online, not the earlier state: a failed attempt may have left it in maintenance.
         self.site.set_maintenance_mode(False)

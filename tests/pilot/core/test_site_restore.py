@@ -29,7 +29,6 @@ def _site(tmp_path: Path) -> MagicMock:
     site.path = tmp_path / "target"
     site.path.mkdir()
     site.config.name = "target.localhost"
-    site.backups.take.return_value = ("20261004_020000", [])
     return site
 
 
@@ -82,7 +81,7 @@ def test_a_failed_restore_keeps_the_site_in_maintenance(tmp_path: Path) -> None:
         SiteRestore(site).restore(run, ["public"], messages.append)
 
     assert site.set_maintenance_mode.call_args_list[-1].args == (True,)
-    assert "20261004_020000" in messages[-1]
+    assert "maintenance mode" in messages[-1]
 
 
 def test_a_missing_part_is_refused_before_anything_changes(tmp_path: Path) -> None:
@@ -91,7 +90,7 @@ def test_a_missing_part_is_refused_before_anything_changes(tmp_path: Path) -> No
     with pytest.raises(BenchError, match="no private file"):
         SiteRestore(site).restore(BackupRun(), ["private"], lambda message: None)
 
-    site.backups.take.assert_not_called()
+    site.set_maintenance_mode.assert_not_called()
 
 
 def test_a_dump_streams_into_the_client(tmp_path: Path, monkeypatch) -> None:

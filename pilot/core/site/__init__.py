@@ -112,7 +112,7 @@ class Site:
         on_progress: Callable[[str], None] = print,
         open_dump: Callable[[], IO[bytes]] | None = None,
     ) -> None:
-        """Restore `parts` of a backup run, behind a safety backup and maintenance mode."""
+        """Restore `parts` of a backup run in maintenance mode, then migrate."""
         from pilot.core.site.restore import SiteRestore
 
         SiteRestore(self).restore(run, parts, on_progress, open_dump)

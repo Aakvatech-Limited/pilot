@@ -110,7 +110,7 @@ Pilot writes backup runs to `sites/<site>/backups`. Frappe prunes `private/backu
 
 `POST /sites/<name>/actions/restore-upload` takes the same `parts` as multipart form fields, plus the files `database`, `public`, `private`, and the optional `config` (the site config backup, which carries the encryption key). nginx `client_max_body_size` limits the upload size.
 
-A restore takes a backup of the target, puts it in maintenance mode, restores only the chosen parts, and migrates it. A database from another site brings that site's encryption key. If a step fails, the site stays in maintenance mode and the task log names the backup to restore. Restoring from another site needs a bench session; a site token can only restore its own backups.
+A restore puts the site in maintenance mode, restores only the chosen parts, and migrates it. It takes no backup of the site first. A database from another site brings that site's encryption key. If a step fails, the site stays in maintenance mode. Restoring from another site needs a bench session; a site token can only restore its own backups.
 
 ### Site Actions
 
