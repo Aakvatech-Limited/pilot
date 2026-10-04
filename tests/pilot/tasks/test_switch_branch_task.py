@@ -144,9 +144,11 @@ def test_sites_with_the_app_are_migrated_under_the_switch_locks(tmp_path: Path, 
     with patch.object(type(bench.migrations), "create_site_migrate", return_value=FakeOperation()) as create:
         SwitchBranchTask(
             bench=bench, bench_root=bench.path, name="myapp", branch="develop", sites=["a.localhost"]
-        ).queue_site_migrations()
+        ).queue_site_migrations("main", "1111111", "2222222")
 
-    create.assert_called_once_with("a.localhost")
+    assert create.call_args.args == ("a.localhost",)
+    switched = create.call_args.kwargs["switched_app"]
+    assert (switched.name, switched.sha, switched.branch, switched.updated_sha) == ("myapp", "1111111", "main", "2222222")
     assert operations == ["20261004-000000-aaaaaa"]
 
 

@@ -122,7 +122,7 @@ A restore puts the site in maintenance mode, restores only the chosen parts, and
 
 ### App Branches
 
-`POST /apps/<name>/actions/switch-branch` takes `{"branch": "..."}` and queues `switch-branch`. The task validates, reinstalls, and builds the app on the new branch, and returns to the old branch if a step fails. It then backs up and migrates every site that has the app, through one migration operation that takes over the task's locks.
+`POST /apps/<name>/actions/switch-branch` takes `{"branch": "..."}` and queues `switch-branch`. The task validates, reinstalls, and builds the app on the new branch, and returns to the old branch if a step fails. It then backs up and migrates every site that has the app, through one migration operation that takes over the task's locks. If a migration fails, restoring that operation returns the app to its previous branch and restores the site databases.
 
 ### Database Performance Report
 

@@ -55,12 +55,17 @@ class MigrationStore:
             target_kind=pin.kind if pin else "commit",
         )
 
-    def create_site_migrate(self, *sites: str, with_safeguards: bool = True) -> MigrationOperation:
-        """Without safeguards no backup is taken first, so the migration cannot be reverted."""
-        operation = self._create("site_migrate", apps=[], apps_filter=None, sites=list(sites))
-        if not with_safeguards:
-            operation.safeguards_disabled = True
-            self.save(operation)
+    def create_site_migrate(
+        self, *sites: str, with_safeguards: bool = True, switched_app: AppRevision | None = None
+    ) -> MigrationOperation:
+        """Without safeguards no backup is taken first, so the migration cannot be reverted.
+        `switched_app` is an app whose code already changed: a revert returns it to its old revision."""
+        apps = [switched_app] if switched_app else []
+        apps_filter = [switched_app.name] if switched_app else None
+        operation = self._create("site_migrate", apps=apps, apps_filter=apps_filter, sites=list(sites))
+        operation.apps_updated = bool(switched_app)
+        operation.safeguards_disabled = not with_safeguards
+        self.save(operation)
         return operation
 
     def save(self, operation: MigrationOperation) -> None:

@@ -54,7 +54,7 @@ class SwitchBranchTask(Task):
 
         app.record_branch()
         print(f"'{self.name}' switched to '{self.branch}'.")
-        self.queue_site_migrations()
+        self.queue_site_migrations(previous_branch, previous_sha, app.head_sha)
 
     def require_migration_locks(self) -> None:
         """Without these locks the final migration cannot start, so check before changing code."""
@@ -105,11 +105,15 @@ class SwitchBranchTask(Task):
             env.build_assets_for_app(app)
 
     @step("migrate", lambda self: f"Queue backup and migration for {len(self.sites)} site(s)")
-    def queue_site_migrations(self) -> None:
-        """The migration takes over this task's locks, so no update starts in between."""
+    def queue_site_migrations(self, previous_branch: str, previous_sha: str, new_sha: str) -> None:
+        """The migration takes over this task's locks, so no update starts in between. Its
+        revert returns the app to the previous branch as well as the site databases."""
+        from pilot.core.bench.migration.operation import AppRevision
+
         if not self.sites:
             return
-        operation = self.bench.migrations.create_site_migrate(*self.sites)
+        switched_app = AppRevision(name=self.name, sha=previous_sha, updated_sha=new_sha, branch=previous_branch)
+        operation = self.bench.migrations.create_site_migrate(*self.sites, switched_app=switched_app)
         operation.begin(handoff_from=self.running_task_id or None)
         print(f"Queued migration {operation.id} for {', '.join(self.sites)}.")
 
