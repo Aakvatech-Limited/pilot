@@ -104,6 +104,10 @@ Pilot writes backup runs to `sites/<site>/backups`. Frappe prunes `private/backu
 
 `POST /sites/<name>/actions/build-assets` queues `build` for the apps the site runs. Assets are shared by every site on the bench that has those apps, so the task also takes the `bench:update` lock and waits for an update or another build.
 
+### App Branches
+
+`POST /apps/<name>/actions/switch-branch` takes `{"branch": "..."}` and queues `switch-branch`. The task validates, reinstalls, and builds the app on the new branch, and returns to the old branch if a step fails. It then backs up and migrates every site that has the app, through one migration operation that takes over the task's locks.
+
 ### Database Performance Report
 
 `GET /database/performance-report` returns the read-only findings behind the analyzer's Query Analysis and Index Analysis panels: `time_consuming_queries`, `full_table_scan_queries`, `unused_indexes`, `redundant_indexes`, and the `performance_schema_enabled` flag.

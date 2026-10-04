@@ -125,12 +125,13 @@ class MigrationOperation:
         """Resources every task of this operation locks: bench update + each site."""
         return ["bench:update", *[f"site:{site.name.lower()}" for site in self.sites]]
 
-    def begin(self) -> str:
-        """Enter the first phase and queue the first chain task. Returns its id."""
+    def begin(self, handoff_from: str | None = None) -> str:
+        """Enter the first phase and queue the first chain task. Returns its id.
+        `handoff_from` is a running task that passes its resources to this chain."""
         try:
             self._prepare_sites()
             self._enter_first_phase()
-            task_id = self.enqueue_next()
+            task_id = self.enqueue_next(handoff_from=handoff_from)
             if task_id is None:
                 raise BenchError(f"Migration {self.id} has no work to do.")
         except Exception:

@@ -288,7 +288,10 @@ class AppRepository:
 
         repo = self.repo
         self._sync_remote_url()
-        repo.fetch("+refs/heads/*:refs/remotes/origin/*")
+        # A named refspec creates origin/<branch> even in a single-branch clone.
+        refspec = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
+        if not repo.fetch(*self.depth_flags, refspec, timeout=_FETCH_TIMEOUT_SECONDS * 10):
+            raise BenchError(f"Could not fetch branch '{branch}' of '{self.app.config.name}'.")
         repo.abort_merge_rebase()
         stashed = repo.stash_all()
         if not repo.checkout_new_branch(branch, f"origin/{branch}"):
