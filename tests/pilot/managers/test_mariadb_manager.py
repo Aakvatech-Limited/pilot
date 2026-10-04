@@ -10,6 +10,7 @@ from pilot.config import MariaDBConfig
 from pilot.core.mariadb_memory import (
     calculate_mariadb_memory,
     calculate_mariadb_variable_limits,
+    live_sizing_values,
 )
 from pilot.exceptions import DatabaseError
 from pilot.managers.database.mariadb import MariaDBManager
@@ -54,7 +55,7 @@ def test_press_unified_memory_sizing_is_adapted_for_pilot() -> None:
     assert sizing.max_connections == 50
     assert sizing.key_buffer_mb == 32
     assert sizing.innodb_log_file_mb == 512
-    assert sizing.memory_high_mb == 2148
+    assert sizing.memory_high_mb == 2855
     assert sizing.memory_max_mb == 3172
 
 
@@ -100,6 +101,14 @@ def test_startup_values_are_inside_configurable_ranges(total_memory_mb: int) -> 
         limits.innodb_buffer_pool_min_mb <= sizing.innodb_buffer_pool_mb <= limits.innodb_buffer_pool_max_mb
     )
     assert limits.max_connections_min <= sizing.max_connections <= limits.max_connections_max
+
+
+def test_memory_high_does_not_throttle_the_sized_working_set() -> None:
+    """An 8 GB host stalls with 2.1 GB RSS under MemoryHigh=1929M, far below MemoryMax."""
+    sizing = calculate_mariadb_memory(7740)
+
+    assert sizing.memory_high_mb > 2100
+    assert sizing.memory_high_mb >= sizing.memory_max_mb * 0.9
 
 
 @pytest.mark.parametrize("total_memory_mb", [256, 512, 1024, 2048, 8192])
@@ -269,7 +278,7 @@ def test_performance_schema_change_preserves_other_managed_options(tmp_path) -> 
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     (config_dir / "managed.cnf").write_text(
-        "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "max-connections = 50\n"
+        "# Managed by Pilot's database variable editor.\n[mysqld]\nmax-connections = 50\n"
     )
 
     with (
@@ -342,7 +351,7 @@ def test_failed_performance_schema_change_restores_exact_previous_config(tmp_pat
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
-    previous = "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "max-connections = 50\n"
+    previous = "# Managed by Pilot's database variable editor.\n[mysqld]\nmax-connections = 50\n"
     managed_file.write_text(previous)
 
     with (
@@ -473,7 +482,7 @@ def test_max_connections_change_applies_live_and_preserves_other_options(tmp_pat
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
     managed_file.write_text(
-        "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = ON\n"
+        "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = ON\n"
     )
     state = {"max_connections": 50}
 
@@ -503,7 +512,7 @@ def test_failed_dynamic_variable_change_restores_exact_config_and_runtime(tmp_pa
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
-    previous = "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = OFF\n"
+    previous = "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = OFF\n"
     managed_file.write_text(previous)
 
     with (
@@ -593,7 +602,7 @@ def test_safe_configuration_change_applies_live_and_persists(tmp_path) -> None:
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
     managed_file.write_text(
-        "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = OFF\n"
+        "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = OFF\n"
     )
     state = {"connect_timeout": 10}
 
@@ -656,7 +665,7 @@ def test_failed_catalog_change_restores_exact_config_and_runtime(tmp_path) -> No
     config_dir.mkdir()
     (config_dir / "my.cnf").write_text("# Managed by Pilot.\n[mysqld]\n")
     managed_file = config_dir / "managed.cnf"
-    previous = "# Managed by Pilot's database variable editor.\n" "[mysqld]\n" "performance-schema = OFF\n"
+    previous = "# Managed by Pilot's database variable editor.\n[mysqld]\nperformance-schema = OFF\n"
     managed_file.write_text(previous)
 
     with (
@@ -773,6 +782,176 @@ def test_linux_unit_starts_with_option_file_and_memory_limits(tmp_path) -> None:
     assert f"MemoryHigh={sizing.memory_high_mb}M" in content
     assert f"MemoryMax={sizing.memory_max_mb}M" in content
     assert "MemorySwapMax=100M" in content
+
+
+def _tune(manager, tmp_path, current_max_mb):
+    order = Mock()
+    with (
+        patch(f"{MODULE}.is_macos", return_value=False),
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        patch.object(manager, "is_installed", return_value=True),
+        patch.object(manager, "is_provisioned", return_value=True),
+        patch.object(manager, "_total_memory_mb", return_value=1024),
+        patch.object(manager, "_install_unit") as install_unit,
+        patch.object(manager, "_wait_until_healthy"),
+        patch.object(manager, "_unit_memory_mb", return_value=current_max_mb),
+        patch.object(manager, "_apply_live_sizing", order.live_sizing),
+        patch.object(manager, "_set_runtime_memory_limits", order.set_limits),
+        patch.object(manager, "_lower_runtime_memory_limits", order.lower_limits),
+        patch.object(manager, "_restart_and_wait_healthy") as restart,
+    ):
+        sizing = manager.tune_to_host()
+        config = manager.my_cnf_path.read_text()
+    restart.assert_not_called()
+    install_unit.assert_called_once_with(sizing)
+    return sizing, config, [name for name, _args, _kwargs in order.mock_calls]
+
+
+def test_tune_to_host_applies_the_sizing_live_without_a_restart(tmp_path) -> None:
+    sizing, config, _calls = _tune(_manager(), tmp_path, current_max_mb=None)
+
+    expected = calculate_mariadb_memory(1024)
+    assert sizing == expected
+    assert f"innodb-buffer-pool-size = {expected.innodb_buffer_pool_mb}M" in config
+
+
+def test_tune_to_host_raises_the_limits_before_the_server_grows(tmp_path) -> None:
+    _sizing, _config, calls = _tune(_manager(), tmp_path, current_max_mb=1)
+
+    assert calls == ["set_limits", "live_sizing"]
+
+
+def test_tune_to_host_lowers_the_limits_after_the_server_shrinks(tmp_path) -> None:
+    _sizing, _config, calls = _tune(_manager(), tmp_path, current_max_mb=1_000_000)
+
+    assert calls == ["live_sizing", "lower_limits"]
+
+
+MIB = 1024 * 1024
+
+
+def test_live_sizing_lowers_the_minimum_before_it_shrinks_the_pool() -> None:
+    sizing = calculate_mariadb_memory(2048)
+    names = [name for name, _value in live_sizing_values(sizing, 4096 * MIB, 8192 * MIB, set())]
+
+    assert names.index("innodb_buffer_pool_size_auto_min") < names.index("innodb_buffer_pool_size")
+
+
+def test_live_sizing_grows_the_pool_before_it_raises_the_minimum() -> None:
+    sizing = calculate_mariadb_memory(8192)
+    names = [name for name, _value in live_sizing_values(sizing, 128 * MIB, 8192 * MIB, set())]
+
+    assert names.index("innodb_buffer_pool_size") < names.index("innodb_buffer_pool_size_auto_min")
+
+
+def test_live_sizing_keeps_managed_options_and_the_pool_maximum() -> None:
+    sizing = calculate_mariadb_memory(8192)
+    values = dict(live_sizing_values(sizing, 128 * MIB, 256 * MIB, {"max-connections"}))
+
+    assert "max_connections" not in values
+    assert values["innodb_buffer_pool_size"] == 256 * MIB
+
+
+def test_apply_live_sizing_sets_each_value_and_closes_the_connection(tmp_path) -> None:
+    manager = _manager()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (128 * MIB, 8192 * MIB)
+    connection = MagicMock()
+    connection.cursor.return_value.__enter__.return_value = cursor
+    sizing = calculate_mariadb_memory(4096)
+    with (
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        patch.object(manager, "connect", return_value=connection),
+    ):
+        manager.config_dir.mkdir(parents=True)
+        manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")
+        manager._apply_live_sizing(sizing)
+
+    statements = [executed.args for executed in cursor.execute.call_args_list[1:]]
+    expected = live_sizing_values(sizing, 128 * MIB, 8192 * MIB, {"max-connections"})
+    assert statements == [(f"SET GLOBAL {name} = %s", (value,)) for name, value in expected]
+    assert not any("max_connections" in statement for statement, _value in statements)
+    connection.close.assert_called_once_with()
+
+
+def test_runtime_memory_limits_wait_until_the_memory_is_released() -> None:
+    manager = _manager()
+    sizing = calculate_mariadb_memory(2048)
+    usage = [sizing.memory_high_mb + 100, sizing.memory_high_mb - 1]
+    with (
+        patch.object(manager, "_unit_memory_mb", side_effect=usage),
+        patch(f"{MODULE}.time.sleep"),
+        patch(f"{MODULE}.run_command") as run,
+    ):
+        manager._lower_runtime_memory_limits(sizing)
+
+    command = run.call_args.args[0]
+    assert "set-property" in command and "--runtime" in command
+    assert f"MemoryMax={sizing.memory_max_mb}M" in command
+
+
+def test_runtime_memory_limits_wait_for_the_next_start_while_memory_stays_high() -> None:
+    manager = _manager()
+    sizing = calculate_mariadb_memory(2048)
+    with (
+        patch.object(manager, "_unit_memory_mb", return_value=sizing.memory_high_mb + 100),
+        patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 61]),
+        patch(f"{MODULE}.time.sleep"),
+        patch(f"{MODULE}.run_command") as run,
+    ):
+        manager._lower_runtime_memory_limits(sizing)
+
+    run.assert_not_called()
+
+
+def test_runtime_memory_limits_wait_for_the_next_start_when_memory_is_unknown() -> None:
+    manager = _manager()
+    sizing = calculate_mariadb_memory(2048)
+    with (
+        patch.object(manager, "_unit_memory_mb", return_value=None),
+        patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 61]),
+        patch(f"{MODULE}.time.sleep"),
+        patch(f"{MODULE}.run_command") as run,
+    ):
+        manager._lower_runtime_memory_limits(sizing)
+
+    run.assert_not_called()
+
+
+def test_tune_to_host_keeps_manual_options(tmp_path) -> None:
+    manager = _manager()
+    with (
+        patch(f"{MODULE}.is_macos", return_value=False),
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        patch.object(manager, "is_installed", return_value=True),
+        patch.object(manager, "is_provisioned", return_value=True),
+        patch.object(manager, "_total_memory_mb", return_value=1024),
+        patch.object(manager, "_install_unit"),
+        patch.object(manager, "_wait_until_healthy"),
+        patch.object(manager, "_unit_memory_mb", return_value=None),
+        patch.object(manager, "_apply_live_sizing"),
+        patch.object(manager, "_lower_runtime_memory_limits"),
+    ):
+        manager.config_dir.mkdir(parents=True)
+        manager.managed_cnf_path.write_text("[mysqld]\nmax-connections = 80\n")
+        manager.tune_to_host()
+        managed = manager.managed_cnf_path.read_text()
+
+    assert managed == "[mysqld]\nmax-connections = 80\n"
+
+
+def test_tune_to_host_refuses_external_server_before_writing(tmp_path) -> None:
+    manager = MariaDBManager(MariaDBConfig(existing=True))
+    with (
+        patch(f"{MODULE}.is_macos", return_value=False),
+        patch.object(type(manager), "state_dir", new_callable=PropertyMock, return_value=tmp_path),
+        patch.object(manager, "_restart_and_wait_healthy") as restart,
+        pytest.raises(DatabaseError, match="external MariaDB"),
+    ):
+        manager.tune_to_host()
+
+    assert not manager.my_cnf_path.exists()
+    restart.assert_not_called()
 
 
 def test_is_provisioned_on_macos_checks_live_server_not_a_marker_file() -> None:
@@ -1035,3 +1214,26 @@ def test_validate_endpoint_on_macos_checks_password_for_already_secured_server(t
     ):
         resp = _post_validate(_client(tmp_path), "wrong")
     assert resp.get_json() == {"engine": "mariadb", "state": "invalid"}
+
+
+def test_an_existing_unit_gets_its_memory_high_raised_live(tmp_path: Path, monkeypatch) -> None:
+    """MemoryHigh 1 GB under MemoryMax throttles MariaDB below its working set."""
+    from pilot.managers.database import mariadb as module
+
+    manager = _manager()
+    unit = tmp_path / "pilot-mariadb.service"
+    unit.write_text("[Service]\nMemoryHigh=1929M\nMemoryMax=2953M\nMemorySwapMax=100M\n")
+    limits = {"MemoryHigh": 1929, "MemoryMax": 2953}
+    commands: list[list[str]] = []
+    monkeypatch.setattr(module, "is_macos", lambda: False)
+    monkeypatch.setattr(type(manager), "unit_path", property(lambda self: unit))
+    monkeypatch.setattr(manager, "_unit_memory_mb", lambda name: limits[name])
+    monkeypatch.setattr(module, "run_command", lambda argv, **kwargs: commands.append(argv))
+
+    assert manager.raise_memory_high() is True
+    assert "MemoryHigh=2658M" in unit.read_text()
+    assert "MemoryMax=2953M" in unit.read_text()
+    assert commands[-1][-1] == "MemoryHigh=2658M"
+
+    limits["MemoryHigh"] = 2658
+    assert manager.raise_memory_high() is False
