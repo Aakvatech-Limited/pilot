@@ -140,63 +140,62 @@ const restore = async () => {
     :disabled="!isReady"
     @confirm="restore"
   >
-    <p class="text-ink-gray-6 text-p-sm">The site is restored, then migrated.</p>
     <div class="space-y-4">
-        <TabButtons v-model="source" :options="SOURCES" class="w-full" />
+      <TabButtons v-model="source" :options="SOURCES" class="w-full" />
 
-        <div v-if="source === 'upload'" class="divide-y divide-outline-gray-1">
-          <div
-            v-for="item in uploadRows"
-            :key="item.part"
-            class="flex justify-between items-center gap-4 py-2.5"
-          >
-            <div class="min-w-0">
-              <p class="font-medium text-ink-gray-8 text-sm">{{ item.label }}</p>
-              <p class="text-ink-gray-5 text-p-sm truncate">
-                {{ uploads[item.part]?.name || item.hint }}
-              </p>
-            </div>
-            <input
-              :ref="(el) => (inputs[item.part] = el as HTMLInputElement | null)"
-              type="file"
-              :accept="item.accept"
-              class="hidden"
-              @change="pickFile(item.part, $event)"
-            />
-            <Button
-              v-if="uploads[item.part]"
-              variant="ghost"
-              icon="lucide-x"
-              :aria-label="`Remove ${item.label}`"
-              @click="removeFile(item.part)"
-            />
-            <Button v-else class="shrink-0" @click="inputs[item.part]?.click()">Choose</Button>
+      <div v-if="source === 'upload'" class="divide-y divide-outline-gray-1">
+        <div
+          v-for="item in uploadRows"
+          :key="item.part"
+          class="flex justify-between items-center gap-4 py-2.5"
+        >
+          <div class="min-w-0">
+            <p class="font-medium text-ink-gray-8 text-sm">{{ item.label }}</p>
+            <p class="text-ink-gray-5 text-p-sm truncate">
+              {{ uploads[item.part]?.name || item.hint }}
+            </p>
           </div>
+          <input
+            :ref="(el) => (inputs[item.part] = el as HTMLInputElement | null)"
+            type="file"
+            :accept="item.accept"
+            class="hidden"
+            @change="pickFile(item.part, $event)"
+          />
+          <Button
+            v-if="uploads[item.part]"
+            variant="ghost"
+            icon="lucide-x"
+            :aria-label="`Remove ${item.label}`"
+            @click="removeFile(item.part)"
+          />
+          <Button v-else class="shrink-0" @click="inputs[item.part]?.click()">Choose</Button>
+        </div>
+      </div>
+
+      <template v-else>
+        <Select
+          v-if="source === 'site'"
+          v-model="sourceSite"
+          label="Site"
+          :options="sourceOptions"
+          placeholder="Choose a site"
+        />
+
+        <div v-else class="space-y-3">
+          <TextInput v-model="remoteSite" label="Site" placeholder="erp.example.com" />
+          <TextInput v-model="password" label="Administrator password" type="password" />
         </div>
 
-        <template v-else>
-          <Select
-            v-if="source === 'site'"
-            v-model="sourceSite"
-            label="Site"
-            :options="sourceOptions"
-            placeholder="Choose a site"
+        <div class="flex flex-wrap gap-x-5 gap-y-2">
+          <Checkbox
+            v-for="item in PARTS"
+            :key="item.part"
+            v-model="chosen[item.part]"
+            :label="item.label"
           />
-
-          <div v-else class="space-y-3">
-            <TextInput v-model="remoteSite" label="Site" placeholder="erp.example.com" />
-            <TextInput v-model="password" label="Administrator password" type="password" />
-          </div>
-
-          <div class="flex flex-wrap gap-x-5 gap-y-2">
-            <Checkbox
-              v-for="item in PARTS"
-              :key="item.part"
-              v-model="chosen[item.part]"
-              :label="item.label"
-            />
-          </div>
-        </template>
-      </div>
+        </div>
+      </template>
+    </div>
   </ActionDialog>
 </template>

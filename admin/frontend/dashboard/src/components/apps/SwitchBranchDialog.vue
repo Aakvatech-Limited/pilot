@@ -77,8 +77,7 @@ const confirm = async () => {
     @confirm="confirm"
   >
     <p class="text-ink-gray-6 text-p-sm">
-      {{ app?.title }} is on {{ app?.branch || 'a detached commit' }}. The switch applies to every
-      site, and the sites that use it are backed up and migrated after.
+      {{ app?.title }} is on {{ app?.branch || 'a detached commit' }}. This applies to every site.
     </p>
     <Select
         v-model="branch"
