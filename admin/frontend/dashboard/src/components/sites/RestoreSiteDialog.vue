@@ -26,7 +26,7 @@ type Source = 'upload' | 'site' | 'remote'
 
 const SOURCES = [
   { value: 'upload', label: 'Upload files' },
-  { value: 'site', label: 'Another site' },
+  { value: 'site', label: 'Other site' },
   { value: 'remote', label: 'Remote site' },
 ]
 const PARTS = [
