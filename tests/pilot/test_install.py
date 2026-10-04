@@ -161,6 +161,7 @@ install_database_engines() { echo install_database_engines; }
 install_production_packages() { echo install_production_packages; }
 disable_system_services() { echo disable_system_services; }
 install_node() { echo install_node; }
+ensure_tzdata() { echo ensure_tzdata; }
 install_system_packages
 """,
         tmp_path,
@@ -236,3 +237,23 @@ echo reached_the_end
     assert result.returncode == 0, result.stderr
     assert "Warning: tzdata-legacy is unavailable" in result.stdout
     assert "reached_the_end" in result.stdout
+
+
+def test_user_pass_never_installs_timezone_data(tmp_path: Path) -> None:
+    """The bench user may have no sudo; the root pass installs tzdata."""
+    result = run_installer_functions(
+        """
+require_linger() { :; }
+fetch_pilot() { :; }
+ensure_uv() { :; }
+add_pilot_to_path() { :; }
+ensure_admin_venv() { :; }
+chmod() { :; }
+PILOT_DIR=/nonexistent
+pkg_install() { echo "pkg_install $*"; }
+install_for_user
+""",
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "pkg_install" not in result.stdout

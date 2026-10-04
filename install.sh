@@ -284,7 +284,11 @@ disable_system_services() {
 }
 
 install_system_packages() {
-    [ "$DISTRO" = "unknown" ] && return 0
+    if [ "$DISTRO" = "unknown" ]; then
+        # Timezone data still applies where apt exists; only root may install it.
+        if is_root; then ensure_tzdata; fi
+        return 0
+    fi
     # Root always runs this (idempotent, and bare containers need it before
     # useradd). A non-root install may skip it only when the complete host stack
     # is already present, such as the second pass after root provisioning.
@@ -308,6 +312,7 @@ install_system_packages() {
     install_production_packages
     disable_system_services
     install_node
+    ensure_tzdata
 }
 
 base_tools_present() {
@@ -686,7 +691,6 @@ install_for_user() {
     rm -f "$PILOT_DIR/bench"
     chmod +x "$PILOT_DIR/bin/pilot"
     ensure_uv
-    ensure_tzdata
     add_pilot_to_path
     ensure_admin_venv
 
