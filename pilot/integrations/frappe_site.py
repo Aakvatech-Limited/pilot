@@ -77,6 +77,16 @@ class RemoteFrappeSite:
         with self.open_backup(path) as response:
             return int(response.headers.get("Content-Length") or -1)
 
+    def get_latest_run(self) -> tuple[str, dict[str, str]]:
+        """The newest backup run on the remote: its timestamp and its files by part. Frappe
+        picks the newest file of each kind on its own, so files of older runs are left out."""
+        from pilot.core.site.backups import parse_backup_timestamp
+
+        backups = {part: path for part, path in self.get_latest_backups().items() if path}
+        timestamps = {part: parse_backup_timestamp(Path(path).name) or "" for part, path in backups.items()}
+        timestamp = max(timestamps.values(), default="")
+        return timestamp, {part: path for part, path in backups.items() if timestamp and timestamps[part] == timestamp}
+
     def get_latest_backups(self) -> dict[str, str]:
         """Paths of the remote's newest backup files, by part (database, public, private, config)."""
         return self._call("frappe.utils.backups.fetch_latest_backups")

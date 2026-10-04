@@ -5,11 +5,12 @@ import secrets
 import shutil
 from pathlib import Path
 
-from flask import current_app, request
+from flask import current_app, jsonify, request
 
 from admin.backend.api.responses import accepted_task_response, error_response
 from admin.backend.api.v1.sites import sites_bp
 from admin.backend.api.v1.sites.shared import malformed_body, site_name, site_not_found, task_failure
+from admin.backend.api.v1.types.site_backups import RemoteBackup, RemoteBackupList
 from admin.backend.middleware import is_bench_scoped, require_scope
 from pilot.core.bench import Bench
 from pilot.core.site.restore import RESTORE_PARTS
@@ -94,23 +95,62 @@ def _restore_from_bench_site(bench_root: Path, name: str, parts: list[str], data
     return _queue(bench_root, name, parts, {name, source}, source_site=source, backup_timestamp=timestamp)
 
 
+@sites_bp.post("/<name>/actions/remote-backups")
+@require_scope(site_name)
+def list_remote_backups(name: str):
+    """The latest backup of a remote Frappe site, which a restore can use instead of a new one."""
+    from admin.backend.providers.backups import BackupProvider
+    from pilot.exceptions import RemoteSiteError
+
+    if not site_exists(Path(current_app.config["BENCH_ROOT"]), name):
+        return site_not_found()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return malformed_body()
+    remote, failure = _signed_in_remote(data)
+    if failure:
+        return failure
+    try:
+        timestamp, files = remote.get_latest_run()
+    except RemoteSiteError as error:
+        return _invalid(str(error))
+    backups: list[RemoteBackup] = []
+    if created_at := BackupProvider.get_timestamp(timestamp):
+        parts = [part for part in RESTORE_PARTS if part in files]
+        backups.append(RemoteBackup(timestamp=timestamp, created_at=created_at.isoformat(), parts=parts))
+    return jsonify(RemoteBackupList(backups=backups))
+
+
 def _restore_from_remote(bench_root: Path, name: str, parts: list[str], data: dict):
+    timestamp = data.get("backup_timestamp") or ""
+    if not isinstance(timestamp, str) or (timestamp and not _TIMESTAMP_RE.fullmatch(timestamp)):
+        return _invalid("The backup timestamp is not valid.")
+    _, failure = _signed_in_remote(data)
+    if failure:
+        return failure
+    source = {"remote_site": data["remote_site"], "remote_password": data["password"], "backup_timestamp": timestamp}
+    return _queue(bench_root, name, parts, {name}, **source)
+
+
+def _signed_in_remote(data: dict):
+    """The remote site signed in as Administrator, or the response that explains why not."""
     from pilot.exceptions import RemoteSiteError
     from pilot.integrations.frappe_site import RemoteFrappeSite
 
     # The admin calls out to the given host, so a site token must not choose one.
     if not is_bench_scoped():
-        return error_response("forbidden", "Restoring from a remote site needs a bench session.", 403)
-    remote, password = data.get("remote_site"), data.get("password")
-    if not isinstance(remote, str) or not isinstance(password, str) or not password:
-        return _invalid("Enter the site and its Administrator password.")
-    if remote.strip().startswith("http://"):
-        return _invalid("Use an https:// site: the Administrator password must not travel in clear text.")
+        return None, error_response("forbidden", "Restoring from a remote site needs a bench session.", 403)
+    remote_site, password = data.get("remote_site"), data.get("password")
+    if not isinstance(remote_site, str) or not isinstance(password, str) or not password:
+        return None, _invalid("Enter the site and its Administrator password.")
+    if remote_site.strip().startswith("http://"):
+        return None, _invalid("Use an https:// site: the Administrator password must not travel in clear text.")
+    remote = RemoteFrappeSite(remote_site, password)
     try:
-        RemoteFrappeSite(remote, password).login()
+        remote.login()
     except RemoteSiteError as error:
-        return _invalid(str(error))
-    return _queue(bench_root, name, parts, {name}, remote_site=remote, remote_password=password)
+        return None, _invalid(str(error))
+    return remote, None
 
 
 def _queue(bench_root: Path, name: str, parts: list[str], sites: set[str], idempotent: bool = True, **source):

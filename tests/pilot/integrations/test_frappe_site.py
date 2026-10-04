@@ -113,3 +113,21 @@ def test_files_from_different_runs_are_not_a_complete_backup() -> None:
     assert RemoteFrappeSite.is_new_complete_run(mixed, previous="./s/1-database.sql.gz") is False
     assert RemoteFrappeSite.is_new_complete_run(same, previous="./s/1-database.sql.gz") is True
     assert RemoteFrappeSite.is_new_complete_run(same, previous="./s/2-database.sql.gz") is False
+
+
+def test_the_latest_run_leaves_out_files_of_older_runs() -> None:
+    from unittest.mock import patch
+
+    from pilot.integrations.frappe_site import RemoteFrappeSite
+
+    latest = {
+        "database": "./s/20261004_020000-s-database.sql.gz",
+        "public": "./s/20261001_020000-s-files.tar",
+        "private": None,
+        "config": "./s/20261004_020000-s-site_config_backup.json",
+    }
+    with patch.object(RemoteFrappeSite, "get_latest_backups", return_value=latest):
+        timestamp, files = RemoteFrappeSite("old.example.com", "pw").get_latest_run()
+
+    assert timestamp == "20261004_020000"
+    assert set(files) == {"database", "config"}

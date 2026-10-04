@@ -106,7 +106,12 @@ Pilot writes backup runs to `sites/<site>/backups`. Frappe prunes `private/backu
 |---|---|---|
 | A run of a site on this bench | `source_site`, `backup_timestamp` | A run that only exists offsite is downloaded first. Omit `source_site` to use the target's own run. |
 | A fresh backup of a site on this bench | `source_site` | The source site is backed up first. |
-| A remote Frappe site | `remote_site`, `password` | Needs a bench session and an `https://` site. The Administrator password is checked before the task is queued and is kept out of the task record. The remote takes a fresh backup, which emails its Administrator, and Pilot waits until all of its files are complete. |
+| The latest backup of a remote Frappe site | `remote_site`, `password`, `backup_timestamp` | Get `backup_timestamp` from `remote-backups`. The restore stops if the remote has a newer backup by then. |
+| A new backup of a remote Frappe site | `remote_site`, `password` | The remote takes a new backup, which emails its Administrator, and Pilot waits until all of its files are complete. |
+
+A remote source needs a bench session and an `https://` site. The Administrator password is checked before the task is queued and is kept out of the task record.
+
+`POST /sites/<name>/actions/remote-backups` takes `remote_site` and `password` and returns the remote's latest backup as `{"backups": [{"timestamp", "created_at", "parts"}]}`. Frappe exposes only its latest backup, so the list has one entry, or none when the remote has no backup from the last 30 days.
 
 `POST /sites/<name>/actions/restore-upload` takes the same `parts` as multipart form fields, plus the files `database`, `public`, `private`, and the optional `config` (the site config backup, which carries the encryption key). nginx `client_max_body_size` limits the upload size.
 

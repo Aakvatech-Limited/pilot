@@ -156,3 +156,45 @@ def test_an_upload_that_cannot_be_queued_is_deleted(tmp_path: Path) -> None:
 
     assert response.status_code >= 400
     assert list((bench_root / "tmp" / "uploads").iterdir()) == []
+
+
+def test_remote_backups_list_the_latest_run(tmp_path: Path) -> None:
+    files = {"database": "./s/20261004_020000-s-database.sql.gz", "private": "./s/20261004_020000-s-private-files.tar"}
+    with (
+        patch("pilot.integrations.frappe_site.RemoteFrappeSite.login"),
+        patch("pilot.integrations.frappe_site.RemoteFrappeSite.get_latest_run", return_value=("20261004_020000", files)),
+    ):
+        response = _client(tmp_path / "benches" / "current").post(
+            "/api/v1/sites/a.localhost/actions/remote-backups",
+            json={"remote_site": "old.example.com", "password": "pw"},
+        )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "backups": [{"timestamp": "20261004_020000", "created_at": "2026-10-04T02:00:00+00:00", "parts": ["database", "private"]}]
+    }
+
+
+def test_a_remote_without_backups_lists_none(tmp_path: Path) -> None:
+    with (
+        patch("pilot.integrations.frappe_site.RemoteFrappeSite.login"),
+        patch("pilot.integrations.frappe_site.RemoteFrappeSite.get_latest_run", return_value=("", {})),
+    ):
+        response = _client(tmp_path / "benches" / "current").post(
+            "/api/v1/sites/a.localhost/actions/remote-backups",
+            json={"remote_site": "old.example.com", "password": "pw"},
+        )
+
+    assert response.get_json() == {"backups": []}
+
+
+def test_a_chosen_remote_backup_is_passed_to_the_task(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    with patch("pilot.integrations.frappe_site.RemoteFrappeSite.login"):
+        response = _client(bench_root).post(
+            "/api/v1/sites/a.localhost/actions/restore",
+            json={"parts": ["database"], "remote_site": "old.example.com", "password": "pw", "backup_timestamp": "20261004_020000"},
+        )
+
+    assert response.status_code == 202
+    assert _meta(bench_root, response)["args"]["backup_timestamp"] == "20261004_020000"

@@ -1,6 +1,6 @@
 import { apiUrl, request, unwrap } from '@/api/client'
 import type { DisabledApp, EnabledApp, SiteApps } from '@/types/siteApps'
-import type { Backup, BackupSchedule } from '@/types/siteBackups'
+import type { Backup, BackupSchedule, RemoteBackupList } from '@/types/siteBackups'
 import type { DnsRecords, SiteDomains } from '@/types/siteDomains'
 import type { SiteAnalytics, SiteUptime } from '@/types/siteMonitoring'
 import type { SiteStorageReport } from '@/types/siteStorage'
@@ -55,6 +55,13 @@ export const sitesApi = {
 
   restore: (name: string, payload: Record<string, unknown>): Promise<TaskPayload> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/restore`, { json: payload }).json(),
+
+  remoteBackups: (name: string, remoteSite: string, password: string): Promise<RemoteBackupList> =>
+    request
+      .post(`sites/${encodeURIComponent(name)}/actions/remote-backups`, {
+        json: { remote_site: remoteSite, password },
+      })
+      .json(),
 
   // Large archives take as long as the upload does.
   restoreUpload: (name: string, form: FormData): Promise<TaskPayload> =>

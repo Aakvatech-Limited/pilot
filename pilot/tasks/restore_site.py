@@ -7,14 +7,15 @@ from pathlib import Path
 from typing import IO, Annotated, ClassVar
 
 from pilot.core.site.restore import BackupRun
-from pilot.exceptions import BenchError
+from pilot.exceptions import BenchError, RemoteSiteError
 from pilot.tasks import Arg, Task, on_cancel, on_failure, step
 
 
 @dataclass(kw_only=True)
 class RestoreSiteTask(Task):
     """Restore chosen parts of one backup into `site`. The source is a run of a site on this
-    bench, a fresh backup of one, uploaded files, or a fresh backup of a remote Frappe site."""
+    bench, a fresh backup of one, uploaded files, or the latest or a fresh backup of a remote
+    Frappe site."""
 
     command: ClassVar[str] = "restore-site"
     # Stopping between the database and the files leaves a half-restored site.
@@ -61,9 +62,14 @@ class RestoreSiteTask(Task):
 
         remote = RemoteFrappeSite(self.remote_site, self.remote_password)
         remote.login()
-        self.report(f"Taking a fresh backup on {remote.url}...")
-        latest = remote.take_backup()
-        is_streamed = "database" in self.parts and self.bench.config.db_type == "mariadb"
+        if self.backup_timestamp:
+            timestamp, latest = remote.get_latest_run()
+            if timestamp != self.backup_timestamp:
+                raise RemoteSiteError(f"{remote.url} has a newer backup now. Get its backups again.")
+        else:
+            self.report(f"Taking a new backup on {remote.url}...")
+            latest = remote.take_backup()
+        is_streamed = "database" in self.parts and self.bench.config.db_type == "mariadb" and "database" in latest
         wanted = [part for part in ("public", "private") if part in self.parts]
         wanted += ["config"] if "database" in self.parts else []
         wanted += ["database"] if "database" in self.parts and not is_streamed else []
