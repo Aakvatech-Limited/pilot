@@ -34,14 +34,23 @@ def test_without_a_run_the_other_site_is_backed_up_first(tmp_path: Path) -> None
 
 
 def test_a_remote_database_streams_and_only_chosen_files_download(tmp_path: Path) -> None:
-    task, _ = _task(tmp_path, parts=["database", "private"], remote_site="old.example.com", remote_password="pw")
+    task, _ = _task(
+        tmp_path,
+        parts=["database", "private"],
+        remote_site="old.example.com",
+        remote_password="pw",
+        backup_timestamp="2",
+    )
     remote = MagicMock()
-    remote.take_backup.return_value = {
-        "database": "./s/2-database.sql.gz",
-        "public": "./s/2-files.tar",
-        "private": "./s/2-private-files.tar",
-        "config": "./s/2-site_config_backup.json",
-    }
+    remote.get_latest_run.return_value = (
+        "2",
+        {
+            "database": "./s/2-database.sql.gz",
+            "public": "./s/2-files.tar",
+            "private": "./s/2-private-files.tar",
+            "config": "./s/2-site_config_backup.json",
+        },
+    )
     remote.download_backup.side_effect = lambda path, directory: directory / Path(path).name
 
     with patch("pilot.integrations.frappe_site.RemoteFrappeSite", return_value=remote):
@@ -53,21 +62,6 @@ def test_a_remote_database_streams_and_only_chosen_files_download(tmp_path: Path
     stream()
     remote.open_backup.assert_called_once_with("./s/2-database.sql.gz")
     assert set(run.files) == {"private", "config"}
-
-
-def test_a_chosen_remote_backup_is_used_without_a_new_backup(tmp_path: Path) -> None:
-    task, _ = _task(
-        tmp_path, parts=["public"], remote_site="old.example.com", remote_password="pw", backup_timestamp="20261004_020000"
-    )
-    remote = MagicMock()
-    remote.get_latest_run.return_value = ("20261004_020000", {"public": "./s/20261004_020000-s-files.tar"})
-    remote.download_backup.side_effect = lambda path, directory: directory / Path(path).name
-
-    with patch("pilot.integrations.frappe_site.RemoteFrappeSite", return_value=remote):
-        run, stream = task.fetch(tmp_path)
-
-    remote.take_backup.assert_not_called()
-    assert set(run.files) == {"public"} and stream is None
 
 
 def test_a_newer_remote_backup_stops_the_restore(tmp_path: Path) -> None:

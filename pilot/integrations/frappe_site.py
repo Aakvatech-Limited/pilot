@@ -3,7 +3,6 @@ from __future__ import annotations
 import http.client
 import json
 import shutil
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,12 +15,10 @@ from pilot.exceptions import RemoteSiteError
 _REQUEST_TIMEOUT_SECONDS = 30
 # Per socket read, so a large download may take as long as it needs but a stalled one ends.
 _DOWNLOAD_READ_TIMEOUT_SECONDS = 300
-_BACKUP_TIMEOUT_SECONDS = 60 * 60
-_BACKUP_POLL_SECONDS = 10
 
 
 class RemoteFrappeSite:
-    """A Frappe site reached as its Administrator, to copy a fresh backup. Method calls
+    """A Frappe site reached as its Administrator, to copy its latest backup. Method calls
     use GET: a session-cookie POST needs a CSRF token that only Frappe's desk receives."""
 
     def __init__(self, site: str, password: str) -> None:
@@ -41,41 +38,6 @@ class RemoteFrappeSite:
             raise RemoteSiteError(f"The site refused the login (HTTP {error.code}).") from error
         if "verification" in response:
             raise RemoteSiteError("Sites with two-factor authentication are not supported.")
-
-    def take_backup(self) -> dict[str, str]:
-        """Start a backup with files on the remote and wait until it is complete. The remote
-        runs it on its long queue and mails its Administrator."""
-        previous = self.get_latest_backups().get("database")
-        user = self._call("frappe.client.get_value", doctype="User", filters="Administrator", fieldname="email")
-        self._call(
-            "frappe.desk.page.backups.backups.schedule_files_backup",
-            user_email=user.get("email") or "Administrator",
-        )
-        deadline = time.monotonic() + _BACKUP_TIMEOUT_SECONDS
-        sizes: dict[str, int] = {}
-        while time.monotonic() < deadline:
-            backups = self.get_latest_backups()
-            if self.is_new_complete_run(backups, previous):
-                # Frappe writes each file at its final path, so a file is done once it stops growing.
-                current = {part: self.get_backup_size(backups[part]) for part in ("database", "public", "private")}
-                if current == sizes:
-                    return backups
-                sizes = current
-            time.sleep(_BACKUP_POLL_SECONDS)
-        raise RemoteSiteError(f"{self.url} did not finish its backup. Check that its background workers run.")
-
-    @staticmethod
-    def is_new_complete_run(backups: dict, previous: str | None) -> bool:
-        """The database and both file archives come from one run, newer than `previous`.
-        Frappe picks the newest file of each kind on its own, so they can mix runs."""
-        paths = [backups.get(part) for part in ("database", "public", "private")]
-        if not all(paths) or backups["database"] == previous:
-            return False
-        return len({Path(path).name.split("-", 1)[0] for path in paths}) == 1
-
-    def get_backup_size(self, path: str) -> int:
-        with self.open_backup(path) as response:
-            return int(response.headers.get("Content-Length") or -1)
 
     def get_latest_run(self) -> tuple[str, dict[str, str]]:
         """The newest backup run on the remote: its timestamp and its files by part. Frappe

@@ -79,7 +79,7 @@ def test_remote_credentials_are_checked_before_queueing(tmp_path: Path) -> None:
     ):
         response = _client(tmp_path / "benches" / "current").post(
             "/api/v1/sites/a.localhost/actions/restore",
-            json={"parts": ["database"], "remote_site": "old.example.com", "password": "nope"},
+            json={"parts": ["database"], "remote_site": "old.example.com", "password": "nope", "backup_timestamp": "20261004_020000"},
         )
 
     assert response.status_code == 422
@@ -91,7 +91,7 @@ def test_the_remote_password_stays_out_of_the_task_record(tmp_path: Path) -> Non
     with patch("pilot.integrations.frappe_site.RemoteFrappeSite.login"):
         response = _client(bench_root).post(
             "/api/v1/sites/a.localhost/actions/restore",
-            json={"parts": ["database"], "remote_site": "old.example.com", "password": "hunter2-secret"},
+            json={"parts": ["database"], "remote_site": "old.example.com", "password": "hunter2-secret", "backup_timestamp": "20261004_020000"},
         )
 
     assert response.status_code == 202
@@ -128,7 +128,7 @@ def test_an_upload_missing_a_chosen_part_is_rejected(tmp_path: Path) -> None:
 def test_a_site_token_cannot_point_the_admin_at_another_host(tmp_path: Path) -> None:
     response = _client(tmp_path / "benches" / "current", site_token="a.localhost").post(
         "/api/v1/sites/a.localhost/actions/restore",
-        json={"parts": ["database"], "remote_site": "http://127.0.0.1:6379", "password": "x"},
+        json={"parts": ["database"], "remote_site": "http://127.0.0.1:6379", "password": "x", "backup_timestamp": "20261004_020000"},
     )
 
     assert response.status_code == 403
@@ -138,7 +138,7 @@ def test_a_site_token_cannot_point_the_admin_at_another_host(tmp_path: Path) -> 
 def test_an_invalid_remote_site_is_a_clear_error(tmp_path: Path, remote: str) -> None:
     response = _client(tmp_path / "benches" / "current").post(
         "/api/v1/sites/a.localhost/actions/restore",
-        json={"parts": ["database"], "remote_site": remote, "password": "x"},
+        json={"parts": ["database"], "remote_site": remote, "password": "x", "backup_timestamp": "20261004_020000"},
     )
 
     assert response.status_code == 422
@@ -198,3 +198,14 @@ def test_a_chosen_remote_backup_is_passed_to_the_task(tmp_path: Path) -> None:
 
     assert response.status_code == 202
     assert _meta(bench_root, response)["args"]["backup_timestamp"] == "20261004_020000"
+
+
+def test_a_remote_restore_needs_a_backup_from_remote_backups(tmp_path: Path) -> None:
+    with patch("pilot.integrations.frappe_site.RemoteFrappeSite.login") as login:
+        response = _client(tmp_path / "benches" / "current").post(
+            "/api/v1/sites/a.localhost/actions/restore",
+            json={"parts": ["database"], "remote_site": "old.example.com", "password": "pw"},
+        )
+
+    assert response.status_code == 422
+    login.assert_not_called()

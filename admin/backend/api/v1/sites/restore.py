@@ -98,7 +98,7 @@ def _restore_from_bench_site(bench_root: Path, name: str, parts: list[str], data
 @sites_bp.post("/<name>/actions/remote-backups")
 @require_scope(site_name)
 def list_remote_backups(name: str):
-    """The latest backup of a remote Frappe site, which a restore can use instead of a new one."""
+    """The latest backup of a remote Frappe site, which is what a remote restore uses."""
     from admin.backend.providers.backups import BackupProvider
     from pilot.exceptions import RemoteSiteError
 
@@ -122,9 +122,9 @@ def list_remote_backups(name: str):
 
 
 def _restore_from_remote(bench_root: Path, name: str, parts: list[str], data: dict):
-    timestamp = data.get("backup_timestamp") or ""
-    if not isinstance(timestamp, str) or (timestamp and not _TIMESTAMP_RE.fullmatch(timestamp)):
-        return _invalid("The backup timestamp is not valid.")
+    timestamp = data.get("backup_timestamp")
+    if not isinstance(timestamp, str) or not _TIMESTAMP_RE.fullmatch(timestamp):
+        return _invalid("Get the backups of the remote site first.")
     _, failure = _signed_in_remote(data)
     if failure:
         return failure
