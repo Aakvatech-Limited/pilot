@@ -70,7 +70,6 @@ class BenchConfigFiles:
                     "monitor": True,
                 }
             )
-            config.setdefault("server_script_enabled", True)
             if self.bench.is_lite_mode:
                 config["client_cache_max_bytes"] = _LITE_CLIENT_CACHE_BYTES
             else:
