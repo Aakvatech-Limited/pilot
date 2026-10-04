@@ -57,7 +57,7 @@ test('Migrate the site', async ({ page }) => {
 
 test('Reset the site', async ({ page }) => {
   await page.goto(`/sites/${site}/settings`)
-  await page.getByRole('button', { name: 'Reset site' }).click()
+  await page.getByRole('button', { name: 'Reset', exact: true }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Reset Site' })
   await dialog.getByRole('textbox').fill(site)
@@ -69,7 +69,7 @@ test('Reset the site', async ({ page }) => {
 
 test('Drop the site', async ({ page }) => {
   await page.goto(`/sites/${site}/settings`)
-  await page.getByRole('button', { name: 'Drop site' }).click()
+  await page.getByRole('button', { name: 'Drop', exact: true }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Drop Site' })
   await dialog.getByRole('textbox').fill(site)
