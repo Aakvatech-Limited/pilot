@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -982,3 +983,199 @@ def test_symlink_check_does_not_walk_through_an_allowed_symlinked_dir(tmp_path: 
 
     SymlinkCheck().run(app)  # no raise, and terminates
     assert SymlinkCheck.get_invalid_symlinks(app.path) == []
+
+
+def test_validation_ignore_skips_python_files_from_syntax_check(tmp_path: Path) -> None:
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench]\nvalidation-ignore = ["myapp/internal/*"]\n\n'
+        '[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {
+            "myapp/hooks.py": "app_name = 'myapp'\n",
+            "myapp/internal/generated.py": "def broken(:\n",
+            "myapp/internal/nested/also_generated.py": "def broken(:\n",
+        },
+    )
+
+    Validator(app, checks=_static_checks()).validate()  # no raise
+
+
+def test_validation_ignore_does_not_skip_unmatched_files(tmp_path: Path) -> None:
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench]\nvalidation-ignore = ["myapp/internal/*"]\n\n'
+        '[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n", "myapp/utils.py": "def broken(:\n"},
+    )
+
+    with pytest.raises(AppValidationError, match=r"syntax errors"):
+        Validator(app, checks=_static_checks()).validate()
+
+
+def test_validation_ignore_skips_fixtures(tmp_path: Path) -> None:
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench]\nvalidation-ignore = ["myapp/fixtures/*"]\n\n'
+        '[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n", "myapp/fixtures/custom_field.json": "{not json"},
+    )
+
+    Validator(app, checks=_static_checks()).validate()  # no raise
+
+
+def test_validation_ignore_skips_symlinks(tmp_path: Path) -> None:
+    app = _app_with_symlink(tmp_path, "myapp/vendor/node_modules", "/nowhere/node_modules")
+    (app.path / "pyproject.toml").write_text(
+        f'[project]\nname = "myapp"\nversion = "0.0.1"\n\n'
+        f'[tool.bench]\nvalidation-ignore = ["myapp/vendor/*"]\n\n{_SETUPTOOLS_BUILD}'
+    )
+
+    SymlinkCheck().run(app)  # no raise
+
+
+def test_validation_ignore_rejects_a_non_list_value(tmp_path: Path) -> None:
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench]\nvalidation-ignore = "myapp/internal/*"\n\n'
+        '[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+
+    with pytest.raises(AppValidationError, match=r"invalid \[tool\.bench\] validation-ignore"):
+        Validator(app, checks=_static_checks()).validate()
+
+
+def test_validation_rejects_a_non_table_bench_key(tmp_path: Path) -> None:
+    """A non-table must fail as AppValidationError, not AttributeError: only a
+    BenchError rolls a switched branch back."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool]\nbench = "nope"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+
+    with pytest.raises(AppValidationError, match=r"invalid \[tool\.bench\] in pyproject\.toml"):
+        Validator(app, checks=_static_checks()).validate()
+
+
+def test_validation_ignores_unrelated_tool_tables(tmp_path: Path) -> None:
+    """Other tools' keys under [tool] are not pilot's to validate."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool]\nx = ["sss"]\n\n'
+        '[tool.ruff]\nline-length = 110\n\n[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+
+    Validator(app, checks=_static_checks()).validate()  # no raise
+
+
+def test_syntax_check_resolves_bench_python(tmp_path: Path) -> None:
+    """Verifies that SyntaxCheck prefers the bench's python binary when present."""
+    app = _make_app(tmp_path, "myapp", '[project]\nname = "myapp"\n', {"myapp/hooks.py": ""})
+    bench_python = app.bench.env_path / "bin" / "python"
+    bench_python.parent.mkdir(parents=True, exist_ok=True)
+    bench_python.touch(mode=0o755)
+
+    assert SyntaxCheck._get_python_bin(app) == str(bench_python)
+
+
+def test_syntax_check_falls_back_to_sys_executable_when_no_bench_env(tmp_path: Path) -> None:
+    """Verifies fallback to sys.executable when bench env python is absent."""
+    app = _make_app(tmp_path, "myapp", '[project]\nname = "myapp"\n', {"myapp/hooks.py": ""})
+    assert SyntaxCheck._get_python_bin(app) == sys.executable
+
+    # Also falls back to sys.executable if app has no bench associated
+    app.bench = None  # type: ignore[assignment]
+    assert SyntaxCheck._get_python_bin(app) == sys.executable
+
+
+def test_syntax_check_passes_when_no_python_files(tmp_path: Path) -> None:
+    """SyntaxCheck returns early without running subprocess if app has no .py files."""
+    app = _make_app(tmp_path, "myapp", '[project]\nname = "myapp"\n', {})
+    SyntaxCheck().run(app)  # Should not raise
+
+
+def test_syntax_check_reports_broken_file_and_line(tmp_path: Path) -> None:
+    """Verifies that SyntaxCheck includes the relative file path and line number on error."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n',
+        {
+            "myapp/hooks.py": "app_name = 'myapp'\n",
+            "myapp/bad.py": "def broken(:\n    pass\n",
+        },
+    )
+    with pytest.raises(AppValidationError) as exc_info:
+        SyntaxCheck().run(app)
+
+    err_msg = str(exc_info.value)
+    assert "myapp/bad.py" in err_msg
+    assert "line 1" in err_msg
+
+    # Also test the _syntax_errors method directly
+    bad_file = app.path / "myapp" / "bad.py"
+    single_errors = SyntaxCheck._syntax_errors(app, [str(bad_file)])
+    assert str(bad_file) in single_errors
+    assert "line 1" in single_errors[str(bad_file)]
+
+    good_file = app.path / "myapp" / "hooks.py"
+    assert SyntaxCheck._syntax_errors(app, [str(good_file)]) == {}
+
+
+def test_syntax_check_raises_on_process_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies AppValidationError is raised if the python runner subprocess exits non-zero."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, returncode=1, stderr="fatal error"),
+    )
+    with pytest.raises(AppValidationError, match=r"Syntax validator failed under .* fatal error"):
+        SyntaxCheck().run(app)
+
+
+def test_syntax_check_raises_on_malformed_json_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies AppValidationError is raised if the subprocess returns malformed JSON."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, returncode=0, stdout="not valid json"),
+    )
+    with pytest.raises(AppValidationError, match=r"returned malformed output"):
+        SyntaxCheck().run(app)
+
+
+def test_syntax_check_raises_on_subprocess_exception(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifies AppValidationError wraps OSError / subprocess exceptions."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n',
+        {"myapp/hooks.py": "app_name = 'myapp'\n"},
+    )
+
+    def _raise_err(*args, **kwargs):
+        raise FileNotFoundError("python binary not found")
+
+    monkeypatch.setattr(subprocess, "run", _raise_err)
+    with pytest.raises(AppValidationError, match=r"Failed to execute syntax validator"):
+        SyntaxCheck().run(app)

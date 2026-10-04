@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TypedDict
 
-from flask import current_app, jsonify, request
+from flask import jsonify, request
 
 from admin.backend.api.responses import error_response
 from admin.backend.api.v1.sites import sites_bp
@@ -10,21 +10,17 @@ from admin.backend.api.v1.sites.shared import site_name
 from admin.backend.middleware import require_scope
 from pilot.integrations.central import CentralClient, CentralClientError
 
+
+class CentralAccountLink(TypedDict):
+    url: str
+
+
 _ALLOWED_PREFIXES = ("central.billing.api.billing_api.",)
 _ALLOWED_EXACT = frozenset({"central.api.pilot.heartbeat"})
 
 
 def _is_allowed(method_path: str) -> bool:
     return method_path in _ALLOWED_EXACT or any(method_path.startswith(p) for p in _ALLOWED_PREFIXES)
-
-
-def _central() -> CentralClient:
-    from pilot.config.bench import BenchConfig
-    from pilot.core.bench import Bench
-
-    bench_root = Path(current_app.config["BENCH_ROOT"])
-    bench = Bench(BenchConfig.read(bench_root), bench_root)
-    return CentralClient(bench)
 
 
 @sites_bp.get("/<name>/central/<path:method_path>")
@@ -37,7 +33,7 @@ def central_proxy(name: str, method_path: str):
         )
     data = request.get_json(silent=True) if request.method == "POST" else None
     try:
-        return jsonify(_central().forward(method_path, request.method, data))
+        return jsonify(CentralClient().forward(method_path, request.method, data))
     except CentralClientError as exc:
         # Central rejecting the input is not an outage; relaying a 502 would read
         # as though Central is down.
@@ -49,8 +45,10 @@ def central_proxy(name: str, method_path: str):
 @sites_bp.get("/<name>/account-url")
 @require_scope(site_name)
 def account_url(name: str):
-    """The configured Central base URL, safe for the site's browser to open."""
-    endpoint = _central().bench.config.central.endpoint.rstrip("/")
-    if not endpoint:
+    """This host's Central base URL, safe for the site's browser to open."""
+    from pilot.integrations.central import InstanceMetadata
+
+    credentials = InstanceMetadata().get_credentials()
+    if credentials is None:
         return error_response("central_not_configured", "Central is not configured.", 503)
-    return jsonify({"url": endpoint})
+    return jsonify({"url": credentials["central_endpoint"].rstrip("/")})

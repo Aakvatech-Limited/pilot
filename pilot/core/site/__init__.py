@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING
 
 from pilot.config import SiteConfig
 from pilot.utils import run_command
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pilot.core.site.backups import SiteBackups
     from pilot.core.site.domains import SiteDomains
     from pilot.core.site.migration_backup import SiteMigrationBackup
+    from pilot.core.site.restore import BackupRun
 
 
 class Site:
@@ -64,9 +65,7 @@ class Site:
 
     def set_maintenance_mode(self, enabled: bool) -> None:
         value = 1 if enabled else 0
-        self.set_maintenance_settings(
-            {"maintenance_mode": value, "pause_scheduler": value}
-        )
+        self.set_maintenance_settings({"maintenance_mode": value, "pause_scheduler": value})
 
     def set_maintenance_settings(self, settings: dict[str, int]) -> None:
         import json
@@ -82,8 +81,7 @@ class Site:
 
     @contextmanager
     def under_maintenance(self) -> Iterator[None]:
-        """Hold the site in maintenance mode for a schema change, restoring the
-        settings it had before - a site already down stays down afterwards."""
+        """Temporarily enable maintenance mode and restore the prior state."""
         original = self.maintenance_settings
         self.set_maintenance_mode(True)
         try:
@@ -106,6 +104,24 @@ class Site:
         from pilot.core.site.commands import SiteCommands
 
         SiteCommands(self).restore(db_file, public_files, private_files)
+
+    def restore_backup(
+        self,
+        run: BackupRun,
+        parts: list[str],
+        on_progress: Callable[[str], None] = print,
+        open_dump: Callable[[], IO[bytes]] | None = None,
+    ) -> None:
+        """Restore `parts` of a backup run in maintenance mode, then migrate."""
+        from pilot.core.site.restore import SiteRestore
+
+        SiteRestore(self).restore(run, parts, on_progress, open_dump)
+
+    def set_config_values(self, values: dict) -> None:
+        """Write keys into site_config.json under its lock."""
+        from pilot.core.site.config import set_site_config_values
+
+        set_site_config_values(self.bench.sites_path, self.config.name, values)
 
     def reinstall(self, admin_password: str) -> None:
         from pilot.core.site.commands import SiteCommands
@@ -179,6 +195,11 @@ class Site:
 
         SiteCommands(self).clear_cache()
 
+    def build_assets(self) -> None:
+        """Rebuild the assets of the apps this site runs. Assets are shared by every
+        site on the bench that has those apps."""
+        self.bench.rebuild_assets(apps=self.active_apps(), force=True)
+
     def uninstall_apps(
         self,
         app_names: list[str],
@@ -208,10 +229,15 @@ class Site:
         on_progress(f"\nSite '{self.config.name}' dropped.")
         NginxManager(self.bench).reload_for_site_change()
 
-    def rename_to(self, new_name: str, on_progress: Callable[[str], None] = lambda message: None) -> None:
+    def rename_to(
+        self,
+        new_name: str,
+        on_progress: Callable[[str], None] = lambda message: None,
+        keep_old_hostname: bool = True,
+    ) -> None:
         from pilot.core.site.rename import SiteRename
 
-        SiteRename(self, new_name).run(on_progress)
+        SiteRename(self, new_name, keep_old_hostname).run(on_progress)
 
     def _provider_domains(self) -> list[str]:
         """Capture provider-owned domains before the site config is removed."""
@@ -247,6 +273,11 @@ class Site:
 
     def set_ssl(self, enabled: bool) -> None:
         set_site_ssl_flag(self.bench.sites_path, self.config.name, enabled)
+
+    def clear_certificate_pin(self) -> None:
+        from pilot.core.site.config import clear_certificate_pin
+
+        clear_certificate_pin(self.bench.sites_path, self.config.name)
 
     def public_config(self) -> dict:
         from pilot.core.site.config import read_public_config

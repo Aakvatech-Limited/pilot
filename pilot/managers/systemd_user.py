@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from pilot.utils import run_command
@@ -12,8 +13,36 @@ def systemctl(*args: str) -> list[str]:
 
 def systemctl_env() -> dict:
     env = dict(os.environ)
-    env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    runtime_dir = env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    # Without the bus address systemd-run starts an uncapped scope and reports success.
+    env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={runtime_dir}/bus")
     return env
+
+
+def can_cap_memory() -> bool:
+    """Can we cap memory usage."""
+    controllers = Path(f"/sys/fs/cgroup/user.slice/user-{os.getuid()}.slice/cgroup.controllers")
+    try:
+        return bool(shutil.which("systemd-run")) and "memory" in controllers.read_text().split()
+    except OSError:
+        return False
+
+
+def memory_capped(argv: list[str], memory_max_mb: int) -> list[str]:
+    """Run argv in a transient scope the kernel kills past memory_max_mb. Only where
+    `can_cap_memory` holds."""
+    return [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "-p",
+        f"MemoryMax={memory_max_mb}M",
+        "-p",
+        "MemorySwapMax=0",
+        *argv,
+    ]
 
 
 def user_unit_dir() -> Path:

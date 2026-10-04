@@ -12,7 +12,8 @@ def open_root(page: Page, base_url: str) -> None:
     Playwright reports the navigation as interrupted. Return once the document commits instead;
     the callers' own locators wait for whichever page the redirect chain settles on.
 
-    """
+    The redirect can also beat the commit outright, which Playwright raises rather than
+    reports; that is the navigation succeeding, so only that error is swallowed."""
     try:
         page.goto(f"{base_url}/", wait_until="commit")
     except PlaywrightError as error:
@@ -52,7 +53,7 @@ def drop_site(page: Page, base_url: str, site_name: str) -> None:
     # Drop lives in the site's Danger section, part of the "settings" tab (there
     # is no standalone "actions" tab anymore).
     _open_site_tab(page, base_url, site_name, "settings")
-    page.get_by_role("button", name="Drop site").click()
+    page.get_by_role("button", name="Drop", exact=True).click()
 
     dialog = page.get_by_role("dialog")
     dialog.get_by_label(f"Type {site_name} to confirm").fill(site_name)

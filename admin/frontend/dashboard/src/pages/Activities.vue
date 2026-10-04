@@ -1,20 +1,24 @@
 <script setup lang="ts">
+import { Button, Combobox, Dialog, Dropdown, ErrorMessage, Tooltip } from 'frappe-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import { type RouteLocationRaw, useRoute, useRouter } from 'vue-router'
-import { Button, Combobox, Dialog, Dropdown, ErrorMessage, Tooltip } from 'frappe-ui'
 
 import ListSkeleton from '@/components/common/ListSkeleton.vue'
 import Table from '@/components/common/Table.vue'
 
 import { useActivities } from '@/composables/activities/useActivities'
 import { useSites } from '@/composables/sites/useSites'
-import { relativeTime } from '@/utils/time'
-import { commandLabel, fmtDateTime } from '@/utils/taskFormat'
 import type { AuditEntry } from '@/types/audit'
+import { commandLabel, fmtDateTime } from '@/utils/taskFormat'
+import { relativeTime } from '@/utils/time'
 
-const props = defineProps<{ siteName?: string }>()
+interface Props {
+  siteName?: string
+}
 
-const typeMetaMap: any = {
+const props = defineProps<Props>()
+
+const typeMetaMap: Record<string, { icon: string; bg: string }> = {
   backup: { icon: 'lucide-database', bg: 'bg-surface-blue-2 text-ink-blue-7' },
   app: { icon: 'lucide-package', bg: 'bg-surface-purple-2 text-ink-purple-7' },
   ssh_key: { icon: 'lucide-key', bg: 'bg-surface-gray-2 text-ink-gray-7' },
@@ -78,7 +82,7 @@ const activityLabel = (entry: AuditEntry) => {
         ? `Connected ${entry.provider} account${entry.username ? ` (${entry.username})` : ''}`
         : 'Git account disconnected'
     case 'task':
-      return `Queued ${commandLabel(entry.command)}`
+      return `Queued ${commandLabel(entry.command || 'task')}`
     case 'bypass_patch':
       return `Bypassed patch${site}`
     default:
@@ -131,7 +135,7 @@ const openDetail = (entry: AuditEntry) => {
 // complete key/value dump of the raw audit record - no per-type formatting to maintain.
 const detailEntries = computed(() => {
   if (!viewingDetail.value) return []
-  const { args, ...rest } = viewingDetail.value as AuditEntry & { args?: Record<string, unknown> }
+  const { args, ...rest } = viewingDetail.value
   return Object.entries({ ...rest, ...args })
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .map(([key, value]) => ({
@@ -152,11 +156,11 @@ const siteOptions = computed(() => [
 
 const activityTable = computed(() => ({
   columns: [
-    { key: 'activity', label: 'Activity', class: 'flex items-center gap-3' },
+    { key: 'activity', label: 'Activity', cellClass: 'flex items-center gap-3' },
     ...(props.siteName ? [] : [{ key: 'resource', label: 'Resource' }]),
     { key: 'actor', label: 'Triggered by' },
-    { key: 'time', label: 'Date/time', class: 'text-right whitespace-nowrap' },
-    { key: 'actions', label: '', class: 'text-right' },
+    { key: 'time', label: 'Date/time', class: 'whitespace-nowrap' },
+    { key: 'actions', label: '' },
   ],
 
   rows: activities.value
@@ -200,18 +204,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    class="flex flex-col"
-    :class="siteName ? '' : 'p-3 md:p-4 mx-auto max-w-4xl h-[calc(100vh-3rem)]'"
-  >
-    <div v-if="!siteName">
-      <h1 class="font-semibold text-xl">Activity</h1>
-      <p class="mt-1 text-ink-gray-5 text-p-base">
-        A trail of actions taken on this bench - logins, backups, app changes and more.
-      </p>
-    </div>
-
-    <div class="flex flex-wrap items-center gap-3 shrink-0" :class="siteName ? '' : 'mt-4'">
+  <div class="flex flex-col" :class="siteName ? '' : 'p-3 md:p-4 h-[calc(100vh-3rem)]'">
+    <div class="flex flex-wrap items-center gap-3 shrink-0">
       <Combobox
         v-model="typeFilter"
         class="w-48"
@@ -235,7 +229,7 @@ onMounted(() => {
     <ErrorMessage :message="'error'" v-else-if="error" class="mt-4" />
 
     <div v-else-if="activities.length" class="flex flex-col flex-1 mt-4 min-h-0 overflow-hidden">
-      <Table v-bind="activityTable">
+      <Table v-bind="activityTable" height="flex-1">
         <template #activity="{ row }">
           <span
             class="place-items-center grid rounded-full size-6 shrink-0"

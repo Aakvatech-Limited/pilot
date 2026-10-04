@@ -4,9 +4,11 @@ import { Dialog, ErrorMessage, LoadingText } from 'frappe-ui'
 
 import Table from '@/components/common/Table.vue'
 
-import { apiErrorMessage } from '@/api/client'
+import { apiErrorMessage, hasApiError } from '@/api/client'
 import { databaseApi } from '@/api/database'
 import { formatBytes } from '@/utils/format'
+import type { TableSize } from '@/types/database'
+import { errorMessage } from '@/utils/error'
 
 interface Props {
   site?: string
@@ -20,13 +22,13 @@ const open = defineModel('open', { type: Boolean, default: false })
 
 const columns = [
   { label: 'Table', key: 'name', class: 'w-[44%]' },
-  { label: 'Data', key: 'data', class: 'w-[14%] text-right' },
-  { label: 'Index', key: 'index', class: 'w-[14%] text-right' },
-  { label: 'Claimable', key: 'claimable', class: 'w-[14%] text-right' },
-  { label: 'Total', key: 'total', class: 'w-[14%] text-right' },
+  { label: 'Data', key: 'data', class: 'w-[14%]' },
+  { label: 'Index', key: 'index', class: 'w-[14%]' },
+  { label: 'Claimable', key: 'claimable', class: 'w-[14%]' },
+  { label: 'Total', key: 'total', class: 'w-[14%]' },
 ]
 
-const tables = ref([])
+const tables = ref<TableSize[]>([])
 const loading = ref(false)
 const error = ref('')
 
@@ -50,10 +52,10 @@ const load = async () => {
   tables.value = []
   try {
     const result = await databaseApi.tableSizes(props.site)
-    if (result?.error) throw new Error(apiErrorMessage(result, 'Could not read table sizes.'))
+    if (hasApiError(result)) throw new Error(apiErrorMessage(result, 'Could not read table sizes.'))
     tables.value = Array.isArray(result) ? result : []
-  } catch (e) {
-    error.value = e.message || 'Could not read table sizes.'
+  } catch (caught) {
+    error.value = errorMessage(caught, 'Could not read table sizes.')
   } finally {
     loading.value = false
   }

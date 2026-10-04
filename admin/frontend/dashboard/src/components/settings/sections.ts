@@ -20,6 +20,11 @@ export const GENERAL_SECTIONS = [
     description: 'Alert when host resource usage crosses a limit.',
   },
   {
+    id: 'mail',
+    label: 'Mail settings',
+    description: 'Send alerts to a mailbox alongside Central and webhooks.',
+  },
+  {
     id: 'workers',
     label: 'Background workers',
     description: 'Configure background worker groups and queues.',

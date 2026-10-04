@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from pilot.core.bench.admin_domain import ProductionAdminDomain
+from pilot.core.bench.telemetry import apply_credential as apply_telemetry_credential
 from pilot.exceptions import BenchError
-from pilot.utils import write_private_text
 
 if TYPE_CHECKING:
     from pilot.core.bench import Bench
@@ -60,6 +59,9 @@ class ProductionSetup:
 
             self._build_admin_for_production()
 
+            # Both shippers present the same credential, so it is fetched once here
+            # rather than by whichever of them happens to run first.
+            apply_telemetry_credential(self.bench, on_progress=on_progress)
             self._setup_monitoring()
             self._setup_log_shipping()
             self._persist_production_state()
@@ -141,7 +143,7 @@ class ProductionSetup:
 
             SystemdProcessManager(self.bench).remove_units()
 
-    def _setup_monitoring(self):
+    def _setup_monitoring(self) -> None:
         from pilot.core.server.monitoring_config import MonitorConfigurator
         from pilot.core.site.storage.systemd import SiteStorageConfigurator
         from pilot.core.site.uptime_monitoring_config import UptimeMonitorConfigurator
@@ -157,16 +159,16 @@ class ProductionSetup:
         SiteStorageConfigurator().install()
 
     def _setup_log_shipping(self) -> None:
-        """Install Fluent Bit as a systemd service, if a logs endpoint is configured."""
+        """Install Fluent Bit as a systemd service, if this bench has a Datum credential."""
         from pilot.managers.fluentbit import LogsConfigurator
 
-        log_config = self.bench.config.logs
-        if not log_config.is_enabled:
+        telemetry = self.bench.config.telemetry
+        if not telemetry.is_shipping_logs:
             return
 
         configurator = LogsConfigurator(self.bench)
         configurator.setup()
-        configurator.install(log_config)
+        configurator.install(telemetry)
 
     def _persist_production_state(self) -> None:
         """Write the production state to bench.toml LAST, so the switcher never
@@ -233,13 +235,11 @@ class ProductionSetup:
             data.get("production", {}).pop("nginx", None)
 
     def _write_dns_multitenancy(self) -> None:
+        from pilot.config.common_site_config import update_common_site_config
+
         self.bench.sites_path.mkdir(parents=True, exist_ok=True)
-        common_config_path = self.bench.sites_path / "common_site_config.json"
-        existing_data: dict = {}
-        if common_config_path.exists():
-            existing_data = json.loads(common_config_path.read_text())
-        existing_data["dns_multitenant"] = 1
-        write_private_text(common_config_path, json.dumps(existing_data, indent=2))
+        with update_common_site_config(self.bench.sites_path) as config:
+            config["dns_multitenant"] = 1
 
     def _setup_supervisor(self) -> None:
         import subprocess
@@ -275,6 +275,7 @@ class ProductionSetup:
     def _setup_letsencrypt_if_needed(self) -> None:
         from pilot.managers.letsencrypt import is_letsencrypt_required
 
+        self._enable_public_site_tls()
         if not is_letsencrypt_required(self.bench):
             return
         try:
@@ -287,6 +288,16 @@ class ProductionSetup:
                 f"yet ({exc}). Continuing on HTTP - retry once its DNS resolves.",
                 file=sys.stderr,
             )
+
+    def _enable_public_site_tls(self) -> None:
+        if not self.bench.config.admin.tls:
+            return
+
+        from pilot.managers.letsencrypt import public_domains
+
+        for site in self.bench.sites():
+            if not site.config.ssl and public_domains(site.config):
+                site.set_ssl(True)
 
     def _build_admin_for_production(self) -> None:
         from admin.backend.frontend import ensure_admin_frontend

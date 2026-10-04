@@ -32,6 +32,15 @@ class NewAppOptions:
     branch: str = ""
     github_workflow: bool = False
 
+    def __post_init__(self) -> None:
+        missing = [
+            name
+            for name in ("description", "publisher", "email")
+            if not getattr(self, name).strip()
+        ]
+        if missing:
+            raise BenchError(f"App {', '.join(missing)} cannot be blank.")
+
     def as_answers(self) -> str:
         answers = [
             self.title,
@@ -217,6 +226,15 @@ class App:
         """Check out a specific commit SHA, refetching it from origin if needed."""
         self._repository.checkout_pinned_commit(sha)
 
+    def return_to(self, branch: str, sha: str) -> None:
+        """Go back to `sha` with `branch` tracked again, as before a branch switch. A commit
+        hash or empty `branch` leaves the checkout detached, as it was."""
+        if branch and not self.is_commit_hash(branch):
+            self.switch_branch(branch)
+        else:
+            self.config.branch = branch
+        self.checkout_commit(sha)
+
     def _pyproject(self) -> dict:
         """Parsed pyproject.toml, or an empty dict when it is missing or malformed."""
         import tomllib
@@ -235,8 +253,10 @@ class App:
     def editable_target(self) -> str:
         """Target for `uv pip install -e`. A dev bench also pulls the app's dev extra,
         which is where frappe keeps watchdog, the reloader `--dev` refuses to start
-        without."""
-        if self.bench.config.production.enabled or not self.has_dev_extra:
+        without. `bench.install_dev_extra = false` opts out on a bench that will never
+        run the reloader."""
+        config = self.bench.config
+        if config.production.enabled or not config.install_dev_extra or not self.has_dev_extra:
             return str(self.path)
         return f"{self.path}[dev]"
 

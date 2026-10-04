@@ -12,21 +12,22 @@ from typing import Any, ClassVar
 from pilot.config.admin import AdminConfig
 from pilot.config.alert_limit import ResourceLimitConfig
 from pilot.config.app import AppConfig
+from pilot.config.build import BuildConfig
 from pilot.config.central import CentralConfig
 from pilot.config.common import CommonConfig
-from pilot.config.datum import DatumConfig
 from pilot.config.firewall import FirewallConfig, FirewallRule
 from pilot.config.gunicorn import GunicornConfig
 from pilot.config.letsencrypt import LetsEncryptConfig
 from pilot.config.lite_mode import LiteModeConfig
 from pilot.config.llm import LLMConfig
-from pilot.config.logs import LogsConfig
 from pilot.config.mariadb import MariaDBConfig
 from pilot.config.nginx import NginxConfig
 from pilot.config.postgres import PostgresConfig
 from pilot.config.production import ProductionConfig
+from pilot.config.proxy import ProxyConfig
 from pilot.config.redis import RedisConfig
 from pilot.config.s3 import S3Config
+from pilot.config.telemetry import TelemetryConfig
 from pilot.config.waf import WafCondition, WafConfig, WafRule
 from pilot.config.worker import WorkerConfig, WorkerGroup
 from pilot.exceptions import ConfigError
@@ -38,6 +39,9 @@ from pilot.internal.atomic_file import (
 from pilot.internal.toml import ConfigDict, Toml
 
 _BENCH_NAME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+# Every host-wide user unit is named "pilot-<what>.service". A bench owns
+# "<name>-*", so a bench named pilot could not be told apart from them.
+_RESERVED_BENCH_NAMES = frozenset({"pilot"})
 _PORT_MIN = 1
 _PORT_MAX = 65535
 
@@ -98,8 +102,7 @@ _PORT_FIELDS = ("http_port", "socketio_port", "redis.cache_port", "redis.queue_p
 
 @dataclass
 class BenchConfig:
-    """A bench's full configuration: fields, validation, TOML persistence,
-    and the setup wizard's flat-key view, all in one place."""
+    """A bench's configuration, validation, persistence, and wizard view."""
 
     FILENAME: ClassVar[str] = "bench.toml"
 
@@ -121,29 +124,33 @@ class BenchConfig:
     default_branch: str = ""
     # Gates whether developer mode can be toggled per site; sets nothing itself.
     allow_developer_mode: bool = False
+    # Whether `uv pip install -e` pulls an app's `dev` extra, such as frappe's watchdog.
+    install_dev_extra: bool = True
     production: ProductionConfig = field(default_factory=ProductionConfig)
     lite_mode: LiteModeConfig = field(default_factory=LiteModeConfig)
     nginx: NginxConfig = field(default_factory=NginxConfig)
     gunicorn: GunicornConfig = field(default_factory=GunicornConfig)
+    build: BuildConfig = field(default_factory=BuildConfig)
     letsencrypt: LetsEncryptConfig = field(default_factory=LetsEncryptConfig)
     admin: AdminConfig = field(default_factory=AdminConfig)
     central: CentralConfig = field(default_factory=CentralConfig)
-    datum: DatumConfig = field(default_factory=DatumConfig)
-    logs: LogsConfig = field(default_factory=LogsConfig)
+    proxy: ProxyConfig = field(default_factory=ProxyConfig)
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     firewall: FirewallConfig = field(default_factory=FirewallConfig)
     waf: WafConfig = field(default_factory=WafConfig)
     s3: S3Config = field(default_factory=S3Config)
     llm: LLMConfig = field(default_factory=LLMConfig)
     resource_limits: ResourceLimitConfig = field(default_factory=ResourceLimitConfig)
+    # What common_config.toml held when this was read, so a write can tell which
+    # shared settings this view changed. Not a setting itself: kept out of
+    # equality so it never makes a write look necessary, and out of repr.
+    _common_baseline: CommonConfig | None = field(default=None, compare=False, repr=False)
 
     # -- construction --
 
     @classmethod
     def from_file(cls, path: Path) -> "BenchConfig":
-        """Read a bench.toml at an arbitrary path. Host-shared fields only
-        merge in correctly when `path` sits at the real `<benches_root>/
-        <bench>/bench.toml` depth (see `_benches_root`) - a standalone file
-        elsewhere merges with an empty CommonConfig instead."""
+        """Read and validate bench.toml from an arbitrary path."""
         with path.open("rb") as fh:
             data = tomllib.load(fh)
         config = cls._from_dict(data, common=cls._read_common(path))
@@ -152,9 +159,7 @@ class BenchConfig:
 
     @classmethod
     def default(cls, name: str = "", benches_root: Path | None = None) -> "BenchConfig":
-        """A fresh config seeded with the setup wizard's baseline values. With
-        no benches_root (nothing created on this host yet), suggests a
-        starter MariaDB password instead of leaving it blank."""
+        """Build a fresh config from the setup wizard's baseline values."""
         common = CommonConfig.read(benches_root) if benches_root else _DEFAULT_COMMON_CONFIG
         data = copy.deepcopy(_DEFAULT_DATA)
         data["bench"]["name"] = name
@@ -212,31 +217,33 @@ class BenchConfig:
             db_type=bench_data.get("db_type", "mariadb"),
             default_branch=bench_data.get("default_branch", ""),
             allow_developer_mode=bench_data.get("allow_developer_mode", False),
+            install_dev_extra=bench_data.get("install_dev_extra", True),
             apps=apps,
             mariadb=common.mariadb,
             postgres=common.postgres,
             letsencrypt=common.letsencrypt,
             central=common.central,
-            datum=common.datum,
-            logs=common.logs,
+            proxy=common.proxy,
+            telemetry=common.telemetry,
             resource_limits=common.resource_limits,
             **sections,
         )
         config.admin.jwks_url = common.jwks_url
         config.admin.jwks_audience = common.jwks_audience
+        # What the shared file held when this was read, so a later write can tell
+        # which shared settings this view actually changed.
+        config._common_baseline = copy.deepcopy(common)
         return config
 
     @staticmethod
     def _known_fields(dataclass_type: type, data: dict) -> dict:
-        """Drop keys a bench.toml table has that the dataclass no longer
-        declares, so a config written by an older Pilot version still loads."""
+        """Keep only fields declared by the dataclass."""
         known = {f.name for f in fields(dataclass_type)}
         return {k: v for k, v in data.items() if k in known}
 
     @classmethod
     def _report_unknown_fields(cls, data: dict, *, strict: bool) -> None:
-        """Unknown keys are ignored so older/foreign configs still load; strict
-        (opt-in, for validation) raises ConfigError naming them."""
+        """Optionally reject keys outside the known config schema."""
         if not strict:
             return
         paths = cls._unknown_config_paths(data)
@@ -257,6 +264,7 @@ class BenchConfig:
         self.workers.validate()
         self.letsencrypt.validate()
         self.gunicorn.validate()
+        self.build.validate()
         self.lite_mode.validate()
         self.production.validate(self.name)
         self.admin.validate(self.production.enabled, self.name)
@@ -282,6 +290,12 @@ class BenchConfig:
         if not _BENCH_NAME_PATTERN.match(self.name):
             raise ConfigError(
                 f"bench.name '{self.name}' is invalid. Must start with a letter and contain only letters, digits, underscores, or hyphens."
+            )
+        if self.name in _RESERVED_BENCH_NAMES:
+            raise ConfigError(
+                f"bench.name '{self.name}' is reserved: this host's own services are named "
+                f"'{self.name}-<service>', so a bench of this name could not be told apart "
+                f"from them."
             )
 
     def _validate_app_names_unique(self) -> None:
@@ -317,9 +331,9 @@ class BenchConfig:
 
         endpoints = {
             "admin.jwks_url": self.admin.jwks_url,
-            "central.endpoint": self.central.endpoint,
-            "datum.endpoint": self.datum.endpoint,
+            "telemetry.endpoint": self.telemetry.endpoint,
             "llm.api_base": self.llm.api_base,
+            "s3.endpoint_url": self.s3.endpoint_url,
         }
         for name, url in endpoints.items():
             if error := validate_external_url(url, name):
@@ -355,16 +369,14 @@ class BenchConfig:
 
     @classmethod
     def _benches_root(cls, bench_root: Path) -> Path:
-        """The directory holding every bench folder as siblings, one level
-        above whichever bench directory (or bench.toml path) was given."""
+        """Return the parent directory containing sibling benches."""
         path = Path(bench_root)
         bench_dir = path if path.is_dir() else path.parent
         return bench_dir.parent
 
     @classmethod
     def _read_common(cls, bench_root: Path | None) -> CommonConfig | None:
-        """The host-shared config this bench merges with, or None if bench_root
-        is unknown (only _validate_serialized calls it without one)."""
+        """Read host-shared config, or return None without a bench root."""
         return CommonConfig.read(cls._benches_root(bench_root)) if bench_root else None
 
     @classmethod
@@ -400,9 +412,7 @@ class BenchConfig:
     @classmethod
     @contextmanager
     def open(cls, bench_root: Path, mode: str = "rw") -> Iterator:
-        """Lock bench.toml for one read-modify-write transaction, writing
-        back on exit if changed. mode="rw" yields a typed BenchConfig;
-        mode="raw" yields the parsed TOML as a plain dict."""
+        """Lock bench.toml for one read-modify-write transaction."""
         if mode not in ("rw", "raw"):
             raise ValueError(f"Unsupported mode: {mode!r}. Use 'rw' or 'raw'.")
         path = cls.toml_path(bench_root)
@@ -452,25 +462,26 @@ class BenchConfig:
         atomic_write_private_text(cls.toml_path(bench_root), content)
 
     def _write_common(self, bench_root: Path) -> None:
-        """Persist this config's shared subset (mariadb/postgres/letsencrypt/
-        central/datum/resource_limits/jwks) to common_config.toml, the single
-        source every bench merges.
-        A no-op when nothing shared changed, so an unrelated bench.toml write
-        never disturbs the file other benches are reading."""
+        """Persist shared settings to common_config.toml.
+
+        Every shared field has to be listed here: one left out is written back as
+        its default, so an unrelated write silently drops it.
+        """
         common = CommonConfig(
             mariadb=self.mariadb,
             postgres=self.postgres,
             letsencrypt=self.letsencrypt,
             central=self.central,
-            datum=self.datum,
-            logs=self.logs,
+            proxy=self.proxy,
+            telemetry=self.telemetry,
             resource_limits=self.resource_limits,
             jwks_url=self.admin.jwks_url,
             jwks_audience=self.admin.jwks_audience,
         )
-        benches_root = self._benches_root(bench_root)
-        if common != CommonConfig.read(benches_root):
-            common.write(benches_root)
+        # This view of the shared file was read without holding its lock, so only
+        # the settings it actually changed are applied - writing all of them back
+        # would undo whatever another bench committed in the meantime.
+        CommonConfig.apply_changes(self._benches_root(bench_root), self._common_baseline, common)
 
     @classmethod
     def _validate_serialized(cls, content: str, bench_root: Path | None = None) -> None:
@@ -508,6 +519,7 @@ class BenchConfig:
             "watch_admin_js": self.watch_admin_js,
             "db_type": self.db_type,
             "allow_developer_mode": self.allow_developer_mode,
+            "install_dev_extra": self.install_dev_extra,
         }
         if self.default_branch:
             bench["default_branch"] = self.default_branch
@@ -560,6 +572,9 @@ class BenchConfig:
             "max_requests_jitter": self.gunicorn.max_requests_jitter,
         }
 
+    def _build_section(self) -> ConfigDict:
+        return {"memory_limit_mb": self.build.memory_limit_mb}
+
     def _admin_section(self) -> ConfigDict:
         admin: ConfigDict = {
             "port": self.admin.port,
@@ -570,6 +585,8 @@ class BenchConfig:
             "tls": self.admin.tls,
             "allow_bench_management": self.admin.allow_bench_management,
         }
+        if self.admin.route:
+            admin["route"] = self.admin.route.to_dict()
         # jwks_url/jwks_audience are host-shared (common_config.toml), not written here.
         optional_admin = {
             "jwt_secret": self.admin.jwt_secret,
@@ -630,6 +647,7 @@ class BenchConfig:
             "bucket": self.s3.bucket,
             "provider": self.s3.provider,
             "region": self.s3.region,
+            "endpoint_url": self.s3.endpoint_url,
         }
 
     def _llm_section(self) -> ConfigDict:
@@ -701,8 +719,7 @@ class BenchConfig:
 
     @staticmethod
     def _unknown_config_paths(data: Mapping) -> list[str]:
-        """Dotted paths of every bench.toml key the schema does not declare, e.g.
-        ``mariadb.typo`` or an unknown top-level table ``whatever``."""
+        """Return dotted paths for keys outside the declared schema."""
         return _scan(data, _SCHEMA_ROOT, "")
 
     @staticmethod
@@ -713,15 +730,7 @@ class BenchConfig:
 
 @dataclass(frozen=True)
 class _Section:
-    """One nested bench.toml table, wired for both reading and writing.
-
-    To add a new nested section: add the field to BenchConfig (with a
-    dataclass, plus a ``from_dict`` classmethod if it needs custom parsing),
-    write its ``_xxx_section()`` method, and add one entry here. attr is both
-    the BenchConfig field name and the TOML table name. write returns None to
-    omit the section from output entirely (for config that's only written
-    when actually used, like s3 or waf).
-    """
+    """Describe one nested bench.toml table and its read/write handlers."""
 
     attr: str
     read: Callable[[dict], Any]
@@ -755,6 +764,11 @@ _SECTIONS: tuple[_Section, ...] = (
         lambda config: config._gunicorn_section(),
     ),
     _Section(
+        "build",
+        lambda data: BuildConfig.from_dict(data.get("build", {})),
+        lambda config: config._build_section() if config.build.memory_limit_mb else None,
+    ),
+    _Section(
         "admin",
         lambda data: AdminConfig.from_dict(data.get("admin", {})),
         lambda config: config._admin_section(),
@@ -782,6 +796,7 @@ _SECTIONS: tuple[_Section, ...] = (
                 or config.s3.bucket
                 or config.s3.provider
                 or config.s3.region
+                or config.s3.endpoint_url
             )
             else None
         ),
@@ -834,8 +849,7 @@ def _workers_to_groups(value) -> list[WorkerGroup]:
 
 @dataclass
 class _Table:
-    """Declared shape of one bench.toml table: its accepted leaf keys plus any
-    nested tables and arrays-of-tables. Drives unknown-field detection."""
+    """Describe a table's keys and nested tables for schema validation."""
 
     keys: set[str] = field(default_factory=set)
     tables: dict[str, "_Table"] = field(default_factory=dict)
@@ -860,6 +874,7 @@ _BENCH_KEYS = {
     "db_type",
     "default_branch",
     "allow_developer_mode",
+    "install_dev_extra",
 }
 # Keys older Pilot versions wrote that the parser still tolerates.
 _PRODUCTION_LEGACY = {"lightweight", "nginx", "use_companion_manager"}
@@ -875,6 +890,7 @@ def _bench_schema() -> _Table:
             "production": _Table(keys=_keys(ProductionConfig) | _PRODUCTION_LEGACY),
             "lite_mode": _Table(keys=_keys(LiteModeConfig)),
             "gunicorn": _Table(keys=_keys(GunicornConfig) | _GUNICORN_LEGACY),
+            "build": _Table(keys=_keys(BuildConfig)),
             "admin": _Table(keys=_keys(AdminConfig)),
             "s3": _Table(keys=_keys(S3Config)),
             "llm": _Table(keys=_keys(LLMConfig)),

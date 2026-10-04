@@ -2,6 +2,7 @@ from flask import Blueprint
 
 sites_bp = Blueprint("sites", __name__)
 
+
 from admin.backend.api.v1.sites import (  # noqa: E402
     apps,
     backups,
@@ -10,6 +11,7 @@ from admin.backend.api.v1.sites import (  # noqa: E402
     core,
     domains,
     monitoring,
+    restore,
     storage,
     uptime,
 )
@@ -22,6 +24,7 @@ __all__ = [
     "core",
     "domains",
     "monitoring",
+    "restore",
     "sites_bp",
     "storage",
     "uptime",

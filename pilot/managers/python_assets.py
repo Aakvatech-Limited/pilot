@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pilot.utils import extract_tar_archive, get_yarn_bin, git_has_local_changes, run_command
+from pilot.exceptions import BenchError, CommandError
+from pilot.managers.systemd_user import can_cap_memory, memory_capped, systemctl_env
+from pilot.utils import get_yarn_bin, git_has_local_changes, run_command
 
 if TYPE_CHECKING:
     from pilot.core.app import App
@@ -23,11 +25,42 @@ class PythonAssetBuilder:
         self.manager = manager
         self.bench = manager.bench
 
+    def run_compiler(self, argv: list[str], **kwargs) -> None:
+        """Run a compiler capped at a share of host memory, so a runaway build
+        fails instead of exhausting the machine. Uncapped where the host cannot cap."""
+        from pilot.core.build_memory import build_memory_limit_mb, can_read_memory
+
+        limit_mb = build_memory_limit_mb(self.bench.config.build.memory_limit_mb) if can_read_memory() else 0
+        capped = bool(limit_mb) and can_cap_memory()
+        if capped:
+            argv = memory_capped(argv, limit_mb)
+        else:
+            logging.warning("Memory control unavailable here, so this build runs uncapped.")
+
+        env = {**systemctl_env(), **(kwargs.get("env") or {})}
+        node_options = env.get("NODE_OPTIONS", "")
+        # V8 stops near 2GB whatever the cap; leave a quarter of the cap for native memory.
+        if limit_mb and "--max-old-space-size" not in node_options:
+            env["NODE_OPTIONS"] = f"{node_options} --max-old-space-size={limit_mb * 3 // 4}".strip()
+        kwargs["env"] = env
+        try:
+            run_command(argv, **kwargs)
+        except CommandError as error:
+            # The kernel kills the scope, so the runner only sees a signal.
+            if capped and error.returncode < 0:
+                raise BenchError(
+                    f"Build ran out of memory: it may use {limit_mb}MB on this machine."
+                ) from error
+            raise CommandError(
+                error.message.replace(repr("systemd-run"), repr(argv[0]), 1),
+                returncode=error.returncode,
+            ) from error
+
     def build_assets(self) -> None:
         for app in self.bench.apps():
             if (app.path / "package.json").exists():
                 self.ensure_yarn_install(app.path)
-        run_command(
+        self.run_compiler(
             [*self.bench.frappe_call, "frappe", "build", "--force"],
             cwd=self.bench.sites_path,
             env=self.manager._build_env(),
@@ -39,9 +72,9 @@ class PythonAssetBuilder:
         dist_dir = app_public_dir / "dist"
 
         if not force and not git_has_local_changes(app.path):
-            if self.try_download_prebuilt_assets(app, app_public_dir, dist_dir):
-                return
-            if self.has_prebuilt_assets(dist_dir):
+            from pilot.core.app.prebuilt_assets import PrebuiltAssets
+
+            if PrebuiltAssets(app).install():
                 self.setup_prebuilt_assets(app.config.name, app_public_dir, dist_dir)
                 return
 
@@ -52,7 +85,7 @@ class PythonAssetBuilder:
 
         print(f"  Building assets for {app.config.name}...")
         sys.stdout.flush()
-        run_command(
+        self.run_compiler(
             [*self.bench.frappe_call, "frappe", "build", "--force", "--app", app.config.name],
             cwd=self.bench.sites_path,
             env=self.manager._build_env(),
@@ -63,7 +96,7 @@ class PythonAssetBuilder:
             if (app.path / frontend_dir / "package.json").exists():
                 print(f"  Building {frontend_dir} for {app.config.name}...")
                 sys.stdout.flush()
-                run_command(
+                self.run_compiler(
                     [get_yarn_bin(), "build"],
                     cwd=app.path / frontend_dir,
                     stream_output=True,
@@ -87,80 +120,20 @@ class PythonAssetBuilder:
         app_name = path.name
         print(f"  Installing JS dependencies for {app_name}...")
         sys.stdout.flush()
-        run_command(
-            [get_yarn_bin(), "install", "--frozen-lockfile"],
-            cwd=path,
-            stream_output=True,
-        )
-
-    def try_download_prebuilt_assets(
-        self,
-        app: "App",
-        app_public_dir: Path,
-        dist_dir: Path,
-    ) -> bool:
-        from pilot.internal.git import GitRepo
-
-        branch = GitRepo(app.path).branch
-        if not branch:
-            return False
-        url = self.release_asset_url(app, branch)
-        if not url:
-            return False
-        print(f"  Downloading pre-built assets for {app.config.name}...")
-        sys.stdout.flush()
-        if not self.download_and_extract(url, app_public_dir):
-            return False
-        self.setup_prebuilt_assets(app.config.name, app_public_dir, dist_dir)
-        return True
-
-    @staticmethod
-    def release_asset_url(app: "App", branch: str) -> str | None:
-        import subprocess
-
-        r = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=app.path,
-        )
-        if r.returncode != 0:
-            return None
-        m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", r.stdout.strip())
-        if not m:
-            return None
-        owner_repo = m.group(1)
-        tag = f"assets-{branch.replace('/', '-')}"
-        return f"https://github.com/{owner_repo}/releases/download/{tag}/{app.config.name}-assets.tar.gz"
-
-    @staticmethod
-    def download_and_extract(url: str, dest_dir: Path) -> bool:
-        import tempfile
-        import urllib.error
-        import urllib.request
-
-        with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp_file:
-            tmp_path = Path(tmp_file.name)
         try:
-            urllib.request.urlretrieve(url, tmp_path)
-        except urllib.error.URLError:
-            tmp_path.unlink(missing_ok=True)
-            return False
-
-        try:
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            extract_tar_archive(tmp_path, dest_dir)
-            return True
-        except Exception as exc:
-            logging.debug("Failed to extract downloaded archive to %s: %s", dest_dir, exc)
-            return False
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-    @staticmethod
-    def has_prebuilt_assets(dist_dir: Path) -> bool:
-        js_dir = dist_dir / "js"
-        return js_dir.is_dir() and any(_BUNDLE_RE.match(f.name) for f in js_dir.iterdir())
+            run_command(
+                [get_yarn_bin(), "install", "--frozen-lockfile"],
+                cwd=path,
+                stream_output=True,
+            )
+        except Exception:
+            print(f"  Frozen lockfile install failed for {app_name}; retrying without modifying yarn.lock...")
+            sys.stdout.flush()
+            run_command(
+                [get_yarn_bin(), "install", "--pure-lockfile"],
+                cwd=path,
+                stream_output=True,
+            )
 
     def setup_prebuilt_assets(self, app_name: str, app_public_dir: Path, dist_dir: Path) -> None:
         assets_dir = self.bench.sites_path / "assets"
@@ -216,9 +189,13 @@ class PythonAssetBuilder:
 
     @staticmethod
     def merge_json(path: Path, new_entries: dict) -> None:
-        existing: dict = {}
-        if path.exists():
-            with contextlib.suppress(json.JSONDecodeError):
-                existing = json.loads(path.read_text())
-        existing.update(new_entries)
-        path.write_text(json.dumps(existing, indent="\t", sort_keys=True) + "\n")
+        """Merge under the lock: several apps' builds write this file at once."""
+        from pilot.internal.atomic_file import exclusive_file_lock, replace_private_text_locked
+
+        with exclusive_file_lock(path):
+            existing: dict = {}
+            if path.exists():
+                with contextlib.suppress(json.JSONDecodeError):
+                    existing = json.loads(path.read_text())
+            existing.update(new_entries)
+            replace_private_text_locked(path, json.dumps(existing, indent="\t", sort_keys=True) + "\n")

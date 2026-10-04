@@ -30,7 +30,7 @@ const menuRows = computed(() => [
     label: 'Activity',
     onClick: () => router.push({ name: 'Activity' }),
   },
-].filter(Boolean))
+].filter((row) => row !== false))
 
 const themeOptions = [
   { value: 'system', label: 'System', icon: 'lucide-monitor' },
@@ -44,7 +44,10 @@ const themeOptions = [
     <div
       class="flex flex-col divide-y divide-outline-gray-1 rounded-6 border border-outline-gray-1"
     >
-      <div class="flex items-center gap-3 px-3 py-2.5  text-ink-gray-8">
+      <div
+        v-if="session.centralEnabled"
+        class="flex items-center gap-3 px-3 py-2.5  text-ink-gray-8"
+      >
         <span class="size-4 text-ink-gray-6 lucide-cloud" />
         Central
       </div>
