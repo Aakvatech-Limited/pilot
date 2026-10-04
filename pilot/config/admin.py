@@ -38,6 +38,12 @@ class AdminConfig:
     # they are issued, never on demand.
     recovery_codes: list[str] = field(default_factory=list)
 
+    @property
+    def central_url(self) -> str:
+        """Central's base URL. Central serves its JWKS from its own API, so the URL is the part before `/api/`."""
+        base, separator, _ = self.jwks_url.partition("/api/")
+        return base if separator else ""
+
     @classmethod
     def from_dict(cls, data: dict) -> "AdminConfig":
         return cls(
