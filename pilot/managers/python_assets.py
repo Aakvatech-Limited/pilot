@@ -37,7 +37,12 @@ class PythonAssetBuilder:
         else:
             logging.warning("Memory control unavailable here, so this build runs uncapped.")
 
-        kwargs["env"] = {**systemctl_env(), **(kwargs.get("env") or {})}
+        env = {**systemctl_env(), **(kwargs.get("env") or {})}
+        node_options = env.get("NODE_OPTIONS", "")
+        # V8 stops near 2GB whatever the cap; leave a quarter of the cap for native memory.
+        if limit_mb and "--max-old-space-size" not in node_options:
+            env["NODE_OPTIONS"] = f"{node_options} --max-old-space-size={limit_mb * 3 // 4}".strip()
+        kwargs["env"] = env
         try:
             run_command(argv, **kwargs)
         except CommandError as error:
