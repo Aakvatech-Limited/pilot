@@ -53,6 +53,8 @@ const password = ref('')
 const remoteBackups = ref<RemoteBackup[] | null>(null)
 const remoteBackup = ref('')
 const fetchingBackups = ref(false)
+// The site and password last asked, so leaving a field does not repeat a failed sign-in.
+let fetchedFor = ''
 const chosen = ref<Record<string, boolean>>({})
 const uploads = ref<Record<string, File | null>>({})
 const inputs: Record<string, HTMLInputElement | null> = {}
@@ -62,17 +64,20 @@ const error = ref('')
 const sourceOptions = computed(() =>
   siteNames.value.filter((name) => name !== props.siteName).map((name) => ({ label: name, value: name })),
 )
-const remoteBackupOptions = computed(() => [
-  ...(remoteBackups.value ?? []).map((backup) => ({
+const remoteBackupOptions = computed(() =>
+  (remoteBackups.value ?? []).map((backup) => ({
     label: fmtDateTime(backup.created_at),
     value: backup.timestamp,
   })),
-  { label: 'New backup', value: '' },
-])
-const availableParts = computed(() => {
-  const backup = remoteBackups.value?.find(({ timestamp }) => timestamp === remoteBackup.value)
-  return source.value === 'remote' && backup ? backup.parts : PARTS.map(({ part }) => part)
-})
+)
+const selectedRemoteBackup = computed(() =>
+  remoteBackups.value?.find(({ timestamp }) => timestamp === remoteBackup.value),
+)
+const availableParts = computed(() =>
+  source.value === 'remote'
+    ? (selectedRemoteBackup.value?.parts ?? [])
+    : PARTS.map(({ part }) => part),
+)
 const uploadRows = computed(() => (uploads.value.database ? [...PARTS, CONFIG] : PARTS))
 const parts = computed(() =>
   PARTS.map(({ part }) => part).filter((part) =>
@@ -84,7 +89,7 @@ const parts = computed(() =>
 const isReady = computed(() => {
   if (!parts.value.length) return false
   if (source.value === 'site') return Boolean(sourceSite.value)
-  if (source.value === 'remote') return Boolean(remoteBackups.value)
+  if (source.value === 'remote') return Boolean(selectedRemoteBackup.value)
   return true
 })
 
@@ -94,6 +99,7 @@ watch(open, (isOpen) => {
   sourceSite.value = ''
   remoteSite.value = ''
   password.value = ''
+  fetchedFor = ''
   chosen.value = { database: true, public: true, private: true }
   uploads.value = {}
   error.value = ''
@@ -103,17 +109,25 @@ watch(open, (isOpen) => {
 watch([remoteSite, password], () => {
   remoteBackups.value = null
   remoteBackup.value = ''
+  error.value = ''
 })
 
 const getBackups = async () => {
+  const site = remoteSite.value.trim()
+  const key = `${site}\n${password.value}`
+  if (!site || !password.value || key === fetchedFor) return
+  fetchedFor = key
   fetchingBackups.value = true
   error.value = ''
   try {
-    const data = await sitesApi.remoteBackups(props.siteName, remoteSite.value.trim(), password.value)
-    if ('backups' in data) {
+    const data = await sitesApi.remoteBackups(props.siteName, site, password.value)
+    if (!('backups' in data))
+      error.value = apiErrorMessage(data, 'Could not get the backups of this site.')
+    else if (!data.backups.length) error.value = 'No backups found. Take a backup on that site first.'
+    else {
       remoteBackups.value = data.backups
-      remoteBackup.value = data.backups[0]?.timestamp ?? ''
-    } else error.value = apiErrorMessage(data, 'Could not get the backups of this site.')
+      remoteBackup.value = data.backups[0].timestamp
+    }
   } catch (e) {
     error.value = errorMessage(e, 'Could not get the backups of this site.')
   } finally {
@@ -223,30 +237,28 @@ const restore = async () => {
         />
 
         <div v-else class="space-y-3">
-          <TextInput v-model="remoteSite" label="Site" placeholder="erp.example.com" />
-          <TextInput v-model="password" label="Administrator password" type="password" />
-          <div class="flex items-end gap-2">
-            <Select
-              v-if="remoteBackups"
-              v-model="remoteBackup"
-              label="Backup"
-              :options="remoteBackupOptions"
-              class="flex-1"
-            />
-            <Button
-              :loading="fetchingBackups"
-              :disabled="!remoteSite.trim() || !password"
-              @click="getBackups"
-            >
-              Get backups
-            </Button>
-          </div>
-          <p v-if="remoteBackups && !remoteBackups.length" class="text-ink-gray-5 text-p-sm">
-            No backup found. Take a backup on that site, then get backups again.
-          </p>
+          <TextInput
+            v-model="remoteSite"
+            label="Site"
+            placeholder="erp.example.com"
+            @change="getBackups"
+          />
+          <TextInput
+            v-model="password"
+            label="Administrator password"
+            type="password"
+            @change="getBackups"
+          />
+          <Select
+            v-model="remoteBackup"
+            label="Backup"
+            :options="remoteBackupOptions"
+            :placeholder="fetchingBackups ? 'Loading backups…' : 'Enter the site and password'"
+            :disabled="!remoteBackupOptions.length"
+          />
         </div>
 
-        <div v-if="source !== 'remote' || remoteBackups" class="flex flex-wrap gap-1">
+        <div v-if="source !== 'remote' || selectedRemoteBackup" class="flex flex-wrap gap-1">
           <Checkbox
             v-for="item in PARTS"
             :key="item.part"
