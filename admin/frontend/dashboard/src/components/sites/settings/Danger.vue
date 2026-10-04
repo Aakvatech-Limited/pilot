@@ -1,14 +1,12 @@
 <script setup lang="ts">
+import { Button, Checkbox, TextInput } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Button, TextInput } from 'frappe-ui'
-
-import ActionDialog from '@/components/common/ActionDialog.vue'
-
 import { apiErrorMessage } from '@/api/client'
 import { sitesApi } from '@/api/sites'
-import { openTaskDetailPage } from '@/utils/taskRoute'
+import ActionDialog from '@/components/common/ActionDialog.vue'
 import { errorMessage } from '@/utils/error'
+import { openTaskDetailPage } from '@/utils/taskRoute'
 
 interface Props {
   siteName: string
@@ -56,6 +54,18 @@ const DangerActions = [
     },
   },
   {
+    key: 'rename',
+    label: 'Rename site',
+    buttonLabel: 'Rename',
+    description: "Change this site's name and hostname.",
+    action: () => {
+      newName.value = ''
+      keepOldHostname.value = true
+      renameError.value = ''
+      showRename.value = true
+    },
+  },
+  {
     key: 'reset',
     label: 'Reset site',
     description: 'Wipes the database back to a fresh install. Apps stay; all your data is removed.',
@@ -76,6 +86,28 @@ const DangerActions = [
     },
   },
 ]
+
+const showRename = ref(false)
+const renaming = ref(false)
+const renameError = ref('')
+const newName = ref('')
+const keepOldHostname = ref(true)
+
+const confirmRename = async () => {
+  renaming.value = true
+  renameError.value = ''
+  try {
+    const data = await sitesApi.rename(props.siteName, newName.value.trim(), keepOldHostname.value)
+    if (data.task_id) {
+      showRename.value = false
+      openTaskDetailPage(router, data.task_id)
+    } else renameError.value = apiErrorMessage(data, 'Failed to rename site.')
+  } catch (e) {
+    renameError.value = errorMessage(e, 'Failed to rename site.')
+  } finally {
+    renaming.value = false
+  }
+}
 
 const confirmName = ref('')
 
@@ -156,6 +188,31 @@ const confirmDrop = async () => {
     :loading="migrating"
     @confirm="confirmMigrate"
   />
+
+  <ActionDialog
+    v-model:open="showRename"
+    title="Rename Site"
+    :subject="siteSubject"
+    :warning="{ title: 'The site is offline for a moment while it is renamed.' }"
+    :error="renameError"
+    confirm-label="Rename"
+    :loading="renaming"
+    :disabled="!newName.trim() || newName.trim() === siteName"
+    @confirm="confirmRename"
+  >
+    <template #after-warning>
+      <TextInput v-model="newName" placeholder="prod.example.com" class="w-full">
+        <template #label>
+          <span class="text-sm">New name</span>
+        </template>
+      </TextInput>
+      <Checkbox
+        v-model="keepOldHostname"
+        class="mt-3"
+        :label="`Keep ${siteName} working as a domain`"
+      />
+    </template>
+  </ActionDialog>
 
   <ActionDialog
     v-model:open="showReset"

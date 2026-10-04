@@ -56,6 +56,13 @@ export const sitesApi = {
   buildAssets: (name: string): Promise<TaskPayload> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/build-assets`).json(),
 
+  rename: (name: string, newName: string, keepOldHostname: boolean): Promise<TaskPayload> =>
+    request
+      .post(`sites/${encodeURIComponent(name)}/actions/rename`, {
+        json: { new_name: newName, keep_old_hostname: keepOldHostname },
+      })
+      .json(),
+
   migrate: (name: string): Promise<MigrationStarted> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/migrate`).json(),
 
