@@ -86,12 +86,13 @@ const confirm = async () => {
     </p>
     <div>
       <Select v-model="target" label="Restore into" :options="siteOptions" />
-      <div class="flex flex-col gap-2 mt-3">
+      <div class="flex flex-wrap gap-1 mt-3">
         <Checkbox
           v-for="item in available"
           :key="item.part"
           v-model="chosen[item.part]"
           :label="item.label"
+          padded
         />
       </div>
     </div>
