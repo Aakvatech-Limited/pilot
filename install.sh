@@ -180,16 +180,25 @@ ensure_homebrew() {
 
 # Bare images ship almost nothing: the tools this script and Pilot both need
 # before first use, plus the build deps for the admin venv and frappe wheels.
+# cron runs scheduled backups; Frappe's restore runs `file` to tell a gzipped dump apart.
 bootstrap_packages() {
     case "$DISTRO" in
         macos)
             pkg_install git python3 ;;
         debian|ubuntu)
-            pkg_install git curl bash sudo ca-certificates python3 python3-dev build-essential tzdata ;;
+            pkg_install git curl bash sudo ca-certificates python3 python3-dev build-essential tzdata cron file ;;
         fedora)
-            pkg_install git curl bash sudo shadow-utils python3 python3-devel gcc gcc-c++ make tzdata ;;
+            pkg_install git curl bash sudo shadow-utils python3 python3-devel gcc gcc-c++ make tzdata cronie file ;;
         arch)
-            pkg_install git curl bash sudo python base-devel tzdata ;;
+            pkg_install git curl bash sudo python base-devel tzdata cronie file ;;
+    esac
+}
+
+# Debian's cron starts itself.
+enable_cron() {
+    case "$DISTRO" in
+        fedora) run_sudo systemctl enable --now crond 2>/dev/null || true ;;
+        arch)   run_sudo systemctl enable --now cronie 2>/dev/null || true ;;
     esac
 }
 
@@ -294,6 +303,7 @@ install_system_packages() {
     add_distro_repos
     pkg_update
     bootstrap_packages
+    enable_cron
     install_database_engines
     install_production_packages
     disable_system_services
@@ -304,7 +314,7 @@ base_tools_present() {
     if [ "$DISTRO" = "macos" ]; then
         tools="git brew python3"
     else
-        tools="git curl bash sudo python3"
+        tools="git curl bash sudo python3 crontab file"
     fi
     for tool in $tools; do
         command -v "$tool" >/dev/null 2>&1 || return 1

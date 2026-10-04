@@ -156,6 +156,7 @@ ensure_curl() { echo ensure_curl; }
 add_distro_repos() { echo add_distro_repos; }
 pkg_update() { echo pkg_update; }
 bootstrap_packages() { echo bootstrap_packages; }
+enable_cron() { echo enable_cron; }
 install_database_engines() { echo install_database_engines; }
 install_production_packages() { echo install_production_packages; }
 disable_system_services() { echo disable_system_services; }
