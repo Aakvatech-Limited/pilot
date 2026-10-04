@@ -53,8 +53,6 @@ const password = ref('')
 const remoteBackups = ref<RemoteBackup[] | null>(null)
 const remoteBackup = ref('')
 const fetchingBackups = ref(false)
-// The site and password last asked, so leaving a field does not repeat a failed sign-in.
-let fetchedFor = ''
 const chosen = ref<Record<string, boolean>>({})
 const uploads = ref<Record<string, File | null>>({})
 const inputs: Record<string, HTMLInputElement | null> = {}
@@ -99,7 +97,6 @@ watch(open, (isOpen) => {
   sourceSite.value = ''
   remoteSite.value = ''
   password.value = ''
-  fetchedFor = ''
   chosen.value = { database: true, public: true, private: true }
   uploads.value = {}
   error.value = ''
@@ -113,14 +110,10 @@ watch([remoteSite, password], () => {
 })
 
 const getBackups = async () => {
-  const site = remoteSite.value.trim()
-  const key = `${site}\n${password.value}`
-  if (!site || !password.value || key === fetchedFor) return
-  fetchedFor = key
   fetchingBackups.value = true
   error.value = ''
   try {
-    const data = await sitesApi.remoteBackups(props.siteName, site, password.value)
+    const data = await sitesApi.remoteBackups(props.siteName, remoteSite.value.trim(), password.value)
     if (!('backups' in data))
       error.value = apiErrorMessage(data, 'Could not get the backups of this site.')
     else if (!data.backups.length) error.value = 'No backups found. Take a backup on that site first.'
@@ -237,25 +230,22 @@ const restore = async () => {
         />
 
         <div v-else class="space-y-3">
-          <TextInput
-            v-model="remoteSite"
-            label="Site"
-            placeholder="erp.example.com"
-            @change="getBackups"
-          />
-          <TextInput
-            v-model="password"
-            label="Administrator password"
-            type="password"
-            @change="getBackups"
-          />
+          <TextInput v-model="remoteSite" label="Site" placeholder="erp.example.com" />
+          <TextInput v-model="password" label="Administrator password" type="password" />
           <Select
+            v-if="remoteBackups"
             v-model="remoteBackup"
             label="Backup"
             :options="remoteBackupOptions"
-            :placeholder="fetchingBackups ? 'Loading backups…' : 'Enter the site and password'"
-            :disabled="!remoteBackupOptions.length"
           />
+          <Button
+            v-else
+            :loading="fetchingBackups"
+            :disabled="!remoteSite.trim() || !password"
+            @click="getBackups"
+          >
+            Get backups
+          </Button>
         </div>
 
         <div v-if="source !== 'remote' || selectedRemoteBackup" class="flex flex-wrap gap-1">
