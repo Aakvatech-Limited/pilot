@@ -76,6 +76,10 @@ class DependencyResolutionError(RegistryError):
     """A dependency chain couldn't be resolved (cycle, version conflict, etc)."""
 
 
+class MalformedSiteConfig(ConfigError):
+    """common_site_config.json cannot be parsed, so it must not be rewritten."""
+
+
 class DatabaseError(BenchError):
     """A database server operation failed (connection, provisioning, credentials)."""
 
