@@ -50,3 +50,17 @@ class FrappeCloudBackup(TypedDict):
 class FrappeCloudBackupList(TypedDict):
     backups: list[FrappeCloudBackup]
     running_backup: str | None
+
+
+class BackupUploadStarted(TypedDict):
+    upload_id: str
+    chunk_size: int
+
+
+class BackupUploadFile(TypedDict):
+    size: int
+    received: int
+
+
+class BackupUploadStatus(TypedDict):
+    files: dict[str, BackupUploadFile]

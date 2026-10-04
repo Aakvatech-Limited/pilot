@@ -14,6 +14,7 @@ from admin.backend.api.v1.sites import (  # noqa: E402
     monitoring,
     restore,
     storage,
+    uploads,
     uptime,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "restore",
     "sites_bp",
     "storage",
+    "uploads",
     "uptime",
 ]

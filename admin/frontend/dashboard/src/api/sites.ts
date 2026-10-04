@@ -1,8 +1,10 @@
-import { apiUrl, request, unwrap } from '@/api/client'
+import { apiErrorMessage, apiUrl, request, unwrap } from '@/api/client'
 import type { DisabledApp, EnabledApp, SiteApps } from '@/types/siteApps'
 import type {
   Backup,
   BackupSchedule,
+  BackupUploadStarted,
+  BackupUploadStatus,
   FrappeCloudBackupList,
   FrappeCloudConnection,
   RemoteBackupList,
@@ -108,13 +110,53 @@ export const sitesApi = {
   },
 
   // Large archives take as long as the upload does.
-  restoreUpload: (name: string, form: FormData): Promise<TaskPayload> =>
-    request
-      .post(`sites/${encodeURIComponent(name)}/actions/restore-upload`, {
-        body: form,
-        timeout: false,
-      })
-      .json(),
+  uploads: {
+    start: (
+      name: string,
+      files: Record<string, { filename: string; size: number }>,
+    ): Promise<BackupUploadStarted> =>
+      unwrap(request.post(`sites/${encodeURIComponent(name)}/uploads`, { json: { files } }).json()),
+    status: (name: string, uploadId: string): Promise<BackupUploadStatus> =>
+      unwrap(request.get(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`).json()),
+    cancel: (name: string, uploadId: string): Promise<Record<string, never>> =>
+      unwrap(request.delete(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`).json()),
+    // XMLHttpRequest, because fetch cannot report upload progress.
+    sendChunk: (
+      name: string,
+      uploadId: string,
+      part: string,
+      offset: number,
+      chunk: Blob,
+      onProgress: (sent: number) => void,
+      signal: AbortSignal,
+    ): Promise<number> =>
+      new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open(
+          'PUT',
+          apiUrl(
+            `sites/${encodeURIComponent(name)}/uploads/${uploadId}/files/${part}?offset=${offset}`,
+          ),
+        )
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+        xhr.upload.onprogress = (event) => onProgress(event.loaded)
+        xhr.onload = () => {
+          const body = (() => {
+            try {
+              return JSON.parse(xhr.responseText)
+            } catch {
+              return {}
+            }
+          })()
+          if (xhr.status < 300) resolve(body.received)
+          else reject(new Error(apiErrorMessage(body, 'Could not upload the file.')))
+        }
+        xhr.onerror = () => reject(new Error('The upload lost its connection.'))
+        xhr.onabort = () => reject(new DOMException('The upload was cancelled.', 'AbortError'))
+        signal.addEventListener('abort', () => xhr.abort(), { once: true })
+        xhr.send(chunk)
+      }),
+  },
 
   buildAssets: (name: string): Promise<TaskPayload> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/build-assets`).json(),

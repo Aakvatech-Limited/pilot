@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+from pilot.config.waf import parse_nginx_size
 from pilot.exceptions import CommandError
 from pilot.internal.template import Template
 from pilot.managers.gunicorn import GunicornManager
@@ -40,6 +41,7 @@ _USER_DIRECTIVE = re.compile(r"^[ \t]*user[ \t]+[^;\n]+;", re.MULTILINE)
 _SHARED_ERROR_DIR = Path("/usr/share/nginx/bench-error-pages")
 
 _TEMPLATES = Path(__file__).parent / "templates"
+ADMIN_CLIENT_MAX_BODY_SIZE = "1024m"
 _BENCH_TEMPLATE = Template.from_path(_TEMPLATES / "bench.conf.template")
 _SERVER_TEMPLATE = Template.from_path(_TEMPLATES / "server.conf.template")
 _ERROR_PAGE_TEMPLATE = Template.from_path(_TEMPLATES / "error_page.html.template")
@@ -302,6 +304,10 @@ class NginxConfigRenderer:
             "http_port": nginx.http_port,
             "https_port": nginx.https_port,
             "client_max_body_size": nginx.client_max_body_size,
+            # Backup uploads come in chunks of up to 256 MB, so the admin takes at least 1 GB.
+            "admin_client_max_body_size": max(
+                nginx.client_max_body_size, ADMIN_CLIENT_MAX_BODY_SIZE, key=parse_nginx_size
+            ),
             "socketio_port": self.bench.realtime_port,
             "sites_root": f"{self.bench.path}/sites",
             "logs_path": str(self.bench.logs_path),

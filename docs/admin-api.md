@@ -119,6 +119,19 @@ A remote source needs a bench session and an `https://` site. The Administrator 
 
 A restore puts the site in maintenance mode, restores only the chosen parts, and migrates it. `skip_failing_patches` passes `--skip-failing` to the migration. It takes no backup of the site first. A database from another site brings that site's encryption key. The `config` part merges the source site config into this site, except the keys that belong to this site: `db_*`, `redis_*`, `pilot_*`, `atlas_*`, `host_name`, `installed_apps`, `maintenance_mode`, and `pause_scheduler`. If a step fails, the site stays in maintenance mode. Restoring from another site needs a bench session; a site token can only restore its own backups.
 
+#### Chunked uploads
+
+The dashboard sends large backup files in chunks of up to 256 MB, because one request cannot carry them. The routes take a bench session, or a site token for its own site.
+
+| Route | Purpose |
+|---|---|
+| `POST /sites/<name>/uploads` | Takes `{"files": {part: {"filename", "size"}}}`. Returns `upload_id` and `chunk_size`. Refuses files larger than the free disk space. |
+| `PUT /sites/<name>/uploads/<upload_id>/files/<part>?offset=N` | The raw chunk bytes. `offset` must be the bytes received so far; a chunk sent again rewrites from its offset. A gap returns 409. Returns `received`. |
+| `GET /sites/<name>/uploads/<upload_id>` | The `size` and `received` bytes of each file, to resume after an error. |
+| `DELETE /sites/<name>/uploads/<upload_id>` | Cancels the upload and removes its files. |
+
+`POST /sites/<name>/actions/restore` with `upload_id` restores the uploaded files once each one is complete. The restore then owns the files and removes them when it ends. Each new upload removes the uploads that got no chunk for 3 hours. The admin nginx vhost accepts bodies of at least 1024 MB. The chunk route streams to the admin without request buffering and without the WAF, because the WAF cannot inspect raw backup bytes.
+
 #### Frappe Cloud v1
 
 A site on Frappe Cloud v1 is restored after its team approves the access. All routes need a bench session. Frappe Cloud is `[frappe_cloud] url` in `common_config.toml`.

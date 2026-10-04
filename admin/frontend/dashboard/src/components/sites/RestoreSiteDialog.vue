@@ -6,6 +6,7 @@ import { apiErrorMessage } from '@/api/client'
 import { sitesApi } from '@/api/sites'
 import ActionDialog from '@/components/common/ActionDialog.vue'
 import FrappeCloudSource from '@/components/sites/FrappeCloudSource.vue'
+import { useBackupUpload } from '@/composables/sites/useBackupUpload'
 import { useSites } from '@/composables/sites/useSites'
 import type { RemoteBackup } from '@/types/siteBackups'
 import type { TaskPayload } from '@/types/tasks'
@@ -62,6 +63,7 @@ const skipFailingPatches = ref(false)
 const uploads = ref<Record<string, File | null>>({})
 const inputs: Record<string, HTMLInputElement | null> = {}
 const restoring = ref(false)
+const backupUpload = useBackupUpload(() => props.siteName)
 const error = ref('')
 
 const sourceOptions = computed(() =>
@@ -104,6 +106,7 @@ const isReady = computed(() => {
 
 watch(open, (isOpen) => {
   password.value = ''
+  if (!isOpen && backupUpload.isUploading.value) backupUpload.cancel()
   if (!isOpen) return
   source.value = 'upload'
   sourceSite.value = ''
@@ -151,16 +154,7 @@ const removeFile = (part: string) => {
 }
 
 const submit = (): Promise<TaskPayload> => {
-  if (source.value === 'upload') {
-    const form = new FormData()
-    for (const part of parts.value) form.append('parts', part)
-    if (skipFailingPatches.value) form.append('skip_failing_patches', 'true')
-    for (const { part } of PARTS) {
-      const file = uploads.value[part]
-      if (file) form.append(part, file)
-    }
-    return sitesApi.restoreUpload(props.siteName, form)
-  }
+  if (source.value === 'upload') return restoreUploadedFiles()
   if (source.value === 'frappe-cloud')
     return sitesApi.restore(props.siteName, {
       parts: parts.value,
@@ -180,6 +174,23 @@ const submit = (): Promise<TaskPayload> => {
     skip_failing_patches: skipFailingPatches.value,
     source_site: sourceSite.value,
   })
+}
+
+const restoreUploadedFiles = async (): Promise<TaskPayload> => {
+  const files = Object.fromEntries(parts.value.map((part) => [part, uploads.value[part] as File]))
+  return sitesApi.restore(props.siteName, {
+    parts: parts.value,
+    skip_failing_patches: skipFailingPatches.value,
+    upload_id: await backupUpload.upload(files),
+  })
+}
+
+const uploadHint = (part: string, hint: string) => {
+  const file = uploads.value[part]
+  if (!file) return hint
+  const sent = backupUpload.progress.value[part]
+  if (sent === undefined) return file.name
+  return sent === 1 ? `${file.name} · Uploaded` : `${file.name} · ${Math.floor(sent * 100)}%`
 }
 
 const restore = async () => {
@@ -224,7 +235,7 @@ const restore = async () => {
           <div class="min-w-0">
             <p class="font-medium text-ink-gray-8 text-sm">{{ item.label }}</p>
             <p class="text-ink-gray-5 text-p-sm truncate">
-              {{ uploads[item.part]?.name || item.hint }}
+              {{ uploadHint(item.part, item.hint) }}
             </p>
           </div>
           <input

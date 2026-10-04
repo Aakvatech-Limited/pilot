@@ -358,3 +358,44 @@ def test_an_upload_restore_reads_skip_failing_patches_from_the_form(tmp_path: Pa
 
     assert response.status_code == 202
     assert _meta(bench_root, response)["args"]["skip_failing_patches"] is True
+
+
+def test_a_chunked_upload_restores_once_every_file_has_arrived(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    client = _client(bench_root)
+    started = client.post(
+        "/api/v1/sites/a.localhost/uploads", json={"files": {"config": {"filename": "x-site_config_backup.json", "size": 2}}}
+    ).get_json()
+    url = f"/api/v1/sites/a.localhost/uploads/{started['upload_id']}"
+
+    early = client.post("/api/v1/sites/a.localhost/actions/restore", json={"parts": ["config"], "upload_id": started["upload_id"]})
+    sent = client.put(f"{url}/files/config?offset=0", data=b"{}", content_type="application/octet-stream")
+    response = client.post("/api/v1/sites/a.localhost/actions/restore", json={"parts": ["config"], "upload_id": started["upload_id"]})
+
+    assert early.status_code == 422
+    assert sent.get_json() == {"received": 2}
+    assert response.status_code == 202
+    assert _meta(bench_root, response)["args"]["upload_dir"].endswith(started["upload_id"])
+
+
+def test_a_chunk_past_the_received_bytes_returns_a_conflict(tmp_path: Path) -> None:
+    client = _client(tmp_path / "benches" / "current")
+    upload_id = client.post(
+        "/api/v1/sites/a.localhost/uploads", json={"files": {"database": {"filename": "x.sql.gz", "size": 10}}}
+    ).get_json()["upload_id"]
+
+    reply = client.put(f"/api/v1/sites/a.localhost/uploads/{upload_id}/files/database?offset=4", data=b"ab")
+
+    assert reply.status_code == 409
+
+
+def test_a_site_token_cannot_use_another_sites_upload(tmp_path: Path) -> None:
+    bench_root = tmp_path / "benches" / "current"
+    upload_id = _client(bench_root).post(
+        "/api/v1/sites/b.localhost/uploads", json={"files": {"database": {"filename": "x.sql.gz", "size": 10}}}
+    ).get_json()["upload_id"]
+
+    reply = _client(bench_root, site_token="a.localhost").get(f"/api/v1/sites/a.localhost/uploads/{upload_id}")
+
+    assert reply.status_code == 422
+    assert reply.get_json()["error"]["message"] == "The upload does not exist."
