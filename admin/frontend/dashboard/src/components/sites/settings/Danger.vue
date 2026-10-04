@@ -78,6 +78,7 @@ const DangerActions = [
   {
     key: 'reset',
     label: 'Reset site',
+    buttonLabel: 'Reset',
     description: 'Wipes the database back to a fresh install. Apps stay; all your data is removed.',
     action: () => {
       confirmName.value = ''
@@ -88,6 +89,7 @@ const DangerActions = [
   {
     key: 'drop',
     label: 'Drop site',
+    buttonLabel: 'Drop',
     description: `Permanently deletes ${props.siteName} and all its data.`,
     action: () => {
       confirmName.value = ''
