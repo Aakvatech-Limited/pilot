@@ -82,8 +82,8 @@ const confirm = async () => {
     @confirm="confirm"
   >
     <p class="text-ink-gray-6 text-p-sm">
-      Restores the backup from {{ backup ? fmtDateTime(backup.created_at) : '' }}. The site is
-      backed up first and migrated after.
+      Restores the backup from {{ backup ? fmtDateTime(backup.created_at) : '' }}, then migrates
+      the site.
     </p>
     <div>
       <Select v-model="target" label="Restore into" :options="siteOptions" />

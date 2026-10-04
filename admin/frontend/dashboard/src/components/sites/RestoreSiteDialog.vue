@@ -27,11 +27,6 @@ const SOURCES = [
   { value: 'site', label: 'Another site' },
   { value: 'remote', label: 'Remote site' },
 ]
-const SOURCE_HINTS: Record<Source, string> = {
-  upload: 'Upload the backup files to restore. Leave out a part to keep it as it is.',
-  site: 'Pilot takes a new backup of the other site and restores it here.',
-  remote: 'Pilot signs in as Administrator, takes a new backup there, and restores it here.',
-}
 const PARTS = [
   { part: 'database', label: 'Database', hint: 'Usually ends in .sql.gz or .sql', accept: '.sql,.gz' },
   { part: 'public', label: 'Public files', hint: 'Usually ends in -files.tar', accept: '.tar,.tgz' },
@@ -145,12 +140,9 @@ const restore = async () => {
     :disabled="!isReady"
     @confirm="restore"
   >
-    <p class="text-ink-gray-6 text-p-sm">The site is backed up first, then restored and migrated.</p>
+    <p class="text-ink-gray-6 text-p-sm">The site is restored, then migrated.</p>
     <div class="space-y-4">
-        <div class="space-y-1.5">
-          <TabButtons v-model="source" :options="SOURCES" class="w-full" />
-          <p class="text-ink-gray-5 text-p-sm">{{ SOURCE_HINTS[source] }}</p>
-        </div>
+        <TabButtons v-model="source" :options="SOURCES" class="w-full" />
 
         <div v-if="source === 'upload'" class="divide-y divide-outline-gray-1">
           <div
@@ -196,16 +188,13 @@ const restore = async () => {
             <TextInput v-model="password" label="Administrator password" type="password" />
           </div>
 
-          <div class="space-y-2">
-            <p class="text-ink-gray-5 text-xs">What to restore</p>
-            <div class="flex flex-wrap gap-x-5 gap-y-2">
-              <Checkbox
-                v-for="item in PARTS"
-                :key="item.part"
-                v-model="chosen[item.part]"
-                :label="item.label"
-              />
-            </div>
+          <div class="flex flex-wrap gap-x-5 gap-y-2">
+            <Checkbox
+              v-for="item in PARTS"
+              :key="item.part"
+              v-model="chosen[item.part]"
+              :label="item.label"
+            />
           </div>
         </template>
       </div>
