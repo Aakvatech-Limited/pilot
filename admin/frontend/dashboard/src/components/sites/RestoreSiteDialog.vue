@@ -84,7 +84,7 @@ const parts = computed(() =>
 const isReady = computed(() => {
   if (!parts.value.length) return false
   if (source.value === 'site') return Boolean(sourceSite.value)
-  if (source.value === 'remote') return remoteBackups.value !== null
+  if (source.value === 'remote') return Boolean(remoteBackups.value)
   return true
 })
 
@@ -110,8 +110,10 @@ const getBackups = async () => {
   error.value = ''
   try {
     const data = await sitesApi.remoteBackups(props.siteName, remoteSite.value.trim(), password.value)
-    remoteBackups.value = data.backups
-    remoteBackup.value = data.backups[0]?.timestamp ?? ''
+    if ('backups' in data) {
+      remoteBackups.value = data.backups
+      remoteBackup.value = data.backups[0]?.timestamp ?? ''
+    } else error.value = apiErrorMessage(data, 'Could not get the backups of this site.')
   } catch (e) {
     error.value = errorMessage(e, 'Could not get the backups of this site.')
   } finally {
