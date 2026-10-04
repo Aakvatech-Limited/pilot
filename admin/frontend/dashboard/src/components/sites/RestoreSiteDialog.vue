@@ -84,7 +84,7 @@ const parts = computed(() =>
 const isReady = computed(() => {
   if (!parts.value.length) return false
   if (source.value === 'site') return Boolean(sourceSite.value)
-  if (source.value === 'remote') return Boolean(remoteSite.value.trim() && password.value)
+  if (source.value === 'remote') return remoteBackups.value !== null
   return true
 })
 
@@ -244,7 +244,7 @@ const restore = async () => {
           </p>
         </div>
 
-        <div class="flex flex-wrap gap-1">
+        <div v-if="source !== 'remote' || remoteBackups" class="flex flex-wrap gap-1">
           <Checkbox
             v-for="item in PARTS"
             :key="item.part"
