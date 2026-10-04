@@ -27,7 +27,7 @@ const subject = computed(() =>
   props.app
     ? {
         label: props.app.title,
-        description: `On ${props.app.branch || 'a detached commit'}`,
+        description: `Now on ${props.app.branch || 'a detached commit'}`,
         logo: props.app.logo_url,
       }
     : null,
@@ -83,7 +83,7 @@ const confirm = async () => {
     :subject="subject"
     :warning="{
       title: 'This changes the app for every site on this bench.',
-      message: `Every site with ${app?.title} is backed up and migrated after the switch. If the switch fails, the app returns to ${app?.branch || 'its current commit'}.`,
+      message: `Sites that use ${app?.title} are backed up and migrated after the switch. If the switch fails, ${app?.title} goes back to ${app?.branch || 'its current commit'}.`,
     }"
     :error="error"
     confirm-label="Switch branch"

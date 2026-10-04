@@ -85,8 +85,8 @@ const confirm = async () => {
     title="Restore backup"
     :subject="subject"
     :warning="{
-      title: `This replaces the chosen parts of ${target || siteName}.`,
-      message: 'A backup of it is taken first, and it is migrated after the restore.',
+      title: `This replaces the selected data on ${target || siteName}.`,
+      message: 'The site is backed up first and migrated after the restore.',
     }"
     :error="error"
     confirm-label="Restore"

@@ -47,7 +47,7 @@ const DangerActions = [
     key: 'migrate',
     label: 'Migrate site',
     buttonLabel: 'Migrate',
-    description: 'Creates a recovery backup, then migrates this site.',
+    description: 'Run pending database migrations on this site.',
     action: () => {
       migrateError.value = ''
       showMigrate.value = true
@@ -57,7 +57,7 @@ const DangerActions = [
     key: 'rename',
     label: 'Rename site',
     buttonLabel: 'Rename',
-    description: "Change this site's name and hostname.",
+    description: "Give this site a new name.",
     action: () => {
       newName.value = ''
       keepOldHostname.value = true
@@ -178,10 +178,7 @@ const confirmDrop = async () => {
     v-model:open="showMigrate"
     title="Migrate Site"
     :subject="siteSubject"
-    :warning="{
-      title: 'The site goes down while this runs.',
-      message: `A recovery backup is taken first. If the migration fails you can retry it, or restore that backup from the update page.`,
-    }"
+    :warning="{ title: 'The site might go down while this runs.' }"
     :error="migrateError"
     confirm-label="Migrate"
     confirm-theme="red"
@@ -209,7 +206,7 @@ const confirmDrop = async () => {
       <Checkbox
         v-model="keepOldHostname"
         class="mt-3"
-        :label="`Keep ${siteName} working as a domain`"
+        :label="`Keep ${siteName} working as well`"
       />
     </template>
   </ActionDialog>

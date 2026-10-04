@@ -28,11 +28,11 @@ const run = async (command: 'build' | 'clear-cache') => {
 </script>
 
 <template>
-  <SettingsRow label="Build assets" description="Rebuild JS and CSS for every app.">
+  <SettingsRow label="Build assets" description="Rebuild JS and CSS for all apps.">
     <Button :loading="running === 'build'" @click="run('build')">Build</Button>
   </SettingsRow>
 
-  <SettingsRow label="Clear cache" description="Clear the cache of every site.">
+  <SettingsRow label="Clear cache" description="Clear the cache for all sites.">
     <Button :loading="running === 'clear-cache'" @click="run('clear-cache')">Clear</Button>
   </SettingsRow>
 

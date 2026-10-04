@@ -98,13 +98,13 @@ onMounted(loadSites)
     <Alert
       class="border border-outline-gray-2"
       theme="blue"
-      title="The chosen parts of the site are replaced"
+      title="Restoring replaces the data you select"
       :dismissible="false"
     >
       <template #description>
         <p class="text-ink-gray-6 text-p-sm">
-          A backup of the site is taken first, and the site is migrated after the restore. A remote
-          site first takes a fresh backup, which emails its Administrator.
+          The site is backed up first and migrated after the restore. Restoring from another site
+          uses a new backup of it. A remote site emails its Administrator about that backup.
         </p>
       </template>
     </Alert>
@@ -120,7 +120,7 @@ onMounted(loadSites)
         v-model="sourceSite"
         label="Site"
         :options="sourceOptions"
-        placeholder="Its current state is backed up and restored"
+        placeholder="Choose a site"
       />
 
       <div v-else-if="source === 'remote'" class="flex sm:flex-row flex-col gap-4">
@@ -134,7 +134,7 @@ onMounted(loadSites)
       </div>
 
       <div class="flex flex-col gap-2">
-        <p class="text-ink-gray-5 text-xs">Restore</p>
+        <p class="text-ink-gray-5 text-xs">What to restore</p>
         <div v-for="item in PARTS" :key="item.part" class="flex items-center gap-4">
           <Checkbox v-model="chosen[item.part]" :label="item.label" class="w-32 shrink-0" />
           <input

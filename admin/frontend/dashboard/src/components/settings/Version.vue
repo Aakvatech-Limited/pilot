@@ -119,7 +119,7 @@ const pollTask = async (taskId: string) => {
     latestVersion.value = null
     dialogOpen.value = false
     toast.success('Updated successfully', {
-      description: restartsAdmin ? undefined : 'Restart `pilot start` to run the new version.',
+      description: restartsAdmin ? undefined : 'Stop pilot start and run it again to use the new version.',
     })
     return
   }
@@ -175,7 +175,7 @@ const pollTask = async (taskId: string) => {
           Pilot updates itself and restarts the admin service. Your benches keep running.
         </template>
         <template v-else>
-          Pilot updates itself. Restart <code>pilot start</code> afterwards to run the new version.
+          Pilot updates itself. Then stop <code>pilot start</code> and run it again to use the new version.
         </template>
       </p>
     </div>
