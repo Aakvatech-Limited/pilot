@@ -59,8 +59,6 @@ When Pilot builds an app's assets without `--force` and the app has no local cha
 | The archive matches its checksum and was built for this commit | Replaces each published path whole, so files that a newer build removed do not stay. |
 | The checksum or the commit does not match | Stops with an error. A wrong archive is not hidden behind a build. |
 
-Before it builds, Pilot also tries the older branch-keyed archive `<app>-assets.tar.gz` on the same release. That fallback is removed in the next release.
-
 Only public GitHub repositories are supported. To build locally, run `pilot build --force`.
 
 ## Build Locally
