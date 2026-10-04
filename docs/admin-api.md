@@ -96,6 +96,10 @@ Measuring means a `du` per site directory and one schema-size query, so the rout
 
 `POST /sites/<name>/actions/refresh-storage` queues `refresh-storage-usage` to measure again on demand. One report covers every site on the bench, so the task re-measures all of them and concurrent requests fold into one run.
 
+### Backups
+
+Pilot writes backup runs to `sites/<site>/backups`. Frappe prunes `private/backups` on every backup and every hour, so Pilot keeps its runs out of that directory and its retention policy is the only pruner.
+
 ### Database Performance Report
 
 `GET /database/performance-report` returns the read-only findings behind the analyzer's Query Analysis and Index Analysis panels: `time_consuming_queries`, `full_table_scan_queries`, `unused_indexes`, `redundant_indexes`, and the `performance_schema_enabled` flag.

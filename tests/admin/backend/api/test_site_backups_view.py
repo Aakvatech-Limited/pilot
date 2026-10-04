@@ -33,7 +33,7 @@ def _make_site(bench_root: Path, name: str, **config) -> None:
 
 
 def _make_backup_file(bench_root: Path, site: str, timestamp: str, suffix: str) -> Path:
-    backups_dir = bench_root / "sites" / site / "private" / "backups"
+    backups_dir = bench_root / "sites" / site / "backups"
     backups_dir.mkdir(parents=True, exist_ok=True)
     path = backups_dir / f"{timestamp}-{site}-{suffix}"
     path.write_text("data")
