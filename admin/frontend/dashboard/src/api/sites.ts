@@ -53,6 +53,9 @@ export const sitesApi = {
   clearCache: (name: string): Promise<TaskPayload> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/clear-cache`).json(),
 
+  buildAssets: (name: string): Promise<TaskPayload> =>
+    request.post(`sites/${encodeURIComponent(name)}/actions/build-assets`).json(),
+
   migrate: (name: string): Promise<MigrationStarted> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/migrate`).json(),
 

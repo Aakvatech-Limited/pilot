@@ -176,6 +176,11 @@ class Site:
 
         SiteCommands(self).clear_cache()
 
+    def build_assets(self) -> None:
+        """Rebuild the assets of the apps this site runs. Assets are shared by every
+        site on the bench that has those apps."""
+        self.bench.rebuild_assets(apps=self.active_apps(), force=True)
+
     def uninstall_apps(
         self,
         app_names: list[str],

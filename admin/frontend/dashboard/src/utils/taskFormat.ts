@@ -54,7 +54,7 @@ const COMMAND_LABELS: Record<string, string> = {
   'drop-site': 'Drop Site',
   'backup-site': 'Backup Site',
   'delete-backup': 'Delete Backup',
-  build: 'Build Bench',
+  build: 'Build Assets',
   update: 'Update Bench',
   'get-and-install-app': 'Fetch & Install App',
   'add-and-install-app': 'Fetch & Install App on All Sites',
@@ -156,6 +156,7 @@ const SITE_ARG_KEY: Record<string, string> = {
   'delete-backup': 'site',
   'get-and-install-app': 'site',
   'reinstall-site': 'site',
+  build: 'site',
   'new-site': 'name',
   'new-site-from-backup': 'name',
 }

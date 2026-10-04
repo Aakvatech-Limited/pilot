@@ -8,14 +8,17 @@ from pilot.tasks import Task, step
 class ClearCacheTask(Task):
     command: ClassVar[str] = "clear-cache"
 
-    site: str
+    site: str = ""  # empty clears every site
 
     def run(self) -> None:
         self.clear_cache()
 
-    @step("clear_cache", lambda self: f"Clear cache for {self.site}")
+    @step("clear_cache", lambda self: f"Clear cache for {self.site or 'every site'}")
     def clear_cache(self) -> None:
-        self.bench.site(self.site).clear_cache()
+        if self.site:
+            self.bench.site(self.site).clear_cache()
+        else:
+            self.bench.clear_cache()
 
 
 if __name__ == "__main__":
