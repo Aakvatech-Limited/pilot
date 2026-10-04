@@ -9,7 +9,7 @@ on:
         required: false
         default: ""
       keep:
-        description: How many commits' assets to keep on the branch's release.
+        description: How many untagged commits' assets to keep on the branch's release. Tagged commits are always kept.
         type: number
         required: false
         default: 30
@@ -64,8 +64,19 @@ jobs:
               --title "Assets for $GITHUB_REF_NAME" --notes "Prebuilt assets that Pilot downloads. Do not edit."
           fi
           gh release upload "$tag" dist/* --clobber
-          # Keep the newest $KEEP commits: two files (archive and checksum) per commit.
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" \
-            --jq '.assets | sort_by(.created_at) | reverse | .[].id' \
-            | tail -n +"$((KEEP * 2 + 1))" \
+
+          # Benches run tagged releases long after newer pushes, so their assets stay.
+          tagged=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" --jq '.[].commit.sha' | tr '\n' ' ')
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq .id)
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+            --jq '.[] | "\(.created_at) \(.id) \(.name)"' \
+            | sort -r \
+            | awk -v keep="$KEEP" -v tagged="$tagged" '
+                BEGIN { split(tagged, shas, " "); for (i in shas) is_tagged[shas[i]] = 1 }
+                match($3, /-[0-9a-f]{40}\.tar\.gz/) {
+                  sha = substr($3, RSTART + 1, 40)
+                  if (sha in is_tagged) next
+                  if (!(sha in seen)) { seen[sha] = 1; commits++ }
+                  if (commits > keep) print $2
+                }' \
             | xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/{}"

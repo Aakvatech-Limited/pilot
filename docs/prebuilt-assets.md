@@ -20,7 +20,7 @@ jobs:
       contents: write
 ```
 
-For each push, the workflow builds the app against the matching Frappe branch and uploads `<app>-<commit>.tar.gz` and `<app>-<commit>.tar.gz.sha256` to the release `assets-<branch>`. It keeps the newest 30 commits. Set the `frappe-branch` input when the app branch name does not tell the Frappe branch: `version-16` and `version-16-hotfix` build against `version-16`, and every other branch builds against `develop`.
+For each push, the workflow builds the app against the matching Frappe branch and uploads `<app>-<commit>.tar.gz` and `<app>-<commit>.tar.gz.sha256` to the release `assets-<branch>`. It keeps the assets of every tagged commit and of the newest 30 other commits. Set the `keep` input to change that number. Set the `frappe-branch` input when the app branch name does not tell the Frappe branch: `version-16` and `version-16-hotfix` build against `version-16`, and every other branch builds against `develop`.
 
 ## Declare SPAs
 
