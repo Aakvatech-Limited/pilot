@@ -245,10 +245,9 @@ class TaskProcess:
         ignores SIGTERM outlives the leader, and it still has to be killed."""
         deadline = time.monotonic() + max(0, timeout_seconds)
         cleared = False
+        # UNKNOWN is not an exit: /proc reads fail briefly while a process dies.
         while time.monotonic() < deadline:
             ownership = self._inspector.inspect(record.identity, record.argv)
-            if ownership == ProcessOwnership.UNKNOWN:
-                return True
             if ownership in {ProcessOwnership.DEAD, ProcessOwnership.STALE}:
                 if not cleared:
                     self._clear_process(record.task_id)
