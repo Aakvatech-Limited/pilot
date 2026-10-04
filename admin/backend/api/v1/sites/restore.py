@@ -158,10 +158,19 @@ def _restore_from_frappe_cloud(bench_root: Path, name: str, parts: list[str], da
     if not isinstance(backup, str):
         return _invalid("Choose a Frappe Cloud backup.")
     try:
-        links = Bench(bench_root).site(name).frappe_cloud.client.get_download_links(backup)
+        client = Bench(bench_root).site(name).frappe_cloud.client
+        links = client.get_download_links(backup)
     except FrappeCloudError as error:
         return _invalid(str(error))
-    return _queue(bench_root, name, parts, {name}, frappe_cloud_backup=backup, frappe_cloud_secret_urls=links)
+    return _queue(
+        bench_root,
+        name,
+        parts,
+        {name},
+        frappe_cloud_backup=backup,
+        frappe_cloud_secret_urls=links,
+        frappe_cloud_token=client.token,
+    )
 
 
 def _signed_in_remote(data: dict):

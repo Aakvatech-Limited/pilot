@@ -256,7 +256,7 @@ def test_a_frappe_cloud_restore_keeps_the_download_links_out_of_the_task_record(
     client = _client(bench_root)
     connection = bench_root / "config" / "frappe_cloud" / "a.localhost.json"
     connection.parent.mkdir(parents=True)
-    connection.write_text(json.dumps({"url": "https://cloud.example.com", "token": "t"}))
+    connection.write_text(json.dumps({"url": "https://cloud.example.com", "token": "fc-token-secret"}))
     links = {"database": "https://s3.example.com/db.sql.gz?X-Amz-Signature=signed-secret"}
 
     with patch("pilot.integrations.frappe_cloud.FrappeCloud.get_download_links", return_value=links) as get_links:
@@ -268,7 +268,7 @@ def test_a_frappe_cloud_restore_keeps_the_download_links_out_of_the_task_record(
     get_links.assert_called_once_with("backup-1")
     meta = (bench_root / "tasks" / response.get_json()["task_id"] / "meta.json").read_text()
     assert json.loads(meta)["args"]["frappe_cloud_backup"] == "backup-1"
-    assert "signed-secret" not in meta
+    assert "signed-secret" not in meta and "fc-token-secret" not in meta
 
 
 def test_frappe_cloud_backups_include_the_running_backup_so_a_reloaded_page_can_follow_it(tmp_path: Path) -> None:

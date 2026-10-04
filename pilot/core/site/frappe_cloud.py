@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from pilot.exceptions import FrappeCloudError
 from pilot.integrations.frappe_cloud import FrappeCloud
-from pilot.internal.atomic_file import atomic_write_private_text
+from pilot.internal.atomic_file import atomic_write_private_text, exclusive_file_lock
 from pilot.utils import make_private_directory
 
 if TYPE_CHECKING:
@@ -67,13 +67,21 @@ class SiteFrappeCloud:
             "code": connection["code"],
         }
 
-    def disconnect(self) -> None:
-        """Frappe Cloud ends the access after 12 hours anyway, so a failed revoke is ignored."""
-        if not self.path.exists():
+    def disconnect(self, token: str = "") -> None:
+        """Revoke `token`, or the current one. A restore passes the token it was queued with, so
+        a connection made since then stays. Frappe Cloud ends the access after 12 hours anyway,
+        so a failed revoke is ignored."""
+        make_private_directory(self.path.parent, parents=True)
+        with exclusive_file_lock(self.path):
+            connection = self.connection
+            token = token or connection.get("token", "")
+            if connection.get("token") == token:
+                self.path.unlink(missing_ok=True)
+        if not token:
             return
+        url = connection.get("url") or self.site.bench.config.frappe_cloud.url
         with contextlib.suppress(FrappeCloudError):
-            self.client.revoke()
-        self.path.unlink(missing_ok=True)
+            FrappeCloud(url, token).revoke()
 
 
 def make_pass_code() -> str:

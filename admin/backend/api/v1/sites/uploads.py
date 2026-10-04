@@ -50,7 +50,7 @@ def write_backup_upload_chunk(name: str, upload_id: str, part: str):
 @require_scope(site_name)
 def get_backup_upload(name: str, upload_id: str):
     def status(upload: BackupUpload) -> BackupUploadStatus:
-        return BackupUploadStatus(files={part: BackupUploadFile(**file) for part, file in upload.files.items()})
+        return BackupUploadStatus(files={part: BackupUploadFile(size=file["size"], received=file["received"]) for part, file in upload.files.items()})
 
     return _with_upload(name, upload_id, status)
 

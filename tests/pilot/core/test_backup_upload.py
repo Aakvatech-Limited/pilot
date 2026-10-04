@@ -115,3 +115,14 @@ def test_an_upload_larger_than_the_free_disk_space_is_refused(tmp_path: Path) ->
 def test_an_upload_id_that_is_not_ours_is_refused(tmp_path: Path) -> None:
     with pytest.raises(BenchError, match="does not exist"):
         BackupUpload(_bench(tmp_path), "../../etc")
+
+
+def test_a_chunk_for_an_upload_handed_to_a_restore_is_refused(tmp_path: Path) -> None:
+    upload = _upload(tmp_path, size=5)
+    _send(upload, 0, b"hello")
+    upload.claim(["database"])
+
+    with pytest.raises(BenchError, match="does not exist"):
+        _send(upload, 0, b"HELLO")
+
+    assert (upload.path / "upload-database.sql.gz").read_bytes() == b"hello"

@@ -31,6 +31,7 @@ class RestoreSiteTask(Task):
     skip_failing_patches: bool = False
     # Pre-signed links by part. Queued with the task, so a rerun still has them after the revoke.
     frappe_cloud_secret_urls: Annotated[dict[str, str] | None, Arg(cli=False)] = None
+    frappe_cloud_token: Annotated[str, Arg(cli=False)] = ""
 
     def run(self) -> None:
         if self.upload_dir and Path(self.upload_dir).resolve().parent != self.bench.uploads_path.resolve():
@@ -83,7 +84,7 @@ class RestoreSiteTask(Task):
         """The links work without the token, so the access ends before the download starts."""
         from pilot.integrations.frappe_cloud import download_backup, open_download_link
 
-        self.bench.site(self.site).frappe_cloud.disconnect()
+        self.bench.site(self.site).frappe_cloud.disconnect(self.frappe_cloud_token)
         links = self.frappe_cloud_secret_urls or {}
         is_streamed = "database" in self.parts and self.bench.config.db_type == "mariadb" and "database" in links
         wanted = [*[part for part in ("public", "private") if part in self.parts], "config"]

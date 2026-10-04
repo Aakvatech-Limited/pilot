@@ -64,3 +64,15 @@ def test_a_failed_revoke_still_removes_the_local_token(tmp_path: Path) -> None:
 def test_backups_need_a_connection_first(tmp_path: Path) -> None:
     with pytest.raises(FrappeCloudError, match="Connect to Frappe Cloud first"):
         _ = _frappe_cloud(tmp_path).client
+
+
+def test_a_restore_revokes_its_own_token_and_keeps_a_connection_made_since(tmp_path: Path) -> None:
+    frappe_cloud = _frappe_cloud(tmp_path)
+    frappe_cloud.path.parent.mkdir(parents=True)
+    frappe_cloud.path.write_text(json.dumps({"url": "https://cloud.example.com", "token": "new-token"}))
+
+    with patch("pilot.core.site.frappe_cloud.FrappeCloud") as client:
+        frappe_cloud.disconnect("old-token")
+
+    client.assert_called_once_with("https://cloud.example.com", "old-token")
+    assert json.loads(frappe_cloud.path.read_text())["token"] == "new-token"

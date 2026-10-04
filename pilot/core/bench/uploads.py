@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import secrets
@@ -110,6 +111,8 @@ class BackupUpload:
 
         path = self.path / file["name"]
         with exclusive_file_lock(path):
+            if not self.manifest_path.exists():
+                raise BenchError("The upload was already handed to a restore.")
             received = _size(path)
             if offset > received:
                 raise UploadOffsetError(received)
@@ -126,12 +129,17 @@ class BackupUpload:
 
     def claim(self, parts: list[str]) -> Path:
         """Hand the files to a restore. Without the manifest, cleanup ignores the directory."""
-        missing = [part for part in parts if part not in self.manifest["files"]]
+        files = self.manifest["files"]
+        missing = [part for part in parts if part not in files]
         if missing:
             raise BenchError(f"The upload has no {' or '.join(missing)} file.")
-        if not self.is_complete:
-            raise BenchError("Upload all the files before the restore.")
-        self.manifest_path.unlink()
+        # Each file's lock, so a chunk being rewritten cannot change a file after the check.
+        with contextlib.ExitStack() as locks:
+            for file in files.values():
+                locks.enter_context(exclusive_file_lock(self.path / file["name"]))
+            if not self.is_complete:
+                raise BenchError("Upload all the files before the restore.")
+            self.manifest_path.unlink()
         return self.path
 
     def delete(self) -> None:

@@ -115,7 +115,11 @@ class SiteRestore:
                 self.extract_files(run.files[part], part)
         if "config" in parts:
             on_progress("Restoring the site config...")
-            self.site.set_config_values(run.site_config)
+            values = run.site_config
+            if "database" not in parts:
+                # The key belongs with its database, and this site keeps its own database.
+                values.pop("encryption_key", None)
+            self.site.set_config_values(values)
 
     def get_restored_database_config(self, run: BackupRun) -> dict:
         """Frappe's restore leaves the installed_apps mirror stale, and the restored
