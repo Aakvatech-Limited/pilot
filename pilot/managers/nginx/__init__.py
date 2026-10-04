@@ -209,7 +209,6 @@ class NginxConfigRenderer:
         for domain in site.all_domains:
             route = site.configured_route_for(domain)
             ssl = domain in tls_domains
-            public_scheme = route.public_scheme if route else "$scheme"
             client_ip_source = route.client_ip_source if route else (
                 "proxy_protocol_v2"
                 if ssl and self.bench.config.proxy.protocol_v2
@@ -217,6 +216,7 @@ class NginxConfigRenderer:
                 if self._proxy_servers
                 else "direct"
             )
+            public_scheme = route.public_scheme if route else self._unrouted_scheme(client_ip_source)
             key = (ssl, public_scheme, client_ip_source)
             groups.setdefault(key, []).append(domain)
         for (ssl, public_scheme, client_ip_source), domains in groups.items():
@@ -224,6 +224,12 @@ class NginxConfigRenderer:
                 self._site_vhost(site, domains, ssl, public_scheme, client_ip_source)
             )
         return vhosts
+
+    @staticmethod
+    def _unrouted_scheme(client_ip_source: str) -> str:
+        """Trust the edge's scheme only where it terminates TLS, never on PROXY-protocol passthrough.
+        $pilot_scheme falls back to $scheme when the edge sends no X-Forwarded-Proto."""
+        return "$pilot_scheme" if client_ip_source == "x_forwarded_for" else "$scheme"
 
     def _site_vhost(
         self,
@@ -279,7 +285,7 @@ class NginxConfigRenderer:
                 if client_ip_source == "x_forwarded_for"
                 else "$proxy_add_x_forwarded_for"
             ),
-            public_scheme=route.public_scheme if admin.route else "$scheme",
+            public_scheme=route.public_scheme if admin.route else self._unrouted_scheme(client_ip_source),
             cert=live_cert_path(admin.domain),
             key=live_key_path(admin.domain),
             port=admin.internal_port,
