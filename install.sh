@@ -121,7 +121,8 @@ pkg_installed() {
     case "$DISTRO" in
         macos)  brew list --versions "$1" >/dev/null 2>&1 ;;
         fedora) rpm -q "$1" >/dev/null 2>&1 ;;
-        arch)   pacman -Qi "$1" >/dev/null 2>&1 ;;
+        # -T accepts a provider, such as mariadb-lts for mariadb.
+        arch)   pacman -T "$1" >/dev/null 2>&1 ;;
         *)      dpkg -l "$1" 2>/dev/null | grep -q '^ii' ;;
     esac
 }
@@ -131,6 +132,17 @@ pkg_available() {
         debian|ubuntu) apt-cache show "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
+}
+
+# Naming an installed provider's package again makes pacman remove the provider.
+pkg_install_missing() {
+    missing=""
+    for package in "$@"; do
+        pkg_installed "$package" || missing="$missing $package"
+    done
+    [ -z "$missing" ] && return 0
+    # shellcheck disable=SC2086
+    pkg_install $missing
 }
 
 # Vendors (MariaDB, NodeSource, Homebrew) only publish `curl | bash` installers
@@ -233,7 +245,7 @@ install_database_engines() {
             # Fedora 41+ ships valkey in place of redis (the alias the runtime resolves).
             pkg_install mariadb-server mariadb mariadb-connector-c-devel postgresql-server postgresql libpq-devel pkgconf-pkg-config valkey ;;
         arch)
-            pkg_install mariadb mariadb-clients mariadb-libs postgresql postgresql-libs pkgconf redis ;;
+            pkg_install_missing mariadb mariadb-clients mariadb-libs postgresql postgresql-libs pkgconf redis ;;
     esac
 }
 

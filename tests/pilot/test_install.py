@@ -275,3 +275,18 @@ install_production_packages
     assert "WAF is unavailable" in result.stdout
     assert "pkg_install nginx certbot supervisor" in result.stdout
     assert "modsecurity" not in result.stdout.split("pkg_install", 1)[1]
+
+
+def test_arch_keeps_an_installed_mariadb_provider(tmp_path: Path) -> None:
+    """mariadb-lts provides mariadb; installing mariadb would conflict."""
+    result = run_installer_functions(
+        """
+DISTRO=arch
+pkg_installed() { case "$1" in mariadb*) return 0 ;; *) return 1 ;; esac; }
+pkg_install() { echo "pkg_install $*"; }
+install_database_engines
+""",
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "pkg_install postgresql postgresql-libs pkgconf redis"
