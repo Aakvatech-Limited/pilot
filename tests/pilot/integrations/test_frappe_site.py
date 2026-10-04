@@ -82,7 +82,7 @@ def remote_url():
 
 
 def test_a_wrong_password_is_reported_before_any_work(remote_url: str) -> None:
-    with pytest.raises(RemoteSiteError, match=r"password .* is wrong"):
+    with pytest.raises(RemoteSiteError, match="password is invalid"):
         RemoteFrappeSite(remote_url, "wrong").login()
 
 

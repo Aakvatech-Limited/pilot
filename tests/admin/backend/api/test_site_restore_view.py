@@ -75,7 +75,7 @@ def test_remote_credentials_are_checked_before_queueing(tmp_path: Path) -> None:
 
     with patch(
         "pilot.integrations.frappe_site.RemoteFrappeSite.login",
-        side_effect=RemoteSiteError("The Administrator password for https://old.example.com is wrong."),
+        side_effect=RemoteSiteError("The administrator password is invalid."),
     ):
         response = _client(tmp_path / "benches" / "current").post(
             "/api/v1/sites/a.localhost/actions/restore",
@@ -83,7 +83,7 @@ def test_remote_credentials_are_checked_before_queueing(tmp_path: Path) -> None:
         )
 
     assert response.status_code == 422
-    assert "is wrong" in response.get_json()["error"]["message"]
+    assert response.get_json()["error"]["message"] == "The administrator password is invalid."
 
 
 def test_the_remote_password_stays_out_of_the_task_record(tmp_path: Path) -> None:

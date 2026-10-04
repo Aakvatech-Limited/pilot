@@ -144,7 +144,7 @@ def _signed_in_remote(data: dict):
     if not isinstance(remote_site, str) or not isinstance(password, str) or not password:
         return None, _invalid("Enter the site and its Administrator password.")
     if remote_site.strip().startswith("http://"):
-        return None, _invalid("Use an https:// site: the Administrator password must not travel in clear text.")
+        return None, _invalid("Use an https:// address.")
     remote = RemoteFrappeSite(remote_site, password)
     try:
         remote.login()

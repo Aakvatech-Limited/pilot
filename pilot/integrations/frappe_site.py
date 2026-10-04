@@ -37,10 +37,10 @@ class RemoteFrappeSite:
             response = self._json(self._open("/api/method/login", data=body))
         except urllib.error.HTTPError as error:
             if error.code in (401, 403):
-                raise RemoteSiteError(f"The Administrator password for {self.url} is wrong.") from error
-            raise RemoteSiteError(f"{self.url} refused the login: HTTP {error.code}.") from error
+                raise RemoteSiteError("The administrator password is invalid.") from error
+            raise RemoteSiteError(f"The site refused the login (HTTP {error.code}).") from error
         if "verification" in response:
-            raise RemoteSiteError(f"{self.url} asks for two-factor authentication, which is not supported.")
+            raise RemoteSiteError("Sites with two-factor authentication are not supported.")
 
     def take_backup(self) -> dict[str, str]:
         """Start a backup with files on the remote and wait until it is complete. The remote
