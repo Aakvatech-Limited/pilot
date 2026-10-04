@@ -6,8 +6,9 @@ import subprocess
 import time
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack, contextmanager
+from io import BufferedIOBase
 from pathlib import Path
-from typing import IO, NoReturn
+from typing import NoReturn
 
 from pilot.config import MariaDBConfig
 from pilot.core.database.mariadb_variables import (
@@ -933,7 +934,7 @@ class MariaDBManager(UserOwnedDBManager):
             f"CREATE DATABASE `{database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
         )
 
-    def import_sql(self, db_name: str, dump: IO[bytes]) -> None:
+    def import_sql(self, db_name: str, dump: BufferedIOBase) -> None:
         """Pipe an SQL dump into `db_name` as it is read."""
         process = subprocess.Popen(
             [*self._client_command(), db_name.replace("`", "")],

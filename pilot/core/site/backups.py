@@ -63,7 +63,7 @@ class SiteBackups:
             return local
         offsite = self._offsite()
         files = offsite.get_backup(self.site.config.name, timestamp) if offsite else None
-        if not files:
+        if offsite is None or not files:
             raise BenchError(f"Backup {timestamp} of {self.site.config.name} was not found.")
         paths = []
         for filename in files.values():

@@ -65,7 +65,7 @@ class RestoreSiteTask(Task):
         if timestamp != self.backup_timestamp:
             raise RemoteSiteError("The remote site has a newer backup now. Get its backups again.")
         is_streamed = "database" in self.parts and self.bench.config.db_type == "mariadb" and "database" in latest
-        wanted = [part for part in ("public", "private") if part in self.parts]
+        wanted: list[str] = [part for part in ("public", "private") if part in self.parts]
         wanted += ["config"] if "database" in self.parts else []
         wanted += ["database"] if "database" in self.parts and not is_streamed else []
         run = BackupRun.from_paths([remote.download_backup(latest[part], workdir) for part in wanted if latest.get(part)])
