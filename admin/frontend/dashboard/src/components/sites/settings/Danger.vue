@@ -189,29 +189,28 @@ const confirmDrop = async () => {
   <ActionDialog
     v-model:open="showMigrate"
     title="Migrate Site"
-    :subject="siteSubject"
-    :warning="{ title: 'The site might go down while this runs.' }"
     :error="migrateError"
     confirm-label="Migrate"
     confirm-theme="red"
     :loading="migrating"
     @confirm="confirmMigrate"
-  />
+  >
+    <p class="text-ink-gray-6 text-p-sm">The site might go down while this runs.</p>
+  </ActionDialog>
 
   <RestoreSiteDialog v-model:open="showRestore" :site-name="siteName" />
 
   <ActionDialog
     v-model:open="showRename"
     title="Rename Site"
-    :subject="siteSubject"
-    :warning="{ title: 'The site will be offline for a moment while it is renamed.' }"
     :error="renameError"
     confirm-label="Rename"
     :loading="renaming"
     :disabled="!newName.trim() || newName.trim() === siteName"
     @confirm="confirmRename"
   >
-    <template #after-warning>
+    <p class="text-ink-gray-6 text-p-sm">The site will be offline for a moment while it is renamed.</p>
+    <div>
       <TextInput v-model="newName" placeholder="prod.example.com" class="w-full">
         <template #label>
           <span class="text-sm">New name</span>
@@ -222,7 +221,7 @@ const confirmDrop = async () => {
         class="mt-3"
         :label="`Keep ${siteName} working as well`"
       />
-    </template>
+    </div>
   </ActionDialog>
 
   <ActionDialog

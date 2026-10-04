@@ -39,15 +39,6 @@ const parts = computed(() =>
   available.value.filter(({ part }) => chosen.value[part]).map(({ part }) => part),
 )
 const siteOptions = computed(() => siteNames.value.map((name) => ({ label: name, value: name })))
-const subject = computed(() =>
-  props.backup
-    ? {
-        label: fmtDateTime(props.backup.created_at),
-        description: `Backup of ${props.siteName}`,
-        icon: 'lucide-archive',
-      }
-    : null,
-)
 
 watch(open, (isOpen) => {
   if (!isOpen) return
@@ -83,11 +74,6 @@ const confirm = async () => {
   <ActionDialog
     v-model:open="open"
     title="Restore backup"
-    :subject="subject"
-    :warning="{
-      title: `This replaces the selected data on ${target || siteName}.`,
-      message: 'The site is backed up first and migrated after the restore.',
-    }"
     :error="error"
     confirm-label="Restore"
     confirm-theme="red"
@@ -95,7 +81,11 @@ const confirm = async () => {
     :disabled="!target || !parts.length"
     @confirm="confirm"
   >
-    <template #after-warning>
+    <p class="text-ink-gray-6 text-p-sm">
+      Restores the backup from {{ backup ? fmtDateTime(backup.created_at) : '' }}. The site is
+      backed up first and migrated after.
+    </p>
+    <div>
       <Select v-model="target" label="Restore into" :options="siteOptions" />
       <div class="flex flex-col gap-2 mt-3">
         <Checkbox
@@ -105,6 +95,6 @@ const confirm = async () => {
           :label="item.label"
         />
       </div>
-    </template>
+    </div>
   </ActionDialog>
 </template>

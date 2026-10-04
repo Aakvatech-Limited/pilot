@@ -59,11 +59,6 @@ const inputs: Record<string, HTMLInputElement | null> = {}
 const restoring = ref(false)
 const error = ref('')
 
-const siteSubject = computed(() => ({
-  label: props.siteName,
-  description: 'Site, database and uploaded files',
-  icon: 'lucide-globe',
-}))
 const sourceOptions = computed(() =>
   siteNames.value.filter((name) => name !== props.siteName).map((name) => ({ label: name, value: name })),
 )
@@ -143,11 +138,6 @@ const restore = async () => {
   <ActionDialog
     v-model:open="open"
     title="Restore Site"
-    :subject="siteSubject"
-    :warning="{
-      title: `This replaces the selected data on ${siteName}.`,
-      message: 'The site is backed up first and migrated after the restore.',
-    }"
     :error="error"
     confirm-label="Restore"
     confirm-theme="red"
@@ -155,8 +145,8 @@ const restore = async () => {
     :disabled="!isReady"
     @confirm="restore"
   >
-    <template #after-warning>
-      <div class="space-y-4">
+    <p class="text-ink-gray-6 text-p-sm">The site is backed up first, then restored and migrated.</p>
+    <div class="space-y-4">
         <div class="space-y-1.5">
           <TabButtons v-model="source" :options="SOURCES" class="w-full" />
           <p class="text-ink-gray-5 text-p-sm">{{ SOURCE_HINTS[source] }}</p>
@@ -219,6 +209,5 @@ const restore = async () => {
           </div>
         </template>
       </div>
-    </template>
   </ActionDialog>
 </template>

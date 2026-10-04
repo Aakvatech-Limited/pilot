@@ -23,16 +23,6 @@ const loadingBranches = ref(false)
 const switching = ref(false)
 const error = ref('')
 
-const subject = computed(() =>
-  props.app
-    ? {
-        label: props.app.title,
-        description: `Now on ${props.app.branch || 'a detached commit'}`,
-        logo: props.app.logo_url,
-      }
-    : null,
-)
-
 const options = computed(() =>
   branches.value
     .filter((name) => name !== props.app?.branch)
@@ -80,25 +70,22 @@ const confirm = async () => {
   <ActionDialog
     v-model:open="open"
     title="Switch branch"
-    :subject="subject"
-    :warning="{
-      title: 'This changes the app for every site on this bench.',
-      message: `Sites that use ${app?.title} are backed up and migrated after the switch. If the switch fails, ${app?.title} goes back to ${app?.branch || 'its current commit'}.`,
-    }"
     :error="error"
     confirm-label="Switch branch"
     :loading="switching"
     :disabled="!branch"
     @confirm="confirm"
   >
-    <template #after-warning>
-      <Select
+    <p class="text-ink-gray-6 text-p-sm">
+      {{ app?.title }} is on {{ app?.branch || 'a detached commit' }}. The switch applies to every
+      site, and the sites that use it are backed up and migrated after.
+    </p>
+    <Select
         v-model="branch"
         label="New branch"
         :options="options"
         :placeholder="loadingBranches ? 'Loading branches…' : 'Choose a branch'"
         :disabled="loadingBranches"
       />
-    </template>
   </ActionDialog>
 </template>
