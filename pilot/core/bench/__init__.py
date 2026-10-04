@@ -140,12 +140,21 @@ class Bench:
         return self.path / "config"
 
     @property
+    def uploads_path(self) -> Path:
+        """Where uploaded backups wait for the restore that removes them."""
+        return self.path / "tmp" / "uploads"
+
+    @property
     def pids_path(self) -> Path:
         return self.path / "pids"
 
     @property
     def python(self) -> Path:
         return self.env_path / "bin" / "python"
+
+    @property
+    def is_initialized(self) -> bool:
+        return self.python.exists()
 
     @property
     def frappe_call(self) -> list[str]:

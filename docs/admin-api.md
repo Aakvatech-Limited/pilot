@@ -96,6 +96,34 @@ Measuring means a `du` per site directory and one schema-size query, so the rout
 
 `POST /sites/<name>/actions/refresh-storage` queues `refresh-storage-usage` to measure again on demand. One report covers every site on the bench, so the task re-measures all of them and concurrent requests fold into one run.
 
+### Backups And Restore
+
+Pilot writes backup runs to `sites/<site>/backups`. Frappe prunes `private/backups` on every backup and every hour, so Pilot keeps its runs out of that directory and its retention policy is the only pruner.
+
+`POST /sites/<name>/actions/restore` queues `restore-site`. The body has `parts`, a list of `database`, `public`, and `private`, and one source:
+
+| Source | Body | Notes |
+|---|---|---|
+| A run of a site on this bench | `source_site`, `backup_timestamp` | A run that only exists offsite is downloaded first. Omit `source_site` to use the target's own run. |
+| A fresh backup of a site on this bench | `source_site` | The source site is backed up first. |
+| The latest backup of a remote Frappe site | `remote_site`, `password`, `backup_timestamp` | Get `backup_timestamp` from `remote-backups`. The restore stops if the remote has a newer backup by then. To restore a newer state, take a backup on the remote site first. |
+
+A remote source needs a bench session and an `https://` site. The Administrator password is checked before the task is queued and is kept out of the task record.
+
+`POST /sites/<name>/actions/remote-backups` takes `remote_site` and `password` and returns the remote's latest backup as `{"backups": [{"timestamp", "created_at", "parts"}]}`. Frappe exposes only its latest backup, so the list has one entry, or none when the remote has no backup from the last 30 days.
+
+`POST /sites/<name>/actions/restore-upload` takes the same `parts` as multipart form fields, plus the files `database`, `public`, `private`, and the optional `config` (the site config backup, which carries the encryption key). nginx `client_max_body_size` limits the upload size.
+
+A restore puts the site in maintenance mode, restores only the chosen parts, and migrates it. It takes no backup of the site first. A database from another site brings that site's encryption key. If a step fails, the site stays in maintenance mode. Restoring from another site needs a bench session; a site token can only restore its own backups.
+
+### Site Actions
+
+`POST /sites/<name>/actions/build-assets` queues `build` for the apps the site runs. Assets are shared by every site on the bench that has those apps, so the task also takes the `bench:update` lock and waits for an update or another build.
+
+### App Branches
+
+`POST /apps/<name>/actions/switch-branch` takes `{"branch": "..."}` and queues `switch-branch`. The task validates, reinstalls, and builds the app on the new branch, and returns to the old branch if a step fails. It then backs up and migrates every site that has the app, through one migration operation that takes over the task's locks. If a migration fails, restoring that operation returns the app to its previous branch and restores the site databases.
+
 ### Database Performance Report
 
 `GET /database/performance-report` returns the read-only findings behind the analyzer's Query Analysis and Index Analysis panels: `time_consuming_queries`, `full_table_scan_queries`, `unused_indexes`, `redundant_indexes`, and the `performance_schema_enabled` flag.

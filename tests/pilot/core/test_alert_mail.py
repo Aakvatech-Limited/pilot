@@ -11,9 +11,10 @@ import pytest
 
 from pilot.config import BenchConfig, MariaDBConfig, RedisConfig, WorkerConfig
 from pilot.config.alert_limit import ResourceLimitConfig
-from pilot.config.mail import MailConfig, MalformedSiteConfig
+from pilot.config.mail import MailConfig
 from pilot.core.alerts import check_mail_credentials, notify, send_mail
 from pilot.core.bench import Bench
+from pilot.exceptions import MalformedSiteConfig
 
 PAYLOAD = {
     "event": "site_down",

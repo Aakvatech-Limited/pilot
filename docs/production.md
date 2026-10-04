@@ -87,6 +87,8 @@ The cap applies only to hosts with `systemd-run` and cgroup memory delegation av
 
 To set a fixed cap instead, add `memory_limit_mb` under `[build]` in `bench.toml`. Leave it unset (or 0) to keep the automatic 85% sizing.
 
+Node.js builds get a heap of 75% of the cap through `NODE_OPTIONS=--max-old-space-size`. A `--max-old-space-size` that you set in `NODE_OPTIONS` takes priority.
+
 ## Operational Notes
 
 - Production changes may need non-interactive sudo.
