@@ -48,7 +48,7 @@ const ensureSession = async () => {
   if (!session.loaded) await loadSession()
 }
 
-export type CentralServerAction = 'overview' | 'resize' | 'snapshots'
+export type CentralServerAction = 'overview' | 'resize'
 
 /** This server's page in Central, opened on `action`. Empty when Central is not set up. */
 const centralServerUrl = (action: CentralServerAction = 'overview'): string => {

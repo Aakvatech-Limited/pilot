@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 from pilot.config.route import RoutePolicy
 from pilot.exceptions import ConfigError
@@ -40,9 +41,9 @@ class AdminConfig:
 
     @property
     def central_url(self) -> str:
-        """Central's base URL. Central serves its JWKS from its own API, so the URL is the part before `/api/`."""
-        base, separator, _ = self.jwks_url.partition("/api/")
-        return base if separator else ""
+        """Central's origin. Central serves its JWKS from its own host."""
+        url = urlsplit(self.jwks_url)
+        return f"{url.scheme}://{url.netloc}" if url.scheme and url.netloc else ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "AdminConfig":
