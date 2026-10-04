@@ -25,11 +25,6 @@ export const GENERAL_SECTIONS = [
     description: 'Send alerts to a mailbox alongside Central and webhooks.',
   },
   {
-    id: 'restore',
-    label: 'Restore a site',
-    description: 'Restore from another site, uploaded backup files, or a remote Frappe site.',
-  },
-  {
     id: 'workers',
     label: 'Background workers',
     description: 'Configure background worker groups and queues.',

@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { apiErrorMessage } from '@/api/client'
 import { sitesApi } from '@/api/sites'
 import ActionDialog from '@/components/common/ActionDialog.vue'
+import RestoreSiteDialog from '@/components/sites/RestoreSiteDialog.vue'
 import { errorMessage } from '@/utils/error'
 import { openTaskDetailPage } from '@/utils/taskRoute'
 
@@ -54,10 +55,19 @@ const DangerActions = [
     },
   },
   {
+    key: 'restore',
+    label: 'Restore site',
+    buttonLabel: 'Restore',
+    description: 'Replace its data with uploaded backup files, another site, or a remote site.',
+    action: () => {
+      showRestore.value = true
+    },
+  },
+  {
     key: 'rename',
     label: 'Rename site',
     buttonLabel: 'Rename',
-    description: "Give this site a new name.",
+    description: 'Give this site a new name.',
     action: () => {
       newName.value = ''
       keepOldHostname.value = true
@@ -86,6 +96,8 @@ const DangerActions = [
     },
   },
 ]
+
+const showRestore = ref(false)
 
 const showRename = ref(false)
 const renaming = ref(false)
@@ -185,6 +197,8 @@ const confirmDrop = async () => {
     :loading="migrating"
     @confirm="confirmMigrate"
   />
+
+  <RestoreSiteDialog v-model:open="showRestore" :site-name="siteName" />
 
   <ActionDialog
     v-model:open="showRename"

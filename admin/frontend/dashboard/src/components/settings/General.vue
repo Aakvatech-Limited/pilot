@@ -6,7 +6,6 @@ import Git from '@/components/settings/Git.vue'
 import LLM from '@/components/settings/LLM.vue'
 import Mail from '@/components/settings/Mail.vue'
 import Notifications from '@/components/settings/Notifications.vue'
-import RestoreSite from '@/components/settings/RestoreSite.vue'
 import S3Bucket from '@/components/settings/S3Bucket.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
 import { GENERAL_SECTIONS as sections } from '@/components/settings/sections'
@@ -80,7 +79,6 @@ onMounted(async () => {
   <Notifications v-else-if="openSection?.id === 'notifications'" />
   <Mail v-else-if="openSection?.id === 'mail'" />
   <Workers v-else-if="openSection?.id === 'workers'" />
-  <RestoreSite v-else-if="openSection?.id === 'restore'" />
 
   <template v-else>
     <ErrorMessage v-if="error" :message="error" class="mb-4" />
