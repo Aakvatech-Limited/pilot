@@ -20,7 +20,25 @@ jobs:
       contents: write
 ```
 
-For each push, the workflow builds the app against the matching Frappe branch and uploads `<app>-<commit>.tar.gz` and `<app>-<commit>.tar.gz.sha256` to the release `assets-<branch>`. It keeps the assets of every tagged commit and of the newest 30 other commits. Set the `keep` input to change that number. Set the `frappe-branch` input when the app branch name does not tell the Frappe branch: `version-16` and `version-16-hotfix` build against `version-16`, and every other branch builds against `develop`.
+For each push, the workflow builds the app against the matching Frappe branch and uploads `<app>-<commit>.tar.gz` and `<app>-<commit>.tar.gz.sha256` to the release `assets-<branch>`. Choose the branches in `on.push.branches`. After each upload, the workflow deletes the assets of older commits as the inputs below set. A commit is tagged when a git tag points to it.
+
+| Input | Default | Use |
+|---|---|---|
+| `keep-untagged` | `30` | The number of newest untagged commits that keep their assets. Use a small number for a busy branch without releases, such as `develop`. At least 1. |
+| `keep-tagged` | `0` | The number of newest tagged commits that keep their assets. `0` keeps all of them, so benches on an old release still download assets. |
+| `frappe-branch` | From the branch | The Frappe branch to build against. `version-16` and `version-16-hotfix` build against `version-16`, and every other branch builds against `develop`. Set it when the branch name does not tell the Frappe branch. |
+
+GitHub allows 1000 files in one release, which is 500 commits. Set `keep-tagged` before a branch gets near that number of releases.
+
+```yaml
+jobs:
+  assets:
+    uses: frappe/pilot/.github/workflows/app-assets.yml@develop
+    with:
+      keep-untagged: 10
+    permissions:
+      contents: write
+```
 
 ## Declare SPAs
 

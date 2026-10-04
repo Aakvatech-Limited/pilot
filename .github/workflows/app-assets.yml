@@ -8,11 +8,16 @@ on:
         type: string
         required: false
         default: ""
-      keep:
-        description: How many untagged commits' assets to keep on the branch's release. Tagged commits are always kept.
+      keep-untagged:
+        description: How many of the newest untagged commits keep their assets. At least 1.
         type: number
         required: false
         default: 30
+      keep-tagged:
+        description: How many of the newest tagged commits keep their assets. 0 keeps all of them.
+        type: number
+        required: false
+        default: 0
 
 permissions:
   contents: write
@@ -56,8 +61,13 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-          KEEP: ${{ inputs.keep }}
+          KEEP_UNTAGGED: ${{ inputs.keep-untagged }}
+          KEEP_TAGGED: ${{ inputs.keep-tagged }}
         run: |
+          if [ "$KEEP_UNTAGGED" -lt 1 ] || [ "$KEEP_TAGGED" -lt 0 ]; then
+            echo "keep-untagged must be at least 1 and keep-tagged at least 0." >&2
+            exit 1
+          fi
           tag="assets-${GITHUB_REF_NAME//\//-}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
@@ -65,18 +75,19 @@ jobs:
           fi
           gh release upload "$tag" dist/* --clobber
 
-          # Benches run tagged releases long after newer pushes, so their assets stay.
+          # Keep the newest commits of each kind: two files (archive and checksum) per commit.
           tagged=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" --jq '.[].commit.sha' | tr '\n' ' ')
           release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq .id)
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
             --jq '.[] | "\(.created_at) \(.id) \(.name)"' \
             | sort -r \
-            | awk -v keep="$KEEP" -v tagged="$tagged" '
+            | awk -v keep_untagged="$KEEP_UNTAGGED" -v keep_tagged="$KEEP_TAGGED" -v tagged="$tagged" '
                 BEGIN { split(tagged, shas, " "); for (i in shas) is_tagged[shas[i]] = 1 }
                 match($3, /-[0-9a-f]{40}\.tar\.gz/) {
                   sha = substr($3, RSTART + 1, 40)
-                  if (sha in is_tagged) next
-                  if (!(sha in seen)) { seen[sha] = 1; commits++ }
-                  if (commits > keep) print $2
+                  kind = (sha in is_tagged) ? "tagged" : "untagged"
+                  if (!(sha in seen)) { seen[sha] = 1; count[kind]++ }
+                  if (kind == "untagged" && count[kind] > keep_untagged) print $2
+                  if (kind == "tagged" && keep_tagged > 0 && count[kind] > keep_tagged) print $2
                 }' \
             | xargs -r -I{} gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/{}"
