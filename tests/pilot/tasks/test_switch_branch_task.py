@@ -38,7 +38,8 @@ def test_switch_branch_installs_a_branch_that_validates(tmp_path: Path) -> None:
 
     with (
         patch.object(App, "head_sha", "abc1234"),
-        patch.object(App, "current_branch", "main"),
+        patch("pilot.core.bench.inventory.BenchInventory._git_branch", return_value="main"),
+        patch.object(App, "checkout_commit"),
         patch.object(App, "switch_branch"),
         patch.object(App, "record_branch"),
         patch.object(PythonEnvManager, "install_app") as mock_install,
@@ -59,7 +60,8 @@ def test_switch_branch_returns_to_the_old_branch_when_the_new_one_is_broken(tmp_
 
     with (
         patch.object(App, "head_sha", "abc1234"),
-        patch.object(App, "current_branch", "main"),
+        patch("pilot.core.bench.inventory.BenchInventory._git_branch", return_value="main"),
+        patch.object(App, "checkout_commit"),
         patch.object(App, "switch_branch") as mock_switch,
         patch.object(PythonEnvManager, "install_app") as mock_install,
         pytest.raises(AppValidationError, match=r"fixtures/role\.json"),
@@ -96,7 +98,8 @@ def test_switch_branch_rolls_back_when_a_check_itself_fails(tmp_path: Path) -> N
 
     with (
         patch.object(App, "head_sha", "abc1234"),
-        patch.object(App, "current_branch", "main"),
+        patch("pilot.core.bench.inventory.BenchInventory._git_branch", return_value="main"),
+        patch.object(App, "checkout_commit"),
         patch.object(App, "switch_branch") as mock_switch,
         patch.object(App, "validate", side_effect=CommandError("uv exploded")),
         patch.object(PythonEnvManager, "install_app") as mock_install,
@@ -115,7 +118,8 @@ def test_a_failed_reinstall_returns_to_the_old_branch_and_reinstalls_it(tmp_path
 
     with (
         patch.object(App, "head_sha", "abc1234"),
-        patch.object(App, "current_branch", "main"),
+        patch("pilot.core.bench.inventory.BenchInventory._git_branch", return_value="main"),
+        patch.object(App, "checkout_commit"),
         patch.object(App, "switch_branch") as mock_switch,
         patch.object(App, "record_branch") as mock_record,
         patch.object(PythonEnvManager, "install_app", side_effect=[CommandError("uv failed"), None]),
@@ -169,3 +173,17 @@ def test_a_switch_without_the_site_locks_stops_before_changing_code(tmp_path: Pa
         task.run()
 
     switch.assert_not_called()
+
+
+@pytest.mark.parametrize(("branch", "switched_to", "tracked"), [("main", "main", "main"), ("", None, "")])
+def test_return_to_restores_the_commit_on_its_tracked_branch(tmp_path: Path, branch, switched_to, tracked) -> None:
+    """A pinned commit stays on its tracked branch; without one the checkout stays detached."""
+    from pilot.config import AppConfig
+
+    app = App(AppConfig(name="myapp", repo="https://github.com/frappe/myapp", branch="develop"), make_bench(tmp_path))
+    with patch.object(App, "switch_branch") as switch, patch.object(App, "checkout_commit") as checkout:
+        app.return_to(branch, "abc1234")
+
+    assert switch.call_args_list == ([call(switched_to)] if switched_to else [])
+    checkout.assert_called_once_with("abc1234")
+    assert app.config.branch == ("develop" if switched_to else tracked)

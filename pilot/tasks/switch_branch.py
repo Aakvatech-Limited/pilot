@@ -39,7 +39,7 @@ class SwitchBranchTask(Task):
 
         self.require_migration_locks()
         app = self.bench.app(self.name)
-        previous_branch, previous_sha = app.current_branch, app.head_sha
+        previous_branch, previous_sha = app.config.branch, app.head_sha
         env = PythonEnvManager(self.bench)
         self.checkout(app)
         is_installed = False
@@ -94,12 +94,8 @@ class SwitchBranchTask(Task):
 
     @step("restore", lambda self: f"Return {self.name} to its previous branch")
     def restore(self, env, app, previous_branch: str, previous_sha: str, is_installed: bool) -> None:
-        """The editable install makes a checkout live at once. Restore the branch, not its
-        commit: a detached HEAD would disagree with bench.toml."""
-        if previous_branch:
-            app.switch_branch(previous_branch)
-        else:
-            app.checkout_commit(previous_sha)  # it was already detached
+        """The editable install makes a checkout live at once, so go straight back."""
+        app.return_to(previous_branch, previous_sha)
         if is_installed:
             env.install_app(app)
             env.build_assets_for_app(app)

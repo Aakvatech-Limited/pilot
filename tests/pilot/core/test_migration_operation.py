@@ -803,8 +803,7 @@ def test_reverting_a_branch_switch_migration_returns_the_app_to_its_branch(tmp_p
     assert operation.state == "reverting_apps"
     operation.revert_apps()
 
-    app.switch_branch.assert_called_once_with("main")
-    app.checkout_commit.assert_called_once_with("1111111")
+    app.return_to.assert_called_once_with("main", "1111111")
     app.record_branch.assert_called_once_with()
     mock_bench._reinstall_apps.assert_called_once()
     assert mock_bench._reinstall_apps.call_args.args[0] == {"myapp"}

@@ -337,10 +337,10 @@ class MigrationOperation:
                 on_progress(f"Reverting {revision.name} to {revision.branch or revision.sha[:8]}...")
                 app = self.bench.app(revision.name)
                 if revision.branch:
-                    app.switch_branch(revision.branch)
-                app.checkout_commit(revision.sha)
-                if revision.branch:
+                    app.return_to(revision.branch, revision.sha)
                     app.record_branch()
+                else:
+                    app.checkout_commit(revision.sha)
             if self.apps:
                 filter_set = set(self.apps_filter) if self.apps_filter else None
                 self.bench._reinstall_apps(filter_set, on_progress)
