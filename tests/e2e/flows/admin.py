@@ -56,7 +56,7 @@ def drop_site(page: Page, base_url: str, site_name: str) -> None:
     page.get_by_role("button", name="Drop", exact=True).click()
 
     dialog = page.get_by_role("dialog")
-    dialog.get_by_label(f"Type {site_name} to confirm").fill(site_name)
+    dialog.get_by_label("Type the site name to confirm").fill(site_name)
     task_id = run_task_action(
         page,
         f"/api/v1/sites/{site_name}",

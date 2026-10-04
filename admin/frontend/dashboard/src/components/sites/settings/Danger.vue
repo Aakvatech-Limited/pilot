@@ -94,6 +94,7 @@ const DangerActions = [
     action: () => {
       confirmName.value = ''
       dropError.value = ''
+      takeBackup.value = true
       showDrop.value = true
     },
   },
@@ -148,12 +149,13 @@ const confirmReset = async () => {
 const showDrop = ref(false)
 const dropping = ref(false)
 const dropError = ref('')
+const takeBackup = ref(true)
 
 const confirmDrop = async () => {
   dropping.value = true
   dropError.value = ''
   try {
-    const data = await sitesApi.drop(props.siteName)
+    const data = await sitesApi.drop(props.siteName, { noBackup: !takeBackup.value })
     if (data.task_id) {
       showDrop.value = false
       openTaskDetailPage(router, data.task_id)
@@ -244,7 +246,7 @@ const confirmDrop = async () => {
     <template #after-warning>
       <TextInput v-model="confirmName" :placeholder="siteName" class="w-full">
         <template #label>
-          <span class="text-sm break-all">Type {{ siteName }} to confirm</span>
+          <span class="text-sm">Type the site name to confirm</span>
         </template>
       </TextInput>
     </template>
@@ -256,7 +258,7 @@ const confirmDrop = async () => {
     :subject="siteSubject"
     :warning="{
       title: `This can't be undone.`,
-      message: `The database and every file belonging to ${siteName} are deleted. Existing backups are kept for 30 days.`,
+      message: `The database and every file belonging to ${siteName} will be deleted. Existing backups are kept for 30 days.`,
     }"
     :error="dropError"
     confirm-label="Drop site"
@@ -268,9 +270,10 @@ const confirmDrop = async () => {
     <template #after-warning>
       <TextInput v-model="confirmName" :placeholder="siteName" class="w-full">
         <template #label>
-          <span class="text-sm break-all">Type {{ siteName }} to confirm</span>
+          <span class="text-sm">Type the site name to confirm</span>
         </template>
       </TextInput>
+      <Checkbox v-model="takeBackup" label="Take a backup before dropping" />
     </template>
   </ActionDialog>
 </template>
