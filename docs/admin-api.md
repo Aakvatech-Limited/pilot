@@ -96,9 +96,21 @@ Measuring means a `du` per site directory and one schema-size query, so the rout
 
 `POST /sites/<name>/actions/refresh-storage` queues `refresh-storage-usage` to measure again on demand. One report covers every site on the bench, so the task re-measures all of them and concurrent requests fold into one run.
 
-### Backups
+### Backups And Restore
 
 Pilot writes backup runs to `sites/<site>/backups`. Frappe prunes `private/backups` on every backup and every hour, so Pilot keeps its runs out of that directory and its retention policy is the only pruner.
+
+`POST /sites/<name>/actions/restore` queues `restore-site`. The body has `parts`, a list of `database`, `public`, and `private`, and one source:
+
+| Source | Body | Notes |
+|---|---|---|
+| A run of a site on this bench | `source_site`, `backup_timestamp` | A run that only exists offsite is downloaded first. Omit `source_site` to use the target's own run. |
+| A fresh backup of a site on this bench | `source_site` | The source site is backed up first. |
+| A remote Frappe site | `remote_site`, `password` | Needs a bench session and an `https://` site. The Administrator password is checked before the task is queued and is kept out of the task record. The remote takes a fresh backup, which emails its Administrator, and Pilot waits until all of its files are complete. |
+
+`POST /sites/<name>/actions/restore-upload` takes the same `parts` as multipart form fields, plus the files `database`, `public`, `private`, and the optional `config` (the site config backup, which carries the encryption key). nginx `client_max_body_size` limits the upload size.
+
+A restore takes a backup of the target, puts it in maintenance mode, restores only the chosen parts, and migrates it. A database from another site brings that site's encryption key. If a step fails, the site stays in maintenance mode and the task log names the backup to restore. Restoring from another site needs a bench session; a site token can only restore its own backups.
 
 ### Site Actions
 

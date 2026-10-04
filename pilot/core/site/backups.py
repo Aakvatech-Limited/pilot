@@ -53,6 +53,24 @@ class SiteBackups:
             raise BenchError(f"The backup of {self.site.config.name} produced no files.")
         return timestamp, files
 
+    def fetch_run(self, timestamp: str, destination: Path) -> list[Path]:
+        """One run's files on local disk, downloaded into `destination` when only the
+        offsite copy is left."""
+        from pilot.exceptions import BenchError
+
+        local = sorted(path for path in self.directory.glob(f"{timestamp}-*") if path.is_file())
+        if local:
+            return local
+        offsite = self._offsite()
+        files = offsite.get_backup(self.site.config.name, timestamp) if offsite else None
+        if not files:
+            raise BenchError(f"Backup {timestamp} of {self.site.config.name} was not found.")
+        paths = []
+        for filename in files.values():
+            offsite.download(self.site.config.name, timestamp, filename, destination / filename)
+            paths.append(destination / filename)
+        return paths
+
     def latest_run(self) -> tuple[str, list[Path]]:
         """Timestamp and files of the most recently created backup run for this site."""
         groups: dict[str, list[Path]] = {}

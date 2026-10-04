@@ -140,6 +140,11 @@ class Bench:
         return self.path / "config"
 
     @property
+    def uploads_path(self) -> Path:
+        """Where uploaded backups wait for the restore that removes them."""
+        return self.path / "tmp" / "uploads"
+
+    @property
     def pids_path(self) -> Path:
         return self.path / "pids"
 

@@ -53,6 +53,18 @@ export const sitesApi = {
   clearCache: (name: string): Promise<TaskPayload> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/clear-cache`).json(),
 
+  restore: (name: string, payload: Record<string, unknown>): Promise<TaskPayload> =>
+    request.post(`sites/${encodeURIComponent(name)}/actions/restore`, { json: payload }).json(),
+
+  // Large archives take as long as the upload does.
+  restoreUpload: (name: string, form: FormData): Promise<TaskPayload> =>
+    request
+      .post(`sites/${encodeURIComponent(name)}/actions/restore-upload`, {
+        body: form,
+        timeout: false,
+      })
+      .json(),
+
   buildAssets: (name: string): Promise<TaskPayload> =>
     request.post(`sites/${encodeURIComponent(name)}/actions/build-assets`).json(),
 

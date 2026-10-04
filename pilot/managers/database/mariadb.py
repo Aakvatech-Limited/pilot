@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from typing import NoReturn
+from typing import IO, NoReturn
 
 from pilot.config import MariaDBConfig
 from pilot.core.database.mariadb_variables import (
@@ -34,6 +34,7 @@ from pilot.managers.platform import is_macos, which
 from pilot.utils import cli_root, run_command
 
 _CLIENT_TIMEOUT = 5
+_IMPORT_CHUNK_BYTES = 1024 * 1024
 _MEMORY_RELEASE_TIMEOUT = 60
 _MANAGED_CONFIG_HEADER = "# Managed by Pilot's database variable editor.\n"
 _OPTION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -923,6 +924,34 @@ class MariaDBManager(UserOwnedDBManager):
             timeout=_CLIENT_TIMEOUT,
             env={**os.environ, "MYSQL_PWD": self.config.root_password},
         )
+
+    def recreate_database(self, db_name: str) -> None:
+        """Drop and create an empty database. Grants name the database, so they survive."""
+        database = db_name.replace("`", "")
+        self.run_admin_sql(
+            f"DROP DATABASE IF EXISTS `{database}`;\n"
+            f"CREATE DATABASE `{database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+        )
+
+    def import_sql(self, db_name: str, dump: IO[bytes]) -> None:
+        """Pipe an SQL dump into `db_name` as it is read."""
+        process = subprocess.Popen(
+            [*self._client_command(), db_name.replace("`", "")],
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "MYSQL_PWD": self.config.root_password},
+        )
+        assert process.stdin is not None and process.stderr is not None
+        try:
+            while chunk := dump.read(_IMPORT_CHUNK_BYTES):
+                process.stdin.write(chunk)
+        except BrokenPipeError:
+            pass  # the client exited; its stderr says why
+        finally:
+            process.stdin.close()
+        error = process.stderr.read().decode(errors="replace").strip()
+        if process.wait() != 0:
+            raise DatabaseError(f"The database import failed: {error}")
 
     @contextmanager
     def temporary_setup_user(self, db_name: str):

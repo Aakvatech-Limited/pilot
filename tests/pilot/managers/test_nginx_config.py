@@ -1081,3 +1081,11 @@ def test_a_pinned_lineage_is_what_the_vhost_references(tmp_path: Path) -> None:
 
     assert "/etc/letsencrypt/live/old.example.com/fullchain.pem" in config
     assert "/etc/letsencrypt/live/new.example.com/" not in config
+
+
+def test_admin_accepts_uploads_as_large_as_a_site(tmp_path: Path) -> None:
+    """Backup uploads go to the admin; nginx's 1 MB default would refuse them."""
+    config = _renderer(tmp_path, _ADMIN_DATA).generate_bench_config([], admin_ssl=False)
+
+    admin_block = config[config.index("server_name admin.example.com;") :]
+    assert "client_max_body_size 50m;" in admin_block

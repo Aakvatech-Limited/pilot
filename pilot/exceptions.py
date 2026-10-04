@@ -84,6 +84,10 @@ class MalformedSiteConfig(ConfigError):
     """common_site_config.json cannot be parsed, so it must not be rewritten."""
 
 
+class RemoteSiteError(BenchError):
+    pass
+
+
 class DatabaseError(BenchError):
     """A database server operation failed (connection, provisioning, credentials)."""
 
