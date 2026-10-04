@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
 import { Button, Dialog, ErrorMessage, Spinner, toast } from 'frappe-ui'
-
-import CopyBtn from '@/components/common/CopyBtn.vue'
-import SettingsRow from '@/components/settings/SettingsRow.vue'
-
+import { computed, onMounted, ref } from 'vue'
 import { cliUpdatesApi } from '@/api/settings'
 import { tasksApi } from '@/api/tasks'
+import CopyBtn from '@/components/common/CopyBtn.vue'
+import SettingsRow from '@/components/settings/SettingsRow.vue'
+import type { TaskPayload } from '@/types/tasks'
 import { isTaskActive } from '@/utils/taskFormat'
 
 const DEV_COMMANDS = 'git pull\npilot admin build\npilot admin upgrade'
@@ -14,13 +13,16 @@ const DEV_COMMANDS = 'git pull\npilot admin build\npilot admin upgrade'
 const POLL_INTERVAL_MS = 1500
 
 const loading = ref(true)
-const status = ref({ current_version: '', is_dev: true })
-const latestVersion = ref(null)
+const status = ref<{ current_version: string; is_dev: boolean; restarts_admin?: boolean }>({
+  current_version: '',
+  is_dev: true,
+})
+const latestVersion = ref<string | null>(null)
 const checking = ref(false)
 const updating = ref(false)
 const log = ref('')
-const versionError = ref(null)
-const dialogError = ref(null)
+const versionError = ref<string | null>(null)
+const dialogError = ref<string | null>(null)
 const dialogOpen = ref(false)
 
 const isDev = computed(() => status.value.is_dev || !status.value.current_version)
@@ -52,9 +54,11 @@ const check = async () => {
   versionError.value = null
   try {
     const result = await cliUpdatesApi.check()
+    const latest = 'latest_version' in result ? result.latest_version : null
+
     status.value = { ...status.value, ...result }
-    latestVersion.value = result.latest_version
-    if (result.latest_version && result.latest_version !== status.value.current_version) {
+    latestVersion.value = latest
+    if (latest && latest !== status.value.current_version) {
       dialogOpen.value = true
     } else {
       toast.info(`${status.value.current_version} (latest)`, {
@@ -84,14 +88,14 @@ const update = async () => {
   }
 }
 
-const pollTask = async (taskId) => {
+const pollTask = async (taskId: string) => {
   // The admin service restarts mid-update, so detail requests fail transiently.
   // Give it a bounded window to come back before declaring the update lost.
   const MAX_CONSECUTIVE_FAILURES = 40 // ~60s at POLL_INTERVAL_MS
   let failures = 0
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
-    let task
+    let task: TaskPayload
     try {
       task = await tasksApi.detail(taskId)
       failures = 0
@@ -110,10 +114,13 @@ const pollTask = async (taskId) => {
       dialogError.value = 'Update did not complete successfully.'
       return
     }
+    const restartsAdmin = status.value.restarts_admin !== false
     status.value = await cliUpdatesApi.status().catch(() => status.value)
     latestVersion.value = null
     dialogOpen.value = false
-    toast.success('Updated successfully')
+    toast.success('Updated successfully', {
+      description: restartsAdmin ? undefined : 'Stop pilot start and run it again to use the new version.',
+    })
     return
   }
 }
@@ -164,7 +171,12 @@ const pollTask = async (taskId) => {
       </p>
 
       <p class="text-ink-gray-5 text-p-sm">
-        Pilot updates itself and restarts the admin service. Your benches keep running.
+        <template v-if="status.restarts_admin !== false">
+          Pilot updates itself and restarts the admin service. Your benches keep running.
+        </template>
+        <template v-else>
+          Pilot updates itself. Then stop <code>pilot start</code> and run it again to use the new version.
+        </template>
       </p>
     </div>
 

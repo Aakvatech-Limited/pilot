@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { nextTick, ref } from 'vue'
+
+import { isSelectionInside } from '@/utils/textSelection'
 
 interface Props {
-  lines?: any[]
+  lines?: string[]
   streaming?: boolean
   lineNumbers?: boolean
   emptyText?: string
@@ -19,11 +21,12 @@ withDefaults(defineProps<Props>(), {
   fill: false,
 })
 
-const el = ref(null)
+const el = ref<HTMLElement | null>(null)
 
 const scrollToBottom = () => {
   nextTick(() => {
-    if (el.value) el.value.scrollTop = el.value.scrollHeight
+    if (!el.value || isSelectionInside(window.getSelection(), el.value)) return
+    el.value.scrollTop = el.value.scrollHeight
   })
 }
 
@@ -64,6 +67,9 @@ defineExpose({ scrollToBottom })
   padding: 0.75rem 0;
   background: var(--terminal-bg);
   color: var(--terminal-fg);
+}
+.terminal ::selection {
+  background: rgb(255 255 255 / 0.25);
 }
 .terminal--fill {
   flex: 1;

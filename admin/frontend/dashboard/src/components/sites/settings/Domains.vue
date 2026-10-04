@@ -1,43 +1,52 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Badge, Button, Dropdown, ErrorMessage, LoadingText, Tooltip } from 'frappe-ui'
+import {
+  Badge,
+  Button,
+  Dropdown,
+  type DropdownItem,
+  ErrorMessage,
+  LoadingText,
+  Tooltip,
+} from 'frappe-ui'
 
 import AddDomainDialog from '@/components/sites/settings/domains/AddDomainDialog.vue'
 import RemoveDomainDialog from '@/components/sites/settings/domains/RemoveDomainDialog.vue'
 
-import { useSite } from '@/composables/sites/useSite'
 import { apiErrorMessage } from '@/api/client'
 import { sitesApi } from '@/api/sites'
+import type { SiteDomain } from '@/types/siteDomains'
+import { useSite } from '@/composables/sites/useSite'
+import { errorMessage } from '@/utils/error'
 
 interface Props {
   siteName: string
 }
 
+interface DomainRow extends SiteDomain {
+  isSite: boolean
+  isPrimary: boolean
+}
+
 const props = defineProps<Props>()
 
-const { site, nginxEnabled } = useSite(props.siteName)
+const { nginxEnabled } = useSite(props.siteName)
 
-const domains = ref([])
-const primaryDomain = ref(null)
+const domains = ref<SiteDomain[]>([])
+const primaryDomain = ref('')
 const loading = ref(false)
 const error = ref('')
 
 const domainRows = computed(() => {
-  const rows = [
-    {
-      domain: props.siteName,
-      isSite: true,
-      isPrimary: !primaryDomain.value || primaryDomain.value === props.siteName,
-    },
-  ]
-  for (const domain of domains.value) {
-    rows.push({ domain, isSite: false, isPrimary: primaryDomain.value === domain })
-  }
-  return rows
+  return domains.value.map((route) => ({
+    ...route,
+    isSite: route.is_site,
+    isPrimary: route.is_primary,
+  }))
 })
 
-const domainMenuOptions = (row) => {
-  const options = []
+const domainMenuOptions = (row: DomainRow): DropdownItem[] => {
+  const options: DropdownItem[] = []
   if (!row.isPrimary) {
     options.push({
       label: 'Make primary',
@@ -62,15 +71,15 @@ const loadDomains = async () => {
   try {
     const data = await sitesApi.domains.list(props.siteName)
     domains.value = data.domains || []
-    primaryDomain.value = data.primary || null
+    primaryDomain.value = data.primary || ''
   } catch (e) {
-    error.value = e.message || 'Failed to load domains.'
+    error.value = errorMessage(e, 'Failed to load domains.')
   } finally {
     loading.value = false
   }
 }
 
-const setPrimary = async (domain) => {
+const setPrimary = async (domain: string) => {
   error.value = ''
   try {
     const data = await sitesApi.domains.setPrimary(props.siteName, domain)
@@ -80,7 +89,7 @@ const setPrimary = async (domain) => {
     }
     await loadDomains()
   } catch (e) {
-    error.value = e.message || 'Failed to set primary domain.'
+    error.value = errorMessage(e, 'Failed to set primary domain.')
   }
 }
 
@@ -88,7 +97,7 @@ const showAdd = ref(false)
 const showRemove = ref(false)
 const removeTarget = ref('')
 
-const openRemove = (domain) => {
+const openRemove = (domain: string) => {
   removeTarget.value = domain
   showRemove.value = true
 }
@@ -114,30 +123,21 @@ watch(nginxEnabled, (enabled) => {
         class="flex justify-between items-start gap-x-2.5 first:mt-1 py-4 border-b border-outline-alpha-gray-1"
       >
         <div class="flex items-start gap-2.5 min-w-0">
-          <Tooltip :text="site?.ssl ? 'SSL active' : 'SSL inactive'">
+          <Tooltip :text="row.tls ? 'TLS active' : 'TLS inactive'">
             <span
               class="mt-0.5 size-4 text-ink-gray-5 shrink-0"
-              :class="site?.ssl ? 'lucide-lock text-ink-green-5' : 'lucide-lock-open'"
+              :class="row.tls ? 'lucide-lock text-ink-green-5' : 'lucide-lock-open'"
             />
           </Tooltip>
 
           <div class="flex items-center gap-2 min-w-0">
             <p class="font-medium text-ink-gray-8 truncate">{{ row.domain }}</p>
-            <Badge
-              v-if="row.isPrimary"
-              label="Primary"
-              theme="green"
-              size="sm"
-              class="shrink-0"
-            />
+            <Badge v-if="row.isPrimary" label="Primary" theme="green" size="sm" class="shrink-0" />
             <Badge v-else-if="row.isSite" label="Included" size="sm" class="shrink-0" />
           </div>
         </div>
 
-        <Dropdown
-          v-if="domainMenuOptions(row).length"
-          :options="domainMenuOptions(row)"
-        >
+        <Dropdown v-if="domainMenuOptions(row).length" :options="domainMenuOptions(row)">
           <template #default="{ open }">
             <Button
               variant="ghost"

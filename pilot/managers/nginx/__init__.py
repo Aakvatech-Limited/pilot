@@ -204,22 +204,55 @@ class NginxConfigRenderer:
 
     def _site_vhosts(self, site: "SiteConfig", tls_domains: list[str]) -> list[SimpleNamespace]:
         """Split a site's vhosts by where TLS terminates."""
-        plain = [domain for domain in site.all_domains if domain not in tls_domains]
         vhosts = []
-        if plain:
-            vhosts.append(self._site_vhost(site, plain, ssl=False))
-        if tls_domains:
-            vhosts.append(self._site_vhost(site, tls_domains, ssl=True))
+        groups: dict[tuple[bool, str, str], list[str]] = {}
+        for domain in site.all_domains:
+            route = site.configured_route_for(domain)
+            ssl = domain in tls_domains
+            client_ip_source = route.client_ip_source if route else (
+                "proxy_protocol_v2"
+                if ssl and self.bench.config.proxy.protocol_v2
+                else "x_forwarded_for"
+                if self._proxy_servers
+                else "direct"
+            )
+            public_scheme = route.public_scheme if route else self._unrouted_scheme(client_ip_source)
+            key = (ssl, public_scheme, client_ip_source)
+            groups.setdefault(key, []).append(domain)
+        for (ssl, public_scheme, client_ip_source), domains in groups.items():
+            vhosts.append(
+                self._site_vhost(site, domains, ssl, public_scheme, client_ip_source)
+            )
         return vhosts
 
-    def _site_vhost(self, site: "SiteConfig", domains: list[str], ssl: bool) -> SimpleNamespace:
+    @staticmethod
+    def _unrouted_scheme(client_ip_source: str) -> str:
+        """Trust the edge's scheme only where it terminates TLS, never on PROXY-protocol passthrough."""
+        return "$http_x_forwarded_proto" if client_ip_source == "x_forwarded_for" else "$scheme"
+
+    def _site_vhost(
+        self,
+        site: "SiteConfig",
+        domains: list[str],
+        ssl: bool,
+        public_scheme: str,
+        client_ip_source: str,
+    ) -> SimpleNamespace:
         canonical = site.primary if (len(site.all_domains) > 1 and site.primary_domain) else ""
         return SimpleNamespace(
             kind="site",
             server_name=" ".join(domains),
             ssl=ssl,
-            proxy_protocol=ssl and self.bench.config.proxy.protocol_v2,
-            forwarded_proto=self._forwarded_proto(ssl and self.bench.config.proxy.protocol_v2),
+            proxy_protocol=client_ip_source == "proxy_protocol_v2",
+            trusted_proxy=client_ip_source != "direct",
+            forwarded_for=(
+                "$proxy_protocol_addr"
+                if client_ip_source == "proxy_protocol_v2"
+                else "$http_x_forwarded_for"
+                if client_ip_source == "x_forwarded_for"
+                else "$proxy_add_x_forwarded_for"
+            ),
+            public_scheme=public_scheme,
             cert=live_cert_path(self.bench.certificate_name(site)),
             key=live_key_path(self.bench.certificate_name(site)),
             name=site.name,
@@ -227,18 +260,31 @@ class NginxConfigRenderer:
             canonical=canonical,
         )
 
-    def _forwarded_proto(self, proxy_protocol: bool) -> str:
-        """Trust the edge's scheme only where it terminates TLS, never on PROXY-protocol passthrough."""
-        return "$http_x_forwarded_proto" if self._proxy_servers and not proxy_protocol else "$scheme"
-
     def _admin_vhost(self, ssl: bool) -> SimpleNamespace:
         admin = self.bench.config.admin
+        route = admin.route_policy
+        legacy_source = (
+            "proxy_protocol_v2"
+            if ssl and self.bench.config.proxy.protocol_v2
+            else "x_forwarded_for"
+            if self._proxy_servers
+            else "direct"
+        )
+        client_ip_source = route.client_ip_source if admin.route else legacy_source
         return SimpleNamespace(
             kind="admin",
             server_name=admin.domain,
             ssl=ssl,
-            proxy_protocol=ssl and self.bench.config.proxy.protocol_v2,
-            forwarded_proto=self._forwarded_proto(ssl and self.bench.config.proxy.protocol_v2),
+            proxy_protocol=client_ip_source == "proxy_protocol_v2",
+            trusted_proxy=client_ip_source != "direct",
+            forwarded_for=(
+                "$proxy_protocol_addr"
+                if client_ip_source == "proxy_protocol_v2"
+                else "$http_x_forwarded_for"
+                if client_ip_source == "x_forwarded_for"
+                else "$proxy_add_x_forwarded_for"
+            ),
+            public_scheme=route.public_scheme if admin.route else self._unrouted_scheme(client_ip_source),
             cert=live_cert_path(admin.domain),
             key=live_key_path(admin.domain),
             port=admin.internal_port,
@@ -249,7 +295,6 @@ class NginxConfigRenderer:
     ) -> dict[str, Any]:
         config = self.bench.config
         nginx = config.nginx
-        proxy_servers = self._proxy_servers
         return {
             "upstream_name": config.name,
             "upstream_server": GunicornManager(self.bench).upstream_server,
@@ -262,8 +307,11 @@ class NginxConfigRenderer:
             "acme_root": config.letsencrypt.webroot_path,
             "error_dir": self.bench.config_path / "nginx" / "error_pages",
             "error_codes": list(ERROR_PAGES),
-            "proxy_servers": proxy_servers,
-            "proxy_peers": "|".join(re.escape(ip) for ip in proxy_servers),
+            "proxy_servers": self._proxy_servers,
+            "proxy_gate_variable": "$bench_"
+            + re.sub(r"[^a-zA-Z0-9_]", "_", config.name)
+            + "_from_proxy",
+            "proxy_gate_enabled": any(vhost.trusted_proxy for vhost in vhosts),
             "firewall": config.firewall,
             "waf_active": self._is_waf_active(),
             "waf_rules_file": self.bench.config_path / "modsecurity" / "main.conf",

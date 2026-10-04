@@ -1,22 +1,26 @@
 <script setup lang="ts">
+import { Badge, Button, ErrorMessage, Skeleton } from 'frappe-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Badge, Button, ErrorMessage, Skeleton } from 'frappe-ui'
 
 import AddAppFromGithubDialog from '@/components/apps/AddAppFromGithubDialog.vue'
-import PageHero from '@/components/common/PageHero.vue'
-import ChooseSiteDialog from '@/components/sites/ChooseSiteDialog.vue'
+import NewAppDialog from '@/components/apps/NewAppDialog.vue'
 import InstallAppDialog from '@/components/apps/InstallAppDialog.vue'
+import PageHero from '@/components/common/PageHero.vue'
 import MarketplaceAppCard from '@/components/marketplace/MarketplaceAppCard.vue'
 import MarketplaceAppCardSkeleton from '@/components/marketplace/MarketplaceAppCardSkeleton.vue'
 import MarketplaceFilters from '@/components/marketplace/MarketplaceFilters.vue'
+import ChooseSiteDialog from '@/components/sites/ChooseSiteDialog.vue'
 
 import { useMarketplace } from '@/composables/apps/useMarketplace'
 import { useIsMobile } from '@/composables/common/useIsMobile'
+import type { MarketplaceListing } from '@/composables/apps/useMarketplace'
 
 const isMobile = useIsMobile()
 const route = useRoute()
 const router = useRouter()
+const siteQuery = route.query.site
+const initialSiteName = typeof siteQuery === 'string' ? siteQuery : ''
 
 const {
   loading,
@@ -35,7 +39,7 @@ const {
   sites,
   currentSiteName,
   otherBenchApps,
-} = useMarketplace(route.query.site)
+} = useMarketplace(initialSiteName)
 
 const siteLabel = computed(() => currentSiteName.value || 'All sites')
 
@@ -52,7 +56,8 @@ const filteredHeading = computed(() => {
 const showChooseSite = ref(false)
 const showInstallApp = ref(false)
 const showAddFromGithub = ref(false)
-const installTarget = ref(null)
+const showNewApp = ref(false)
+const installTarget = ref<MarketplaceListing | null>(null)
 
 watch(
   () => route.query.addFromGithub,
@@ -64,7 +69,7 @@ watch(
   { immediate: true },
 )
 
-const onInstall = (app) => {
+const onInstall = (app: MarketplaceListing) => {
   installTarget.value = app
   showInstallApp.value = true
 }
@@ -116,6 +121,7 @@ onMounted(load)
     v-model:works-with="worksWith"
     :works-with-options="worksWithOptions"
     @add-from-github="showAddFromGithub = true"
+    @new-app="showNewApp = true"
   />
 
   <div class="px-3 sm:px-4 mx-auto box-content max-w-3xl pb-40">
@@ -206,4 +212,6 @@ onMounted(load)
     :site-name="currentSiteName"
   />
   <AddAppFromGithubDialog v-model:open="showAddFromGithub" :site-name="currentSiteName" />
+
+  <NewAppDialog v-model:open="showNewApp" />
 </template>

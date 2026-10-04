@@ -108,6 +108,14 @@ def test_site_tasks_reject_empty_admin_password(tmp_path: Path, password) -> Non
         TaskRunner(tmp_path).run("new-site", {"name": "site.localhost", "admin_password": password})
 
 
+@pytest.mark.parametrize("blank", ["name", "description", "publisher", "email"])
+def test_new_app_rejects_blank_required_args(tmp_path: Path, blank: str) -> None:
+    args = {"name": "people", "description": "Hi", "publisher": "Frappe", "email": "t@f.io"}
+    args[blank] = "  "
+    with pytest.raises(ValueError, match="must not be empty"):
+        TaskRunner(tmp_path).run("new-app", args)
+
+
 def test_command_argv_get_app(tmp_path: Path) -> None:
     argv = task_argv(tmp_path, "get-app", {"name": "erpnext", "repo": "https://github.com/frappe/erpnext"})
     assert argv[0] == sys.executable
@@ -630,3 +638,16 @@ def test_task_retention_limit(tmp_path: Path) -> None:
         and (entry / "status").read_text().strip() in {"success", "failed", "killed"}
     ]
     assert len(remaining_completed) == TASK_RETENTION_LIMIT
+
+
+def test_a_running_task_stream_ends_when_the_worker_drains(tmp_path: Path) -> None:
+    """Otherwise an open dashboard holds every Admin restart for the full graceful timeout."""
+    task_id = "20260521-143022-aabbcc"
+    task_dir = _make_task_dir(tmp_path / "tasks", task_id, status="running")
+    (task_dir / "output.log").write_text("alpha\n")
+
+    with patch("os.kill", return_value=None):
+        events = list(TaskReader(tmp_path).stream_output(task_id, should_stop=lambda: True))
+
+    assert {"type": "line", "line": "alpha"} in events
+    assert all(event["type"] != "done" for event in events)

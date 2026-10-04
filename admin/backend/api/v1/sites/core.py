@@ -31,8 +31,9 @@ from admin.backend.providers.apps import AppProvider
 from admin.backend.providers.sites import SiteInfo, SiteProvider
 from pilot.core.bench import Bench
 from pilot.core.site.login import site_url
-from pilot.internal.site_paths import site_config_path, site_exists
+from pilot.internal.site_paths import site_exists
 from pilot.internal.validators import validate_site_name
+from pilot.tasks.build import BuildTask
 from pilot.tasks.clear_cache import ClearCacheTask
 from pilot.tasks.drop_site import DropSiteTask
 from pilot.tasks.new_site import NewSiteTask
@@ -73,21 +74,26 @@ def detail(name: str):
         installable = []
 
     try:
-        bench_config = Bench(bench_root).config
+        bench = Bench(bench_root)
+        bench_config = bench.config
+        pilot_site = next(item.config for item in bench.sites() if item.config.name == name)
         http_port = bench_config.http_port
         nginx_enabled = bench_config.production.enabled
-        admin_tls = bench_config.admin.tls
+        admin_tls = bench_config.admin.route_policy.public_tls
         url = site_url(name, site.site_config, bench_config)
+        site_tls = pilot_site.uses_tls(pilot_site.primary)
     except Exception:
         http_port = 8000
         nginx_enabled = False
         admin_tls = False
         url = f"http://{name}:8000"
+        site_tls = False
 
     return jsonify(
         {
             **_site_resource(site),
             "ssl": bool(site.site_config.get("ssl")),
+            "tls": site_tls,
             "installable_apps": installable,
             "http_port": http_port,
             "nginx_enabled": nginx_enabled,
@@ -251,6 +257,25 @@ def clear_cache(name: str):
     return accepted_task_response(bench_root, task_id)
 
 
+@sites_bp.post("/<name>/actions/build-assets")
+@require_scope(site_name)
+def build_assets(name: str):
+    bench_root = Path(current_app.config["BENCH_ROOT"])
+    if not site_exists(bench_root, name):
+        return site_not_found()
+    try:
+        task_id = BuildTask.queue(
+            Bench(bench_root),
+            site=name,
+            idempotency_key=request.headers.get("Idempotency-Key"),
+            # The built assets are shared by every site, as an update's are.
+            resource_key=[f"site:{name.lower()}", "bench:update"],
+        )
+    except Exception as error:
+        return task_failure(error)
+    return accepted_task_response(bench_root, task_id)
+
+
 @sites_bp.post("/<name>/actions/migrate")
 @require_scope(site_name)
 def migrate_site(name: str):
@@ -258,7 +283,7 @@ def migrate_site(name: str):
     if not site_exists(bench_root, name):
         return site_not_found()
     bench = Bench(bench_root)
-    operation = bench.migrations.create_site_migrate(name)
+    operation = bench.migrations.create_site_migrate(name, with_safeguards=False)
     try:
         task_id = operation.begin()
     except Exception as error:
@@ -275,13 +300,10 @@ def migrate_site(name: str):
 @rate_limit(10, 60, user_ip=True)
 def create_login_link(name: str):
     bench_root = Path(current_app.config["BENCH_ROOT"])
-    config_path = site_config_path(bench_root, name)
-    if config_path is None:
+    if not site_exists(bench_root, name):
         return site_not_found()
     try:
-        bench = Bench(bench_root)
-        proxy_tls = current_app.config["SESSION_COOKIE_SECURE"] and not bench.config.admin.tls
-        url = bench.site(name).admin_login_url(proxy_tls=proxy_tls)
+        url = Bench(bench_root).site(name).admin_login_url()
     except Exception:
         return error_response(
             "configuration_unavailable",

@@ -278,6 +278,8 @@ class ConfigPatcher:
             s3_config.provider = str(s3["provider"]).strip()
         if "region" in s3:
             s3_config.region = str(s3["region"]).strip()
+        if "endpoint_url" in s3:
+            s3_config.endpoint_url = str(s3["endpoint_url"]).strip()
 
     @staticmethod
     def _s3_has_any_value(s3_config: S3Config) -> bool:
@@ -287,6 +289,7 @@ class ConfigPatcher:
             or s3_config.bucket
             or s3_config.provider
             or s3_config.region
+            or s3_config.endpoint_url
         )
 
     @staticmethod
@@ -301,6 +304,14 @@ class ConfigPatcher:
 
     @staticmethod
     def _validate_s3_region(s3_config: S3Config) -> str | None:
+        if s3_config.provider == "frappe":
+            return ConfigPatcher._set_frappe_endpoint(s3_config)
+
+        if s3_config.endpoint_url:
+            from pilot.internal.validators import validate_external_url
+
+            return validate_external_url(s3_config.endpoint_url, "s3.endpoint_url")
+
         from pilot.integrations.s3.base import SUPPORTED_REGIONS
 
         if s3_config.provider not in SUPPORTED_REGIONS:
@@ -308,6 +319,22 @@ class ConfigPatcher:
         if s3_config.region not in SUPPORTED_REGIONS[s3_config.provider]:
             return f"s3.region '{s3_config.region}' is not valid for provider '{s3_config.provider}'."
 
+        return None
+
+    @staticmethod
+    def _set_frappe_endpoint(s3_config: S3Config) -> str | None:
+        """Central owns where each region serves storage, so the endpoint is its answer, not the form's."""
+        from pilot.integrations.central import CentralClient, CentralClientError
+
+        try:
+            endpoints = CentralClient().storage_regions()
+        except CentralClientError as error:
+            return f"Could not read Frappe storage regions from Central: {error}"
+
+        if s3_config.region not in endpoints:
+            return f"s3.region '{s3_config.region}' does not serve Frappe object storage."
+
+        s3_config.endpoint_url = endpoints[s3_config.region]
         return None
 
     def _apply_llm(self) -> str | None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from typing import TYPE_CHECKING
 
 from pilot.core.app.revisions import RevisionPin
@@ -84,11 +85,12 @@ class AppRepository:
         )
         if newest is None or not newest.get("commit"):
             return None
-        return newest if self._is_ahead_of_installed(newest["commit"]) else None
+        return newest if self._is_ahead_of_installed(newest["commit"], newest.get("version", "")) else None
 
-    def _is_ahead_of_installed(self, commit: str) -> bool:
-        """Whether `commit` is a step forward from HEAD, asking git rather than
-        comparing version labels."""
+    def _is_ahead_of_installed(self, commit: str, version: str) -> bool:
+        """Whether `commit` descends from HEAD. A stale registry can advertise an older
+        release, so only proven descent counts. When a shallow clone holds both commits
+        without the history between them, a strictly newer version decides."""
         installed = self.installed_hash
         if installed == commit:
             return False
@@ -97,8 +99,21 @@ class AppRepository:
         repo = self.repo
         if not repo.has_commit(commit):
             self._sync_remote_url()
+            # Fetching a descendant also brings the history that links it to HEAD.
             repo.fetch(commit, timeout=_FETCH_TIMEOUT_SECONDS)
-        return not repo.is_ancestor(commit, installed)
+        if repo.is_ancestor(installed, commit):
+            return True
+        if not repo.has_commit(commit) or repo.is_ancestor(commit, installed):
+            return False
+        return self._is_newer_than_installed(version)
+
+    def _is_newer_than_installed(self, version: str) -> bool:
+        from pilot._vendor.packaging.version import InvalidVersion, Version
+
+        try:
+            return Version(version) > Version(self.app.installed_version)
+        except InvalidVersion:
+            return False
 
     @property
     def remote_url(self) -> str:
@@ -152,6 +167,14 @@ class AppRepository:
         return bool(re.fullmatch(r"[0-9a-f]{7,40}", ref))
 
     def clone_rev(self, commit: str) -> None:
+        # Git fetches a commit on its own only by its full SHA; a short one is found in the full history.
+        if len(commit) == 40 and self.depth_flags and not self.app.path.exists():
+            try:
+                self.fetch_commit(commit)
+                return
+            except CommandError:
+                shutil.rmtree(self.app.path, ignore_errors=True)
+
         run_command(
             ["git", "clone", self.remote_url, str(self.app.path)],
             env=self.git_env,
@@ -160,7 +183,20 @@ class AppRepository:
         try:
             run_command(["git", "-C", str(self.app.path), "checkout", commit])
         except CommandError as exc:
+            shutil.rmtree(self.app.path, ignore_errors=True)
             raise BenchError(f"Commit '{commit}' not found in {self.app.config.repo}.") from exc
+
+    def fetch_commit(self, commit: str) -> None:
+        """Clone only `commit`, without its history, which a large app like erpnext cannot afford."""
+        path = str(self.app.path)
+        run_command(["git", "init", "--quiet", path])
+        run_command(["git", "-C", path, "remote", "add", "origin", self.remote_url])
+        run_command(
+            ["git", "-C", path, "fetch", *self.depth_flags, "origin", commit],
+            env=self.git_env,
+            stream_output=True,
+        )
+        run_command(["git", "-C", path, "checkout", "--quiet", "FETCH_HEAD"])
 
     def clone(self) -> None:
         target = self.app.config.branch or self.get_default_branch()
@@ -252,7 +288,10 @@ class AppRepository:
 
         repo = self.repo
         self._sync_remote_url()
-        repo.fetch("+refs/heads/*:refs/remotes/origin/*")
+        # A named refspec creates origin/<branch> even in a single-branch clone.
+        refspec = f"+refs/heads/{branch}:refs/remotes/origin/{branch}"
+        if not repo.fetch(*self.depth_flags, refspec, timeout=_FETCH_TIMEOUT_SECONDS * 10):
+            raise BenchError(f"Could not fetch branch '{branch}' of '{self.app.config.name}'.")
         repo.abort_merge_rebase()
         stashed = repo.stash_all()
         if not repo.checkout_new_branch(branch, f"origin/{branch}"):
@@ -265,7 +304,10 @@ class AppRepository:
         if pin.kind == "tag":
             self._sync_remote_url()
             self.repo.prune_stale_temp_packs()
-            run_command(["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", pin.ref])
+            run_command(
+                ["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", pin.ref],
+                env=self.git_env,
+            )
             self._checkout_pinned_ref("FETCH_HEAD")
         else:
             self.checkout_pinned_commit(pin.ref)
@@ -275,7 +317,10 @@ class AppRepository:
         self._sync_remote_url()
         self.repo.prune_stale_temp_packs()
         try:
-            run_command(["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", sha])
+            run_command(
+                ["git", "-C", str(self.app.path), "fetch", *self.depth_flags, "origin", sha],
+                env=self.git_env,
+            )
             self._checkout_pinned_ref("FETCH_HEAD")
             return
         except CommandError:
@@ -290,7 +335,8 @@ class AppRepository:
                 *unshallow_flag,
                 "origin",
                 self.app.config.branch,
-            ]
+            ],
+            env=self.git_env,
         )
         self._checkout_pinned_ref(sha)
 

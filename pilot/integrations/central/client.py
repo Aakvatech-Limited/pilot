@@ -47,20 +47,28 @@ class CentralClient:
 
     TOKEN_HEADER = "X-Pilot-Token"
 
-    def log_token(self) -> dict[str, Any]:
-        """The JWT to present to Datum when shipping logs, plus its TTL and resource id."""
-        return self.forward("central.api.pilot.log_token", "GET")
+    def datum_token(self) -> dict[str, Any]:
+        """The JWT to present to Datum, for metrics and logs alike, plus its TTL, resource
+        id and this region's endpoint. Datum tells the two apart by route, not by token."""
+        return self.forward("central.api.pilot.datum_token", "GET")
 
-    def metrics_token(self) -> dict[str, Any]:
-        """The JWT to present to Datum when shipping metrics, plus its TTL and resource id."""
-        return self.forward("central.api.pilot.metrics_token", "GET")
+    def storage_regions(self) -> dict[str, str]:
+        """Each region Frappe object storage serves now, mapped to its S3 endpoint."""
+        return self.forward("central.api.pilot.storage_regions", "GET")
 
-    def notify_central(self, event: str, message: str, context: dict | None = None) -> Any:
-        """Report a bench event to Central."""
+    def notify_central(
+        self, event: str, message: str, context: dict | None = None, reference_name: str | None = None
+    ) -> Any:
+        """Report a bench event to Central. Central deduplicates repeats per ``reference_name``."""
         return self.forward(
             "central.notification.api.report_pilot_event",
             "POST",
-            {"event": event, "message": message, "context": context or {}},
+            {
+                "event_type": event,
+                "message": message,
+                "context": context or {},
+                "reference_name": reference_name,
+            },
         )
 
     def forward(self, method_path: str, http_method: str, data: dict[str, Any] | None = None) -> Any:

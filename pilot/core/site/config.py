@@ -31,6 +31,7 @@ PROTECTED_CONFIG_KEYS = frozenset(
         "installed_apps",
         "pilot_auth_token",
         "pilot_endpoint",
+        "route",
         "ssl",
     }
 )
@@ -185,6 +186,14 @@ def set_site_ssl_flag(sites_root: Path, site_name: str, enabled: bool) -> None:
     with exclusive_file_lock(config_path):
         config = json.loads(config_path.read_text())
         config["ssl"] = enabled
+        replace_private_text_locked(config_path, json.dumps(config, indent=1))
+
+
+def set_site_config_values(sites_root: Path, site_name: str, values: dict) -> None:
+    config_path = safe_site_config_path(sites_root, site_name)
+    with exclusive_file_lock(config_path):
+        config = json.loads(config_path.read_text())
+        config.update(values)
         replace_private_text_locked(config_path, json.dumps(config, indent=1))
 
 
