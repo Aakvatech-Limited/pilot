@@ -83,7 +83,7 @@ jobs:
             | sort -r \
             | awk -v keep_untagged="$KEEP_UNTAGGED" -v keep_tagged="$KEEP_TAGGED" -v tagged="$tagged" '
                 BEGIN { split(tagged, shas, " "); for (i in shas) is_tagged[shas[i]] = 1 }
-                match($3, /-[0-9a-f]{40}\.tar\.gz/) {
+                match($3, /-[0-9a-f]{40}\.tar\.gz(\.sha256)?$/) {
                   sha = substr($3, RSTART + 1, 40)
                   kind = (sha in is_tagged) ? "tagged" : "untagged"
                   if (!(sha in seen)) { seen[sha] = 1; count[kind]++ }
