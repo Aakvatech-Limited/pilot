@@ -22,6 +22,7 @@ from pilot.core.mariadb_memory import (
     calculate_mariadb_memory,
     calculate_mariadb_variable_limits,
     live_sizing_values,
+    memory_high_for,
 )
 from pilot.exceptions import DatabaseError
 from pilot.internal.atomic_file import (
@@ -334,6 +335,28 @@ class MariaDBManager(UserOwnedDBManager):
                 return
             time.sleep(1)
         self._set_runtime_memory_limits(sizing)
+
+    def raise_memory_high(self) -> bool:
+        """Raise the unit's MemoryHigh to `memory_high_for` its MemoryMax, on disk and live.
+        Never lowers a limit or restarts the server. Returns whether anything changed."""
+        if is_macos() or self.config.existing or not self.unit_path.exists():
+            return False
+        current_high = self._unit_memory_mb("MemoryHigh")
+        current_max = self._unit_memory_mb("MemoryMax")
+        if current_high is None or current_max is None:
+            return False
+        memory_high_mb = memory_high_for(current_max)
+        if memory_high_mb <= current_high:
+            return False
+        unit = re.sub(r"^MemoryHigh=.*$", f"MemoryHigh={memory_high_mb}M", self.unit_path.read_text(), flags=re.M)
+        self.unit_path.write_text(unit)
+        env = self._systemctl_env()
+        run_command(self._systemctl("daemon-reload"), env=env)
+        run_command(
+            self._systemctl("set-property", "--runtime", self._UNIT_NAME, f"MemoryHigh={memory_high_mb}M"),
+            env=env,
+        )
+        return True
 
     def _set_runtime_memory_limits(self, sizing: MariaDBMemorySizing) -> None:
         run_command(
