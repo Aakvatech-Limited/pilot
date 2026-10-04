@@ -301,6 +301,14 @@ install_node() {
     esac
 }
 
+# Services not enabled before this run. A rerun must leave alone the nginx that
+# `pilot setup production` enabled, or every production bench goes down.
+services_to_disable() {
+    for service in mariadb postgresql redis-server redis valkey nginx supervisor; do
+        systemctl is-enabled "$service" >/dev/null 2>&1 || echo "$service"
+    done
+}
+
 # The distro packages auto-start services on their default ports. Benches run
 # their own instances, so free the ports and the memory right away. `pilot setup
 # production` starts nginx and enables it at boot, which a sudoers grant allows.
@@ -308,7 +316,7 @@ disable_system_services() {
     case "$DISTRO" in
         macos|unknown) return 0 ;;
     esac
-    for service in mariadb postgresql redis-server redis valkey nginx supervisor; do
+    for service in "$@"; do
         run_sudo systemctl disable --now "$service" 2>/dev/null || true
     done
 }
@@ -333,6 +341,7 @@ install_system_packages() {
         fi
     fi
     echo "$DISTRO detected — installing base dependencies..."
+    new_services=$(services_to_disable)
     ensure_curl
     add_distro_repos
     pkg_update
@@ -340,7 +349,8 @@ install_system_packages() {
     enable_cron
     install_database_engines
     install_production_packages
-    disable_system_services
+    # shellcheck disable=SC2086
+    disable_system_services $new_services
     install_node
     ensure_tzdata
 }

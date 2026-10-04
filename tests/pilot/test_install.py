@@ -290,3 +290,17 @@ install_database_engines
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "pkg_install postgresql postgresql-libs pkgconf redis"
+
+
+def test_a_rerun_leaves_enabled_services_running(tmp_path: Path) -> None:
+    """Production setup enables nginx; a root rerun must not take every bench down."""
+    result = run_installer_functions(
+        """
+systemctl() { [ "$1" = "is-enabled" ] && [ "$2" = "nginx" ]; }
+services_to_disable
+""",
+        tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "nginx" not in result.stdout.split()
+    assert "mariadb" in result.stdout.split()
