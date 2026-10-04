@@ -18,7 +18,7 @@ from pilot.exceptions import FrappeCloudError
 from pilot.internal.site_paths import site_exists
 
 
-@sites_bp.post("/<name>/actions/frappe-cloud/connect")
+@sites_bp.post("/<name>/integrations/frappe-cloud")
 @require_scope(site_name)
 def connect_frappe_cloud(name: str):
     """Ask Frappe Cloud for access to the backups of the site at `remote_site`."""
@@ -31,20 +31,20 @@ def connect_frappe_cloud(name: str):
     return _call(name, lambda frappe_cloud: _connection(frappe_cloud.connect(remote_site.strip())))
 
 
-@sites_bp.get("/<name>/frappe-cloud")
+@sites_bp.get("/<name>/integrations/frappe-cloud")
 @require_scope(site_name)
 def get_frappe_cloud_connection(name: str):
     return _call(name, lambda frappe_cloud: _connection(frappe_cloud.get_status()))
 
 
-@sites_bp.delete("/<name>/frappe-cloud")
+@sites_bp.delete("/<name>/integrations/frappe-cloud")
 @require_scope(site_name)
 def disconnect_frappe_cloud(name: str):
     """Revoke the request on Frappe Cloud and forget its token."""
     return _call(name, lambda frappe_cloud: frappe_cloud.disconnect() or {})
 
 
-@sites_bp.get("/<name>/frappe-cloud/backups")
+@sites_bp.get("/<name>/integrations/frappe-cloud/backups")
 @require_scope(site_name)
 def list_frappe_cloud_backups(name: str):
     start = request.args.get("start", 0, type=int)
@@ -62,13 +62,13 @@ def list_frappe_cloud_backups(name: str):
     return _call(name, backups)
 
 
-@sites_bp.post("/<name>/frappe-cloud/backups")
+@sites_bp.post("/<name>/integrations/frappe-cloud/backups")
 @require_scope(site_name)
 def take_frappe_cloud_backup(name: str):
     return _call(name, lambda frappe_cloud: {"name": frappe_cloud.client.take_backup()})
 
 
-@sites_bp.get("/<name>/frappe-cloud/backups/<backup>")
+@sites_bp.get("/<name>/integrations/frappe-cloud/backups/<backup>")
 @require_scope(site_name)
 def get_frappe_cloud_backup(name: str, backup: str):
     def status(frappe_cloud) -> dict:

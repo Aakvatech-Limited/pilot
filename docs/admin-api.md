@@ -125,12 +125,12 @@ A site on Frappe Cloud v1 is restored after its team approves the access. All ro
 
 | Route | Purpose |
 |---|---|
-| `POST /sites/<name>/actions/frappe-cloud/connect` | Takes `remote_site`, any domain of the site. Returns `status`, `remote_site`, `approval_url`, and an 8-character `code`. |
-| `GET /sites/<name>/frappe-cloud` | The status of the request: `Pending`, `Approved`, `Rejected`, `Revoked`, or `Expired`. |
-| `DELETE /sites/<name>/frappe-cloud` | Revokes the request and deletes the token. |
-| `GET /sites/<name>/frappe-cloud/backups?start=0` | Five offsite backups from `start`, newest first, and `running_backup`. |
-| `POST /sites/<name>/frappe-cloud/backups` | Takes an offsite backup with files. Returns its `name`. |
-| `GET /sites/<name>/frappe-cloud/backups/<backup>` | The backup `status` and the `job_url` of its job on Frappe Cloud. |
+| `POST /sites/<name>/integrations/frappe-cloud` | Takes `remote_site`, any domain of the site. Returns `status`, `remote_site`, `approval_url`, and an 8-character `code`. |
+| `GET /sites/<name>/integrations/frappe-cloud` | The status of the request: `Pending`, `Approved`, `Rejected`, `Revoked`, or `Expired`. |
+| `DELETE /sites/<name>/integrations/frappe-cloud` | Revokes the request and deletes the token. |
+| `GET /sites/<name>/integrations/frappe-cloud/backups?start=0` | Five offsite backups from `start`, newest first, and `running_backup`. |
+| `POST /sites/<name>/integrations/frappe-cloud/backups` | Takes an offsite backup with files. Returns its `name`. |
+| `GET /sites/<name>/integrations/frappe-cloud/backups/<backup>` | The backup `status` and the `job_url` of its job on Frappe Cloud. |
 
 A user of the team opens `approval_url` and enters the code within 10 minutes. Five wrong codes reject the request. The approval gives access for 12 hours. Pilot keeps the token in `config/frappe_cloud/<site>.json` with mode 0600. The restore task revokes the token before it downloads the files. The download links stay valid for 24 hours.
 

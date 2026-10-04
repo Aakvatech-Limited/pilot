@@ -219,7 +219,7 @@ def test_connecting_to_frappe_cloud_shows_the_pass_code_but_not_the_token(tmp_pa
     }
     with patch("pilot.integrations.frappe_cloud.FrappeCloud.request_access", return_value=response):
         reply = _client(tmp_path / "benches" / "current").post(
-            "/api/v1/sites/a.localhost/actions/frappe-cloud/connect", json={"remote_site": "erp.example.com"}
+            "/api/v1/sites/a.localhost/integrations/frappe-cloud", json={"remote_site": "erp.example.com"}
         )
 
     assert reply.status_code == 200
@@ -230,7 +230,7 @@ def test_connecting_to_frappe_cloud_shows_the_pass_code_but_not_the_token(tmp_pa
 
 def test_a_site_token_cannot_connect_to_frappe_cloud(tmp_path: Path) -> None:
     reply = _client(tmp_path / "benches" / "current", site_token="a.localhost").post(
-        "/api/v1/sites/a.localhost/actions/frappe-cloud/connect", json={"remote_site": "erp.example.com"}
+        "/api/v1/sites/a.localhost/integrations/frappe-cloud", json={"remote_site": "erp.example.com"}
     )
 
     assert reply.status_code == 403
@@ -244,7 +244,7 @@ def test_frappe_cloud_refusals_reach_the_user_unchanged(tmp_path: Path) -> None:
         side_effect=FrappeCloudError("No site on Frappe Cloud has the domain erp.example.com."),
     ):
         reply = _client(tmp_path / "benches" / "current").post(
-            "/api/v1/sites/a.localhost/actions/frappe-cloud/connect", json={"remote_site": "erp.example.com"}
+            "/api/v1/sites/a.localhost/integrations/frappe-cloud", json={"remote_site": "erp.example.com"}
         )
 
     assert reply.status_code == 422
@@ -283,7 +283,7 @@ def test_frappe_cloud_backups_include_the_running_backup_so_a_reloaded_page_can_
         patch("pilot.integrations.frappe_cloud.FrappeCloud.get_backups", return_value=backups),
         patch("pilot.integrations.frappe_cloud.FrappeCloud.get_running_backup", return_value="backup-2"),
     ):
-        reply = client.get("/api/v1/sites/a.localhost/frappe-cloud/backups")
+        reply = client.get("/api/v1/sites/a.localhost/integrations/frappe-cloud/backups")
 
     assert reply.get_json() == {
         "backups": [{"name": "backup-1", "created_at": "2026-10-04T12:00:00+05:30", "size_bytes": 2048}],
@@ -299,7 +299,7 @@ def test_cancelling_frappe_cloud_access_revokes_the_request_and_forgets_the_toke
     connection.write_text(json.dumps({"url": "https://cloud.example.com", "token": "t"}))
 
     with patch("pilot.integrations.frappe_cloud.FrappeCloud.revoke") as revoke:
-        reply = client.delete("/api/v1/sites/a.localhost/frappe-cloud")
+        reply = client.delete("/api/v1/sites/a.localhost/integrations/frappe-cloud")
 
     assert reply.status_code == 200
     revoke.assert_called_once()
@@ -315,7 +315,7 @@ def test_a_frappe_cloud_backup_status_carries_the_link_to_its_job(tmp_path: Path
     status = {"status": "Running", "job_url": "https://cloud.example.com/dashboard/sites/s/insights/jobs/j"}
 
     with patch("pilot.integrations.frappe_cloud.FrappeCloud.get_backup_status", return_value=status):
-        reply = client.get("/api/v1/sites/a.localhost/frappe-cloud/backups/backup-2")
+        reply = client.get("/api/v1/sites/a.localhost/integrations/frappe-cloud/backups/backup-2")
 
     assert reply.get_json() == {"name": "backup-2", **status}
 
@@ -331,7 +331,7 @@ def test_frappe_cloud_backups_load_the_page_that_starts_at_the_given_offset(tmp_
         patch("pilot.integrations.frappe_cloud.FrappeCloud.get_backups", return_value=[]) as get_backups,
         patch("pilot.integrations.frappe_cloud.FrappeCloud.get_running_backup", return_value=None),
     ):
-        client.get("/api/v1/sites/a.localhost/frappe-cloud/backups?start=5")
+        client.get("/api/v1/sites/a.localhost/integrations/frappe-cloud/backups?start=5")
 
     get_backups.assert_called_once_with(5)
 

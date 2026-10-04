@@ -73,25 +73,27 @@ export const sitesApi = {
     connect: (name: string, remoteSite: string): Promise<FrappeCloudConnection> =>
       unwrap(
         request
-          .post(`sites/${encodeURIComponent(name)}/actions/frappe-cloud/connect`, {
+          .post(`sites/${encodeURIComponent(name)}/integrations/frappe-cloud`, {
             json: { remote_site: remoteSite },
           })
           .json(),
       ),
     connection: (name: string): Promise<FrappeCloudConnection> =>
-      unwrap(request.get(`sites/${encodeURIComponent(name)}/frappe-cloud`).json()),
+      unwrap(request.get(`sites/${encodeURIComponent(name)}/integrations/frappe-cloud`).json()),
     disconnect: (name: string): Promise<Record<string, never>> =>
-      unwrap(request.delete(`sites/${encodeURIComponent(name)}/frappe-cloud`).json()),
+      unwrap(request.delete(`sites/${encodeURIComponent(name)}/integrations/frappe-cloud`).json()),
     backups: (name: string, start = 0): Promise<FrappeCloudBackupList> =>
       unwrap(
         request
-          .get(`sites/${encodeURIComponent(name)}/frappe-cloud/backups`, {
+          .get(`sites/${encodeURIComponent(name)}/integrations/frappe-cloud/backups`, {
             searchParams: { start },
           })
           .json(),
       ),
     takeBackup: (name: string): Promise<{ name: string }> =>
-      unwrap(request.post(`sites/${encodeURIComponent(name)}/frappe-cloud/backups`).json()),
+      unwrap(
+        request.post(`sites/${encodeURIComponent(name)}/integrations/frappe-cloud/backups`).json(),
+      ),
     backup: (
       name: string,
       backup: string,
@@ -99,7 +101,7 @@ export const sitesApi = {
       unwrap(
         request
           .get(
-            `sites/${encodeURIComponent(name)}/frappe-cloud/backups/${encodeURIComponent(backup)}`,
+            `sites/${encodeURIComponent(name)}/integrations/frappe-cloud/backups/${encodeURIComponent(backup)}`,
           )
           .json(),
       ),
