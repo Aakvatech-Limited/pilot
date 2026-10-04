@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, Checkbox, TextInput } from 'frappe-ui'
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { apiErrorMessage } from '@/api/client'
 import { sitesApi } from '@/api/sites'
 import ActionDialog from '@/components/common/ActionDialog.vue'
@@ -22,6 +22,7 @@ const siteSubject = computed(() => ({
 }))
 
 const router = useRouter()
+const route = useRoute()
 
 const showMigrate = ref(false)
 const migrating = ref(false)
@@ -100,7 +101,8 @@ const DangerActions = [
   },
 ]
 
-const showRestore = ref(false)
+// The Restore dialog keeps its tab in ?restore=, so a reload opens it again.
+const showRestore = ref(Boolean(route.query.restore))
 
 const showRename = ref(false)
 const renaming = ref(false)

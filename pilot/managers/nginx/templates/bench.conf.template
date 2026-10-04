@@ -229,8 +229,8 @@ server {
     root {{ sites_root }};
 
     {% endif %}
-    {# the admin takes backup uploads, so it gets the same limit as a site #}
-    client_max_body_size {{ client_max_body_size }};
+    {# the admin takes backup uploads, so it gets at least the site limit #}
+    client_max_body_size {{ client_max_body_size if vhost.kind == "site" else admin_client_max_body_size }};
 
     {# ACME http-01 challenge, kept reachable so cert issuance never 403s #}
     {% if not vhost.ssl %}
@@ -370,6 +370,22 @@ server {
         try_files $uri =404;
         expires 1y;
         add_header Cache-Control "public, immutable";
+    }
+
+    {# backup upload chunks: raw bytes the WAF cannot inspect, streamed to the admin #}
+    location ~ ^/api/v1/sites/[^/]+/uploads/[^/]+/files/ {
+        {% if waf_active %}
+        modsecurity off;
+        {% endif %}
+        proxy_request_buffering off;
+        proxy_pass         http://127.0.0.1:{{ vhost.port }};
+        proxy_read_timeout 600;
+        proxy_send_timeout 600;
+        proxy_redirect     off;
+        proxy_set_header   Host               $host;
+        proxy_set_header   X-Real-IP          $remote_addr;
+        proxy_set_header   X-Forwarded-For    {{ vhost.forwarded_for }};
+        proxy_set_header   X-Forwarded-Proto  {{ vhost.public_scheme }};
     }
 
     {# everything else to the local admin process #}

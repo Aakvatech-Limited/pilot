@@ -1132,9 +1132,28 @@ def test_a_pinned_lineage_is_what_the_vhost_references(tmp_path: Path) -> None:
     assert "/etc/letsencrypt/live/new.example.com/" not in config
 
 
-def test_admin_accepts_uploads_as_large_as_a_site(tmp_path: Path) -> None:
-    """Backup uploads go to the admin; nginx's 1 MB default would refuse them."""
+def test_admin_takes_backup_uploads_of_at_least_one_gigabyte_while_sites_keep_their_limit(tmp_path: Path) -> None:
     config = _renderer(tmp_path, _ADMIN_DATA).generate_bench_config([], admin_ssl=False)
+    admin = config[config.index("server_name admin.example.com;") :]
 
-    admin_block = config[config.index("server_name admin.example.com;") :]
-    assert "client_max_body_size 50m;" in admin_block
+    assert "client_max_body_size 1024m;" in admin
+    assert "client_max_body_size 1024m;" not in config[: config.index("server_name admin.example.com;")]
+
+
+def test_a_larger_site_limit_also_applies_to_the_admin(tmp_path: Path) -> None:
+    renderer = _renderer(tmp_path, _ADMIN_DATA)
+    renderer.bench.config.nginx.client_max_body_size = "2g"
+    config = renderer.generate_bench_config([], admin_ssl=False)
+
+    assert "client_max_body_size 2g;" in config[config.index("server_name admin.example.com;") :]
+
+
+def test_backup_upload_chunks_stream_to_the_admin_without_the_waf(tmp_path: Path) -> None:
+    data = {**copy.deepcopy(_ADMIN_DATA), "waf": {"enabled": True, "mode": "On"}}
+    with patch("pilot.managers.nginx.NginxConfigRenderer._is_waf_active", return_value=True):
+        config = _renderer(tmp_path, data).generate_bench_config([], admin_ssl=False)
+    location = config[config.index("location ~ ^/api/v1/sites/[^/]+/uploads/[^/]+/files/") :]
+    location = location[: location.index("}")]
+
+    assert "modsecurity off;" in location
+    assert "proxy_request_buffering off;" in location

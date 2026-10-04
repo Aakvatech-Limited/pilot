@@ -13,7 +13,10 @@ from pilot.utils import run_command
 if TYPE_CHECKING:
     from pilot.core.site import Site
 
-RESTORE_PARTS = ("database", "public", "private")
+RESTORE_PARTS = ("database", "public", "private", "config")
+# Keys that tie a config to its own database, cache, host or Pilot, so they stay as this site has them.
+LOCAL_CONFIG_PREFIXES = ("db_", "redis_", "pilot_", "atlas_")
+LOCAL_CONFIG_KEYS = frozenset({"rds_db", "host_name", "installed_apps", "maintenance_mode", "pause_scheduler"})
 
 
 def backup_part(filename: str) -> str | None:
@@ -42,10 +45,19 @@ class BackupRun:
     @property
     def encryption_key(self) -> str:
         """The source site's key: its database holds passwords encrypted with it."""
+        return self.site_config.get("encryption_key", "")
+
+    @property
+    def site_config(self) -> dict:
+        """The source site's config without its local keys."""
         config = self.files.get("config")
         if not config:
-            return ""
-        return json.loads(config.read_text()).get("encryption_key", "")
+            return {}
+        return {key: value for key, value in json.loads(config.read_text()).items() if not is_local_config_key(key)}
+
+
+def is_local_config_key(key: str) -> bool:
+    return key in LOCAL_CONFIG_KEYS or key.startswith(LOCAL_CONFIG_PREFIXES)
 
 
 class SiteRestore:
@@ -60,6 +72,7 @@ class SiteRestore:
         parts: list[str],
         on_progress: Callable[[str], None] = print,
         open_dump: Callable[[], IO[bytes]] | None = None,
+        skip_failing_patches: bool = False,
     ) -> None:
         """`open_dump` opens a gzipped SQL dump that streams in, in place of a database file."""
         self.require_parts(run, parts, has_database_stream=open_dump is not None)
@@ -67,7 +80,7 @@ class SiteRestore:
         try:
             self.restore_parts(run, parts, on_progress, open_dump)
             on_progress("Migrating the site...")
-            self.site.migrate()
+            self.site.migrate(skip_failing=skip_failing_patches)
         except Exception:
             on_progress(f"Restore failed. {self.site.config.name} stays in maintenance mode.")
             raise
@@ -100,18 +113,23 @@ class SiteRestore:
             if part in parts:
                 on_progress(f"Restoring {part} files...")
                 self.extract_files(run.files[part], part)
+        if "config" in parts:
+            on_progress("Restoring the site config...")
+            values = run.site_config
+            if "database" not in parts:
+                # The key belongs with its database, and this site keeps its own database.
+                values.pop("encryption_key", None)
+            self.site.set_config_values(values)
 
     def get_restored_database_config(self, run: BackupRun) -> dict:
         """Frappe's restore leaves the installed_apps mirror stale, and the restored
         passwords need the source site's encryption key."""
         from pilot.core.site.config import query_installed_apps_via_db
 
-        values: dict = {}
+        values: dict = {"encryption_key": run.encryption_key} if run.encryption_key else {}
         apps = query_installed_apps_via_db(self.site.bench.path, self.site.config.name)
         if apps is not None:
             values["installed_apps"] = apps
-        if key := run.encryption_key:
-            values["encryption_key"] = key
         return values
 
     def extract_files(self, archive: Path, part: str) -> None:

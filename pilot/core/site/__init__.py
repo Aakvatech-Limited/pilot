@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from pilot.core.bench import Bench
     from pilot.core.site.backups import SiteBackups
     from pilot.core.site.domains import SiteDomains
+    from pilot.core.site.frappe_cloud import SiteFrappeCloud
     from pilot.core.site.migration_backup import SiteMigrationBackup
     from pilot.core.site.restore import BackupRun
 
@@ -42,6 +43,12 @@ class Site:
         from pilot.core.site.domains import SiteDomains
 
         return SiteDomains(self)
+
+    @cached_property
+    def frappe_cloud(self) -> "SiteFrappeCloud":
+        from pilot.core.site.frappe_cloud import SiteFrappeCloud
+
+        return SiteFrappeCloud(self)
 
     @cached_property
     def migration_backup(self) -> "SiteMigrationBackup":
@@ -118,11 +125,12 @@ class Site:
         parts: list[str],
         on_progress: Callable[[str], None] = print,
         open_dump: Callable[[], IO[bytes]] | None = None,
+        skip_failing_patches: bool = False,
     ) -> None:
         """Restore `parts` of a backup run in maintenance mode, then migrate."""
         from pilot.core.site.restore import SiteRestore
 
-        SiteRestore(self).restore(run, parts, on_progress, open_dump)
+        SiteRestore(self).restore(run, parts, on_progress, open_dump, skip_failing_patches)
 
     def set_config_values(self, values: dict) -> None:
         """Write keys into site_config.json under its lock."""

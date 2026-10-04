@@ -13,25 +13,20 @@ from admin.backend.api.v1.sites.shared import malformed_body, site_name, site_no
 from admin.backend.api.v1.types.site_backups import RemoteBackup, RemoteBackupList
 from admin.backend.middleware import is_bench_scoped, require_scope
 from pilot.core.bench import Bench
+from pilot.core.bench.uploads import upload_file_name
 from pilot.core.site.restore import RESTORE_PARTS
 from pilot.internal.site_paths import site_exists
 from pilot.tasks.restore_site import RestoreSiteTask
 from pilot.utils import make_private_directory
 
 _TIMESTAMP_RE = re.compile(r"^\d{8}_\d{6}$")
-# Saved under names Frappe's backup files carry, so the restore can tell the parts apart.
-_UPLOAD_NAMES = {
-    "database": ("upload-database.sql", "upload-database.sql.gz"),
-    "public": ("upload-files.tar", "upload-files.tgz"),
-    "private": ("upload-private-files.tar", "upload-private-files.tgz"),
-    "config": ("upload-site_config_backup.json", "upload-site_config_backup.json"),
-}
 
 
 @sites_bp.post("/<name>/actions/restore")
 @require_scope(site_name)
 def restore_site(name: str):
-    """Restore from a site on this bench (a backup run or a fresh backup) or a remote site."""
+    """Restore from a site on this bench (a backup run or a fresh backup), a remote site, Frappe
+    Cloud, or files from a chunked upload."""
     bench_root = Path(current_app.config["BENCH_ROOT"])
     if not site_exists(bench_root, name):
         return site_not_found()
@@ -44,6 +39,10 @@ def restore_site(name: str):
 
     if data.get("remote_site"):
         return _restore_from_remote(bench_root, name, parts, data)
+    if data.get("frappe_cloud_backup"):
+        return _restore_from_frappe_cloud(bench_root, name, parts, data)
+    if data.get("upload_id"):
+        return _restore_from_chunked_upload(bench_root, name, parts, data["upload_id"])
     return _restore_from_bench_site(bench_root, name, parts, data)
 
 
@@ -68,15 +67,32 @@ def restore_site_from_upload(name: str):
     try:
         for field in fields:
             if upload := request.files.get(field):
-                plain, compressed = _UPLOAD_NAMES[field]
-                is_compressed = (upload.filename or "").endswith((".gz", ".tgz"))
-                upload.save(upload_dir / (compressed if is_compressed else plain))
+                upload.save(upload_dir / upload_file_name(field, upload.filename or ""))
         response = current_app.make_response(
             _queue(bench_root, name, parts, {name}, upload_dir=str(upload_dir), idempotent=False)
         )
     except Exception:
         shutil.rmtree(upload_dir, ignore_errors=True)
         raise
+    if response.status_code >= 400:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+    return response
+
+
+def _restore_from_chunked_upload(bench_root: Path, name: str, parts: list[str], upload_id):
+    """The restore owns the files once claimed, and its cleanup callback removes them on failure."""
+    from admin.backend.api.v1.sites.uploads import find_upload
+    from pilot.exceptions import BenchError
+
+    if not isinstance(upload_id, str):
+        return _invalid("The upload does not exist.")
+    try:
+        upload_dir = find_upload(bench_root, name, upload_id).claim(parts)
+    except BenchError as error:
+        return _invalid(str(error))
+    response = current_app.make_response(
+        _queue(bench_root, name, parts, {name}, upload_dir=str(upload_dir), idempotent=False)
+    )
     if response.status_code >= 400:
         shutil.rmtree(upload_dir, ignore_errors=True)
     return response
@@ -132,6 +148,31 @@ def _restore_from_remote(bench_root: Path, name: str, parts: list[str], data: di
     return _queue(bench_root, name, parts, {name}, **source)
 
 
+def _restore_from_frappe_cloud(bench_root: Path, name: str, parts: list[str], data: dict):
+    """The links are taken here, so the task can revoke the access and still download."""
+    from pilot.exceptions import FrappeCloudError
+
+    if not is_bench_scoped():
+        return error_response("forbidden", "Restoring from Frappe Cloud needs a bench session.", 403)
+    backup = data["frappe_cloud_backup"]
+    if not isinstance(backup, str):
+        return _invalid("Choose a Frappe Cloud backup.")
+    try:
+        client = Bench(bench_root).site(name).frappe_cloud.client
+        links = client.get_download_links(backup)
+    except FrappeCloudError as error:
+        return _invalid(str(error))
+    return _queue(
+        bench_root,
+        name,
+        parts,
+        {name},
+        frappe_cloud_backup=backup,
+        frappe_cloud_secret_urls=links,
+        frappe_cloud_token=client.token,
+    )
+
+
 def _signed_in_remote(data: dict):
     """The remote site signed in as Administrator, or the response that explains why not."""
     from pilot.exceptions import RemoteSiteError
@@ -162,11 +203,20 @@ def _queue(bench_root: Path, name: str, parts: list[str], sites: set[str], idemp
             parts=parts,
             idempotency_key=request.headers.get("Idempotency-Key") if idempotent else None,
             resource_key=[f"site:{site.lower()}" for site in sorted(sites)],
+            skip_failing_patches=_skips_failing_patches(),
             **source,
         )
     except Exception as error:
         return task_failure(error)
     return accepted_task_response(bench_root, task_id)
+
+
+def _skips_failing_patches() -> bool:
+    """A JSON boolean, or the form field "true" that comes with an upload."""
+    data = request.get_json(silent=True)
+    if isinstance(data, dict):
+        return data.get("skip_failing_patches") is True
+    return request.form.get("skip_failing_patches") == "true"
 
 
 def _parts(value) -> list[str] | None:
