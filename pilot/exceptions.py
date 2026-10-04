@@ -76,6 +76,10 @@ class DependencyResolutionError(RegistryError):
     """A dependency chain couldn't be resolved (cycle, version conflict, etc)."""
 
 
+class CronError(BenchError):
+    pass
+
+
 class MalformedSiteConfig(ConfigError):
     """common_site_config.json cannot be parsed, so it must not be rewritten."""
 
