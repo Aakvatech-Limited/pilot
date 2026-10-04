@@ -193,7 +193,7 @@ const confirmDrop = async () => {
     v-model:open="showRename"
     title="Rename Site"
     :subject="siteSubject"
-    :warning="{ title: 'The site is offline for a moment while it is renamed.' }"
+    :warning="{ title: 'The site will be offline for a moment while it is renamed.' }"
     :error="renameError"
     confirm-label="Rename"
     :loading="renaming"
