@@ -66,7 +66,7 @@ ERROR_PAGES = {
     404: ("Page not found", "The page you're looking for doesn't exist."),
     502: (
         "Temporarily unavailable",
-        "The server isn't responding right now. Please try again in a moment.",
+        "The server is starting or not responding. This page retries every few seconds.",
     ),
     503: (
         "Service unavailable",
