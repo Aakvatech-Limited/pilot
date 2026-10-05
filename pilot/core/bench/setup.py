@@ -114,7 +114,7 @@ class ProductionSetup:
             )
         if letsencrypt_email_required(self.bench) and not self.bench.config.letsencrypt.email:
             raise BenchError(
-                "A contact email is required with --tls for Let's Encrypt. Pass --letsencrypt-email <email>, or set letsencrypt.email in bench.toml."
+                "A contact email is required with --tls for Let's Encrypt. Pass --letsencrypt-email <email>, or set letsencrypt.email in common_config.toml."
             )
 
     def _installed_manager(self) -> str | None:
@@ -181,6 +181,12 @@ class ProductionSetup:
                 "admin": {"domain": admin.domain, "tls": admin.tls, "enabled": True},
             }
         )
+        if self._email_arg:
+            from pilot.config.common import CommonConfig
+
+            # Later cert refreshes read the email from shared config.
+            with CommonConfig.open(self.bench.path.parent) as common:
+                common.letsencrypt.email = self._email_arg
 
     def _require_linux(self) -> None:
         from pilot.managers.platform import is_linux

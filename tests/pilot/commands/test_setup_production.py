@@ -321,6 +321,17 @@ def test_persist_production_state_writes_enabled_and_drops_nginx(tmp_path: Path)
     assert data["admin"]["enabled"] is True
 
 
+def test_persist_production_state_keeps_the_letsencrypt_email(tmp_path: Path) -> None:
+    from pilot.config.common import CommonConfig
+
+    bench = _make_bench(tmp_path, process_manager="systemd")
+    cmd = ProductionSetup(bench, letsencrypt_email="ops@example.com")
+    cmd._resolve_target()
+    cmd._persist_production_state()
+
+    assert CommonConfig.read(bench.path.parent).letsencrypt.email == "ops@example.com"
+
+
 
 
 def test_letsencrypt_is_required_for_a_custom_tls_domain_with_admin_tls_off(tmp_path: Path) -> None:
