@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -757,3 +758,23 @@ def test_an_idle_admin_socket_is_activated(tmp_path: Path, monkeypatch) -> None:
     calls = _admin_activation(tmp_path, monkeypatch, socket_active=False, service_changed=False, socket_changed=False)
 
     assert ["restart", "test-bench-admin.socket"] in calls
+
+
+def test_supervisor_starts_again_after_a_reboot(tmp_path: Path, monkeypatch) -> None:
+    """The bench owns its supervisord, so an @reboot entry brings the bench back."""
+    from pilot.managers.cron import CronManager
+    from pilot.managers.processes.supervisor import SupervisorProcessManager
+
+    crontab: list[str] = []
+    monkeypatch.setattr(CronManager, "_read_crontab", lambda self: list(crontab))
+    monkeypatch.setattr(CronManager, "_write_crontab", lambda self, lines: crontab.__setitem__(slice(None), lines))
+    monkeypatch.setattr(CronManager, "_lock", lambda self: contextlib.nullcontext())
+    manager = SupervisorProcessManager(make_bench(tmp_path))
+    monkeypatch.setattr(manager, "is_alive", lambda: False)
+
+    manager.install_config()
+    entry = next(line for line in crontab if line.startswith("@reboot"))
+    assert f"-c {manager.supervisor_conf_path}" in entry
+
+    manager.shutdown()
+    assert not any(line.startswith("@reboot") for line in crontab)
