@@ -15,13 +15,13 @@ class GetAppCommand(Command):
     help: ClassVar[str] = "Clone and install an app."
 
     repo: Annotated[str, Arg(help="Git repository URL.")]
-    branch: Annotated[str, Arg(help="Git branch to checkout.")] = ""
+    branch: Annotated[str, Arg(help="Git branch to checkout (default: the repository's default branch).")] = ""
     install_dependencies: Annotated[bool, Arg(help="Install app dependencies")] = False
 
     def __post_init__(self) -> None:
         from pilot.core.app import App
 
-        self.app = App.from_repo(self.bench, self.repo, self.branch or "main")
+        self.app = App.from_repo(self.bench, self.repo, self.branch)
         self.installed_dependencies: list[App] = []
 
     def run(self) -> None:

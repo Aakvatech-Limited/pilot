@@ -180,3 +180,12 @@ def test_bench_is_app_installed_reflects_apps_txt_contents(tmp_path: Path) -> No
 
     (bench.sites_path / "apps.txt").write_text("frappe\nerpnext\n")
     assert bench.is_app_installed("erpnext") is True
+
+
+def test_without_a_branch_the_repository_default_is_used(tmp_path: Path) -> None:
+    # Many Frappe apps default to develop and have no main branch.
+    bench = make_bench(tmp_path)
+
+    cmd = GetAppCommand(bench, repo="https://github.com/frappe/telephony")
+
+    assert cmd.app.config.branch == ""
