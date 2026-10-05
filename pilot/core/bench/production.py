@@ -191,7 +191,7 @@ class BenchProduction:
             WafManager(self.bench).install()
         except Exception as exc:
             print(
-                f"Warning: could not install the WAF (ModSecurity/CRS): {exc}. "
+                f"Warning: could not install the WAF (ModSecurity/CRS): {str(exc).rstrip('.')}. "
                 f"Sites are unaffected; re-run setup to retry.",
                 file=sys.stderr,
             )
