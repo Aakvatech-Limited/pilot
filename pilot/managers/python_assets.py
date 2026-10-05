@@ -28,12 +28,13 @@ class PythonAssetBuilder:
     def run_compiler(self, argv: list[str], **kwargs) -> None:
         """Run a compiler capped at a share of host memory, so a runaway build
         fails instead of exhausting the machine. Uncapped where the host cannot cap."""
-        from pilot.core.build_memory import build_memory_limit_mb, can_read_memory
+        from pilot.core.build_memory import build_memory_limit_mb, build_swap_limit_mb, can_read_memory
 
         limit_mb = build_memory_limit_mb(self.bench.config.build.memory_limit_mb) if can_read_memory() else 0
         capped = bool(limit_mb) and can_cap_memory()
         if capped:
-            argv = memory_capped(argv, limit_mb)
+            swap_mb = build_swap_limit_mb()
+            argv = memory_capped(argv, limit_mb, swap_mb)
         else:
             logging.warning("Memory control unavailable here, so this build runs uncapped.")
 
@@ -49,8 +50,8 @@ class PythonAssetBuilder:
             # The kernel kills the scope, so the runner only sees a signal.
             if capped and error.returncode < 0:
                 raise BenchError(
-                    f"Build ran out of memory: it may use {limit_mb}MB of RAM on this machine, "
-                    "plus swap. Add swap, free memory, or set memory_limit_mb under [build] "
+                    f"Build ran out of memory: it may use {limit_mb}MB of RAM and {swap_mb}MB of swap "
+                    "on this machine. Add swap, free memory, or set memory_limit_mb under [build] "
                     "in bench.toml, then retry."
                 ) from error
             raise CommandError(
