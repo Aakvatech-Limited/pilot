@@ -1,5 +1,23 @@
+import {
+  CloudSettingsError,
+  getBilling,
+  getDomains,
+  getMarketplaceApps,
+  getTask,
+} from '@frappe/cloud-sdk'
 import { reactive } from 'vue'
-import * as api from './api'
+
+export const getErrorMessage = (exception: unknown, fallback?: string) => {
+  if (!(exception instanceof CloudSettingsError)) {
+    return (exception as Error | undefined)?.message || fallback || __('Something went wrong.')
+  }
+
+  if (exception.serverMessages.length) return exception.message
+  if (exception.status === 403) return __("You don't have permission to do this.")
+  if (exception.excType) return __('{0}. Please try again.', [exception.excType])
+
+  return __('Something went wrong. Please try again.')
+}
 
 const POLL_INTERVAL = 2500
 const MAX_WAIT = 3 * 60 * 1000
@@ -20,7 +38,7 @@ export const waitForTask = async (
     let task: { status?: string; exit_code?: number | null } | undefined
 
     try {
-      task = await api.getTask(taskId)
+      task = await getTask(taskId)
     } catch {
       if (Date.now() > deadline) return 'error'
 
@@ -103,9 +121,9 @@ export const createStore = (context?: CloudContext) => {
     if (state.billing && !force) return
 
     try {
-      state.billing = await api.getBilling()
+      state.billing = await getBilling()
     } catch (exception) {
-      state.billingError = api.getErrorMessage(exception)
+      state.billingError = getErrorMessage(exception)
     }
   }
 
@@ -115,9 +133,9 @@ export const createStore = (context?: CloudContext) => {
     if (state.marketplace && !force) return
 
     try {
-      state.marketplace = await api.getMarketplaceApps()
+      state.marketplace = await getMarketplaceApps()
     } catch (exception) {
-      state.marketplaceError = api.getErrorMessage(exception)
+      state.marketplaceError = getErrorMessage(exception)
     }
   }
 
@@ -127,15 +145,14 @@ export const createStore = (context?: CloudContext) => {
     if (state.domains && !force) return
 
     try {
-      state.domains = await api.getDomains()
+      state.domains = await getDomains()
     } catch (exception) {
-      state.domainsError = api.getErrorMessage(exception)
+      state.domainsError = getErrorMessage(exception)
     }
   }
 
   return {
     state,
-    api,
     loadBilling,
     loadMarketplace,
     loadDomains,

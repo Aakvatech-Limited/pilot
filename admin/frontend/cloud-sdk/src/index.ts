@@ -1,55 +1,6 @@
-const METHOD_PREFIX = 'frappe.integrations.frappe_providers.cloud_settings'
+import { call } from './request.ts'
 
-const call = <T = any>(
-  method: string,
-  args: Record<string, unknown> = {},
-  type: 'GET' | 'POST' = 'POST',
-): Promise<T> =>
-  new Promise((resolve, reject) => {
-    const request = frappe.call({
-      method: `${METHOD_PREFIX}.${method}`,
-      args,
-      type,
-      silent: true,
-      callback: (response) => resolve(response.message as T),
-      error: (response) => reject(errorFromResponse(response)),
-    })
-
-    Promise.resolve(request).then(
-      (response) => response && resolve(response.message as T),
-      (exception) => reject(errorFromResponse(exception)),
-    )
-  })
-
-const errorFromResponse = (response?: FrappeResponse) =>
-  Object.assign(new Error(messageFromResponse(response)), {
-    excType: response?.exc_type || response?.responseJSON?.exc_type || '',
-  })
-
-export const isMigrationConflict = (exception: unknown) =>
-  (exception as { excType?: string } | undefined)?.excType === 'CloudMigrationConflictError'
-
-const messageFromResponse = (response?: FrappeResponse) => {
-  const raw = response?._server_messages || response?.responseJSON?._server_messages
-
-  if (raw) {
-    try {
-      const messages = JSON.parse(raw)
-        .map((item: string) => JSON.parse(item).message)
-        .filter(Boolean)
-
-      if (messages.length) return messages.join('. ').replace(/<[^>]*>/g, '')
-    } catch {}
-  }
-
-  const exception = response?.exc_type || response?.responseJSON?.exc_type
-  const status = response?.status || response?.httpStatus
-
-  if (status === 403) return __("You don't have permission to do this.")
-  if (exception) return __('{0}. Please try again.', [exception])
-
-  return __('Something went wrong. Please try again.')
-}
+export { CloudSettingsError, isMigrationConflict } from './request.ts'
 
 export const getContext = () => call('get_context', {}, 'GET')
 
@@ -57,13 +8,12 @@ export const getAccountUrl = () => call('get_account_url', {}, 'GET')
 
 export const getBilling = () => call('get_billing', {}, 'GET')
 
-export const getPlanOptions = ({
-  provider,
-  region,
-}: {
+export interface PlanFilters {
   provider?: string
   region?: string
-} = {}) => {
+}
+
+export const getPlanOptions = ({ provider, region }: PlanFilters = {}) => {
   const args: Record<string, string> = {}
 
   if (provider) args.provider = provider
@@ -165,6 +115,3 @@ export const updateSiteConfig = (patch: Record<string, unknown>) =>
 export const clearCache = () => pilotRequest('POST', 'actions/clear-cache')
 
 export const migrate = () => pilotRequest('POST', 'actions/migrate')
-
-export const getErrorMessage = (exception: unknown, fallback?: string) =>
-  (exception as Error | undefined)?.message || fallback || __('Something went wrong.')

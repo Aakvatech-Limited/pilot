@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { changePlan, getPlanOptions } from '@frappe/cloud-sdk'
 import { Badge, Button, Dialog, ErrorMessage, Select } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import { openExternal } from '../external'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -96,7 +97,7 @@ const load = async () => {
   selected.value = ''
 
   try {
-    options.value = await props.store.api.getPlanOptions({
+    options.value = await props.getPlanOptions({
       provider: selectedProvider.value || undefined,
       region: selectedRegion.value || undefined,
     })
@@ -111,7 +112,7 @@ const load = async () => {
       normalizeChoices(options.value?.regions, options.value?.region)[0]?.value ||
       ''
   } catch (exception) {
-    error.value = props.store.api.getErrorMessage(exception)
+    error.value = props.getErrorMessage(exception)
   } finally {
     loading.value = false
   }
@@ -130,7 +131,7 @@ const submit = async () => {
   error.value = ''
 
   try {
-    await props.store.api.changePlan(selected.value)
+    await props.changePlan(selected.value)
     await props.store.loadBilling(true)
 
     frappe.show_alert({
@@ -140,7 +141,7 @@ const submit = async () => {
 
     open.value = false
   } catch (exception) {
-    error.value = props.store.api.getErrorMessage(exception)
+    error.value = props.getErrorMessage(exception)
   } finally {
     submitting.value = false
   }

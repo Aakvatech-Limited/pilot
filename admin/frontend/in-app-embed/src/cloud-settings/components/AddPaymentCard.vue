@@ -1,11 +1,18 @@
 <script setup lang="ts">
+import {
+  addPaymentMethod,
+  confirmPaymentMethod,
+  confirmPaymentMethodCheckout,
+  createPaymentMethodCheckout,
+  getPaymentGateways,
+} from '@frappe/cloud-sdk'
 import { Button, ErrorMessage, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, ref, watch } from 'vue'
 import RazorpayLogo from '../assets/Razorpay-1.svg?inline'
 import StripeLogo from '../assets/Stripe.svg?inline'
 import UpiLogo from '../assets/UPI-1.svg?inline'
 import { openExternal } from '../external'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -75,9 +82,9 @@ const load = async () => {
   error.value = ''
 
   try {
-    gateways.value = await store.api.getPaymentGateways()
+    gateways.value = await getPaymentGateways()
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   }
 }
 
@@ -91,10 +98,7 @@ const start = () => {
 
 const startStripe = async () => {
   await run(async () => {
-    checkout.value = await store.api.createPaymentMethodCheckout(
-      window.location.href,
-      selected.value,
-    )
+    checkout.value = await createPaymentMethodCheckout(window.location.href, selected.value)
 
     message.value = __('Checkout opened in a new tab. Add your card there, then check its status.')
 
@@ -108,7 +112,7 @@ const startRazorpay = async () => {
   message.value = ''
 
   try {
-    const handles = await store.api.addPaymentMethod(
+    const handles = await addPaymentMethod(
       method.value,
       selected.value,
       contact.value.trim() || null,
@@ -117,7 +121,7 @@ const startRazorpay = async () => {
     await loadRazorpay()
     openRazorpayCheckout(handles)
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
     working.value = false
   }
 }
@@ -151,7 +155,7 @@ const openRazorpayCheckout = (handles) => {
 
 const confirmRazorpay = async (paymentMethod, response) => {
   await run(async () => {
-    const result = await store.api.confirmPaymentMethod({
+    const result = await confirmPaymentMethod({
       payment_method: paymentMethod,
       razorpay_payment_id: response.razorpay_payment_id,
       razorpay_order_id: response.razorpay_order_id,
@@ -185,7 +189,7 @@ const loadRazorpay = () => {
 
 const check = async () => {
   await run(async () => {
-    const result = await store.api.confirmPaymentMethodCheckout(checkout.value.reference)
+    const result = await confirmPaymentMethodCheckout(checkout.value.reference)
 
     if (result.active) {
       await store.loadBilling(true)
@@ -207,7 +211,7 @@ const run = async (action) => {
   try {
     await action()
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   } finally {
     working.value = false
   }

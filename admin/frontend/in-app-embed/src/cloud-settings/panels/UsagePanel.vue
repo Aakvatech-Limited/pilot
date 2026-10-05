@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { getStorage, refreshStorage } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage } from 'frappe-ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Scrollbar from '../components/Scrollbar.vue'
-import { settleTask, type Store } from '../store'
+import { getErrorMessage, type Store, settleTask } from '../store'
 
 interface Props {
   store: Store
@@ -47,11 +48,11 @@ const load = async () => {
   error.value = ''
 
   try {
-    const [storage] = await Promise.all([store.api.getStorage(), store.loadBilling()])
+    const [storage] = await Promise.all([getStorage(), store.loadBilling()])
 
     usage.value = storage
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   }
 }
 
@@ -180,13 +181,13 @@ const refresh = async () => {
   error.value = ''
 
   try {
-    const { task_id } = await store.api.refreshStorage()
+    const { task_id } = await refreshStorage()
 
     if (!(await settleTask(task_id, () => gone, __("Couldn't measure usage.")))) return
 
     await load()
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   } finally {
     refreshing.value = false
   }

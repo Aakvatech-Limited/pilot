@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { getBillingProfile, saveBillingProfile } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage, Select, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -61,7 +62,7 @@ const load = async () => {
   error.value = ''
 
   try {
-    const profile = await store.api.getBillingProfile()
+    const profile = await getBillingProfile()
 
     currencies.value = (profile.supported_currencies || []).map((c) =>
       typeof c === 'string' ? { label: c, value: c } : c,
@@ -71,7 +72,7 @@ const load = async () => {
 
     loaded.value = true
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   }
 }
 
@@ -84,12 +85,12 @@ const save = async () => {
   error.value = ''
 
   try {
-    await store.api.saveBillingProfile({ ...form })
+    await saveBillingProfile({ ...form })
     await store.loadBilling(true)
 
     emit('saved')
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   } finally {
     working.value = false
   }

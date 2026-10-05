@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { getAccountUrl } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage, SettingsRow } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import Panel from '../components/Panel.vue'
 import { openExternal } from '../external'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -33,13 +34,13 @@ const openBilling = async () => {
   try {
     const response = context.value.account_url
       ? { url: context.value.account_url }
-      : await props.store.api.getAccountUrl()
+      : await props.getAccountUrl()
 
     if (!response?.url) throw new Error(__('Central is not configured.'))
 
     openExternal(response.url)
   } catch (exception) {
-    billingError.value = props.store.api.getErrorMessage(exception)
+    billingError.value = props.getErrorMessage(exception)
   } finally {
     openingBilling.value = false
   }
