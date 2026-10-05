@@ -80,14 +80,7 @@ export const useBackupUpload = (siteName: () => string) => {
       const isResumable =
         uploadId &&
         uploadedFiles === identity(files) &&
-        (await sitesApi.uploads.status(siteName(), uploadId).then(
-          () => true,
-          // A lost connection (TypeError from fetch) keeps the upload for the next retry.
-          (error) => {
-            if (error instanceof TypeError) throw error
-            return false
-          },
-        ))
+        (await sitesApi.uploads.exists(siteName(), uploadId))
       if (!isResumable) {
         discard()
         const described = Object.fromEntries(

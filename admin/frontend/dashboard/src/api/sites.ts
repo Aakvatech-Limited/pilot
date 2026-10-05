@@ -118,6 +118,13 @@ export const sitesApi = {
       unwrap(request.post(`sites/${encodeURIComponent(name)}/uploads`, { json: { files } }).json()),
     status: (name: string, uploadId: string): Promise<BackupUploadStatus> =>
       unwrap(request.get(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`).json()),
+    // False only when the server no longer has the upload; other failures reject.
+    exists: async (name: string, uploadId: string): Promise<boolean> => {
+      const response = await request.get(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`)
+      if (response.ok) return true
+      if (response.status === 404 || response.status === 422) return false
+      throw Object.assign(new Error('Could not check the upload.'), { status: response.status })
+    },
     cancel: (name: string, uploadId: string): Promise<Record<string, never>> =>
       unwrap(request.delete(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`).json()),
     // XMLHttpRequest, because fetch cannot report upload progress.
