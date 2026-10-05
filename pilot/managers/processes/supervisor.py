@@ -36,8 +36,11 @@ class SupervisorRenderer(ServiceRenderer):
             pairs = ",".join(f'{k}="{v}"' for k, v in pd.env.items())
             env = f"environment={pairs}\n"
         stop = f"stopwaitsecs={pd.stop_timeout}\n" if pd.stop_timeout is not None else ""
+        # Lower priority starts first and stops last, so redis outlives what drains into it.
+        priority = "priority=100\n" if pd.name.startswith("redis") else ""
         return (
             f"[program:{self.get_program_name(pd)}]\n"
+            f"{priority}"
             f"command={shlex.join(pd.argv)}\n"
             f"{env}{directory}"
             f"autostart=true\n"

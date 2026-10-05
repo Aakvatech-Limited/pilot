@@ -14,10 +14,17 @@ class SystemdRenderer(ServiceRenderer):
         working_dir = f"WorkingDirectory={pd.working_dir}\n" if pd.working_dir else ""
         env = "".join(f"Environment={k}={v}\n" for k, v in pd.env.items())
         stop = f"TimeoutStopSec={pd.stop_timeout}\n" if pd.stop_timeout is not None else ""
+        # systemd stops in reverse start order; redis must outlive a lite runner draining into it.
+        after_redis = (
+            ""
+            if pd.name.startswith("redis")
+            else f"After={self.bench_name}-redis_cache.service {self.bench_name}-redis_queue.service\n"
+        )
         return (
             f"[Unit]\n"
             f"Description={self.bench_name} {pd.name}\n"
-            f"PartOf={self.bench_name}.target\n\n"
+            f"PartOf={self.bench_name}.target\n"
+            f"{after_redis}\n"
             f"[Service]\n"
             f"Type=simple\n"
             f"{working_dir}{env}"
