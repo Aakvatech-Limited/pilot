@@ -49,7 +49,9 @@ class PythonAssetBuilder:
             # The kernel kills the scope, so the runner only sees a signal.
             if capped and error.returncode < 0:
                 raise BenchError(
-                    f"Build ran out of memory: it may use {limit_mb}MB on this machine."
+                    f"Build ran out of memory: it may use {limit_mb}MB of RAM on this machine, "
+                    "plus swap. Add swap, free memory, or set memory_limit_mb under [build] "
+                    "in bench.toml, then retry."
                 ) from error
             raise CommandError(
                 error.message.replace(repr("systemd-run"), repr(argv[0]), 1),

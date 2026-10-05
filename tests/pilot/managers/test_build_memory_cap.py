@@ -107,6 +107,8 @@ def test_a_host_that_can_cap_runs_the_build_in_a_capped_scope(monkeypatch: pytes
 
     assert calls[0][0] == "systemd-run"
     assert f"MemoryMax={int(4096 * BUILD_MEMORY_SHARE)}M" in calls[0]
+    # Small hosts finish large frontend builds only by swapping past the cap.
+    assert not any(arg.startswith("MemorySwapMax") for arg in calls[0])
 
 
 def test_a_linux_host_without_memory_control_builds_uncapped(monkeypatch: pytest.MonkeyPatch) -> None:
