@@ -75,6 +75,8 @@ ERROR_PAGES = {
 }
 
 LETSENCRYPT_LIVE = Path("/etc/letsencrypt/live")
+# Debian loads dynamic modules from modules-enabled, Fedora from /usr/share/nginx/modules.
+_MODULE_DIRS = (Path("/etc/nginx/modules-enabled"), Path("/usr/share/nginx/modules"))
 
 
 def _shared_nginx_dir() -> Path:
@@ -523,8 +525,10 @@ class NginxManager:
                 return True
         except OSError:
             return True
-        modules_dir = Path("/etc/nginx/modules-enabled")
-        return modules_dir.is_dir() and any("modsecurity" in entry.name for entry in modules_dir.iterdir())
+        for modules_dir in _MODULE_DIRS:
+            if modules_dir.is_dir() and any("modsecurity" in entry.name for entry in modules_dir.iterdir()):
+                return True
+        return False
 
     @staticmethod
     def _prune_dangling_symlinks(nginx_dir: Path) -> None:
