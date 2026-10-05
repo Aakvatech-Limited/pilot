@@ -60,6 +60,7 @@ EXPECTED_PACKAGES = {
         "nginx",
         "certbot",
         "supervisor",
+        "nginx-mod-modsecurity",
     ],
     "arch": [
         "mariadb",

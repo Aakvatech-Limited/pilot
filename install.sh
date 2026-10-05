@@ -152,6 +152,7 @@ pkg_installed() {
 pkg_available() {
     case "$DISTRO" in
         debian|ubuntu) apt-cache show "$1" >/dev/null 2>&1 ;;
+        fedora) dnf -q info "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
@@ -276,20 +277,20 @@ install_database_engines() {
 install_production_packages() {
     case "$DISTRO" in
         macos)  pkg_install nginx certbot ;;
-        debian|ubuntu)
+        debian|ubuntu|fedora)
             waf=$(waf_packages)
-            [ -n "$waf" ] || echo "Warning: libnginx-mod-http-modsecurity is not packaged for this release, so the WAF is unavailable."
+            [ -n "$waf" ] || echo "Warning: the nginx ModSecurity module is not packaged for this release, so the WAF is unavailable."
             # shellcheck disable=SC2086
             pkg_install nginx certbot supervisor $waf ;;
-        fedora) pkg_install nginx certbot supervisor ;;
         arch)   pkg_install nginx certbot supervisor ;;
     esac
 }
 
-# Some releases, such as Ubuntu 22.04, do not package the ModSecurity module.
+# Some releases do not package the ModSecurity module.
 waf_packages() {
     case "$DISTRO" in
         debian|ubuntu) pkg_available libnginx-mod-http-modsecurity && echo libnginx-mod-http-modsecurity ;;
+        fedora) pkg_available nginx-mod-modsecurity && echo nginx-mod-modsecurity ;;
     esac
     return 0
 }
@@ -397,7 +398,7 @@ system_packages_present() {
         debian|ubuntu)
             packages="mariadb-server mariadb-client libmariadb-dev postgresql postgresql-client libpq-dev pkg-config redis-server nginx certbot supervisor $(waf_packages)" ;;
         fedora)
-            packages="mariadb-server mariadb mariadb-connector-c-devel postgresql-server postgresql libpq-devel pkgconf-pkg-config valkey nginx certbot supervisor" ;;
+            packages="mariadb-server mariadb mariadb-connector-c-devel postgresql-server postgresql libpq-devel pkgconf-pkg-config valkey nginx certbot supervisor $(waf_packages)" ;;
         arch)
             packages="mariadb mariadb-clients mariadb-libs postgresql postgresql-libs pkgconf redis nginx certbot supervisor" ;;
         *)
