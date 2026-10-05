@@ -31,3 +31,6 @@ class GetAppCommand(Command):
         )
         self.app = result.app
         self.installed_dependencies = result.installed_dependencies
+        # Running workers cannot import an app added after they started.
+        if not result.already_installed:
+            self.bench.reload_workers()

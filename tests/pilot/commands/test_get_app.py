@@ -41,9 +41,12 @@ def test_full_flow_runs_when_app_not_registered(tmp_path: Path) -> None:
         patch.object(App, "validate") as mock_validate,
         patch.object(App, "_install_into_environment") as mock_install,
         patch.object(App, "_build_assets_via_env_manager") as mock_build,
+        patch.object(type(bench), "reload_workers") as mock_reload,
     ):
         cmd.run()
 
+    # Production workers must restart to import the new app.
+    mock_reload.assert_called_once()
     mock_clone.assert_called_once()
     mock_validate.assert_called_once()
     mock_install.assert_called_once()
@@ -62,9 +65,11 @@ def test_run_short_circuits_when_app_already_registered(tmp_path: Path) -> None:
         patch.object(App, "validate") as mock_validate,
         patch.object(App, "_install_into_environment") as mock_install,
         patch.object(App, "_build_assets_via_env_manager") as mock_build,
+        patch.object(type(bench), "reload_workers") as mock_reload,
     ):
         cmd.run()
 
+    mock_reload.assert_not_called()
     mock_clone.assert_not_called()
     mock_validate.assert_not_called()
     mock_install.assert_not_called()
