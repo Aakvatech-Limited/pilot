@@ -1157,3 +1157,15 @@ def test_backup_upload_chunks_stream_to_the_admin_without_the_waf(tmp_path: Path
 
     assert "modsecurity off;" in location
     assert "proxy_request_buffering off;" in location
+
+
+def test_nginx_in_sbin_is_found_without_sbin_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Debian leaves /usr/sbin off a normal user's PATH.
+    sbin = tmp_path / "sbin"
+    sbin.mkdir()
+    (sbin / "nginx").write_text("#!/bin/sh\n")
+    (sbin / "nginx").chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path / "bin"))
+    monkeypatch.setattr("pilot.managers.platform._EXTRA_BIN_DIRS", (str(sbin),))
+
+    assert NginxManager(_make_bench(tmp_path, _BASE_DATA)).is_installed()

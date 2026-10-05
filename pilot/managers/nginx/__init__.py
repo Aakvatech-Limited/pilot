@@ -4,7 +4,6 @@ import importlib.util
 import logging
 import pwd
 import re
-import shutil
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
@@ -338,7 +337,7 @@ class NginxManager:
         self._modsec = ModSecurityRenderer(bench)
 
     def is_installed(self) -> bool:
-        return shutil.which("nginx") is not None
+        return which("nginx") is not None
 
     def install(self) -> None:
         if not self.is_installed():
