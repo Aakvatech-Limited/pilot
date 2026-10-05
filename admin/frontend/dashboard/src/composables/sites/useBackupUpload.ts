@@ -76,7 +76,19 @@ export const useBackupUpload = (siteName: () => string) => {
     controller = new AbortController()
     isUploading.value = true
     try {
-      if (!uploadId || uploadedFiles !== identity(files)) {
+      // A restore that claimed the upload, or cleanup of an idle one, removes it on the server.
+      const isResumable =
+        uploadId &&
+        uploadedFiles === identity(files) &&
+        (await sitesApi.uploads.status(siteName(), uploadId).then(
+          () => true,
+          // A lost connection (TypeError from fetch) keeps the upload for the next retry.
+          (error) => {
+            if (error instanceof TypeError) throw error
+            return false
+          },
+        ))
+      if (!isResumable) {
         discard()
         const described = Object.fromEntries(
           Object.entries(files).map(([part, file]) => [part, { filename: file.name, size: file.size }]),
