@@ -68,6 +68,28 @@ detect_distro() {
 
 DISTRO="$(detect_distro)"
 
+# The last two releases of each distro. Derivatives number releases differently
+# (Mint 22 is Ubuntu 24.04), so only the parents are checked.
+require_supported_release() {
+    os_release="${1:-/etc/os-release}"
+    [ -r "$os_release" ] || return 0
+    # shellcheck disable=SC1090
+    distro_id=$(. "$os_release"; echo "$ID")
+    # shellcheck disable=SC1090
+    major=$(. "$os_release"; echo "${VERSION_ID%%.*}")
+    case "$distro_id" in
+        ubuntu) minimum=24; label="Ubuntu 24.04" ;;
+        debian) minimum=12; label="Debian 12" ;;
+        fedora) minimum=43; label="Fedora 43" ;;
+        *) return 0 ;;
+    esac
+    # Debian testing and sid have no VERSION_ID; they are newer than any release.
+    [ -z "$major" ] && return 0
+    [ "$major" -ge "$minimum" ] && return 0
+    echo "Pilot does not support $distro_id $major. Use $label or newer." >&2
+    exit 1
+}
+
 is_root() {
     [ "$(id -u)" -eq 0 ]
 }
@@ -750,6 +772,7 @@ install_for_user() {
 }
 
 # ── run ───────────────────────────────────────────────────────────────────────
+require_supported_release
 install_system_packages
 
 if is_root; then

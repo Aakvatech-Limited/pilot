@@ -338,3 +338,25 @@ echo reached_the_end
     )
     assert ("reached_the_end" in result.stdout) is is_accepted
     assert ("Node.js 24 or later" in result.stdout) is not is_accepted
+
+
+@pytest.mark.parametrize(
+    ("os_release", "supported"),
+    [
+        ('ID=ubuntu\nVERSION_ID="22.04"\n', False),
+        ('ID=ubuntu\nVERSION_ID="24.04"\n', True),
+        ('ID=debian\nVERSION_ID="11"\n', False),
+        ('ID=debian\nVERSION_ID="13"\n', True),
+        ("ID=debian\n", True),  # testing and sid carry no VERSION_ID
+        ('ID=fedora\nVERSION_ID="42"\n', False),
+        ('ID=fedora\nVERSION_ID="44"\n', True),
+        ('ID=linuxmint\nID_LIKE=ubuntu\nVERSION_ID="21.3"\n', True),
+    ],
+)
+def test_only_the_last_two_releases_are_supported(os_release: str, supported: bool, tmp_path: Path) -> None:
+    release_file = tmp_path / "os-release"
+    release_file.write_text(os_release)
+
+    result = run_installer_functions(f"require_supported_release {release_file}", tmp_path)
+
+    assert (result.returncode == 0) is supported
