@@ -121,7 +121,8 @@ watch(
   open,
   (isOpen) => {
     password.value = ''
-    if (!isOpen && backupUpload.isUploading.value) backupUpload.cancel()
+    // Uploaded parts stay for a retry until the dialog closes.
+    if (!isOpen) backupUpload.cancel()
     if (!isOpen) {
       if (route.query.restore) setRestoreQuery()
       return
