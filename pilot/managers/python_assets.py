@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from pilot.exceptions import BenchError, CommandError
 from pilot.managers.systemd_user import can_cap_memory, memory_capped, systemctl_env
-from pilot.utils import get_yarn_bin, git_has_local_changes, run_command
+from pilot.utils import get_yarn_bin, run_command
 
 if TYPE_CHECKING:
     from pilot.core.app import App
@@ -73,11 +73,18 @@ class PythonAssetBuilder:
         app_public_dir = app.path / app.config.name / "public"
         dist_dir = app_public_dir / "dist"
 
-        if not force and not git_has_local_changes(app.path):
+        # Desk serves /assets/frappe/node_modules, and every server build runs Frappe's esbuild.
+        if app.config.name == "frappe" and (app.path / "package.json").exists():
+            self.ensure_yarn_install(app.path)
+
+        if not force and not app.has_source_changes:
             from pilot.core.app.prebuilt_assets import PrebuiltAssets
 
-            if PrebuiltAssets(app).install():
-                self.setup_prebuilt_assets(app.config.name, app_public_dir, dist_dir)
+            prebuilt = PrebuiltAssets(app)
+            if prebuilt.install():
+                self.setup_prebuilt_assets(app.config.name, app_public_dir, dist_dir, prebuilt.asset_maps)
+                if app.has_page_islands:
+                    self.build_page_islands()
                 return
 
         if (app.path / "package.json").exists():
@@ -137,7 +144,13 @@ class PythonAssetBuilder:
                 stream_output=True,
             )
 
-    def setup_prebuilt_assets(self, app_name: str, app_public_dir: Path, dist_dir: Path) -> None:
+    def setup_prebuilt_assets(
+        self,
+        app_name: str,
+        app_public_dir: Path,
+        dist_dir: Path,
+        asset_maps: dict[str, dict[str, str]] | None = None,
+    ) -> None:
         assets_dir = self.bench.sites_path / "assets"
         assets_dir.mkdir(exist_ok=True)
 
@@ -148,8 +161,32 @@ class PythonAssetBuilder:
             shutil.rmtree(str(app_link))
         app_link.symlink_to(app_public_dir.resolve())
 
-        self.write_assets_json(app_name, dist_dir, assets_dir)
+        # As `bench build` links it: <app>/node_modules is served at /assets/<app>/node_modules.
+        node_modules = app_public_dir.parent.parent / "node_modules"
+        node_modules_link = app_public_dir / "node_modules"
+        if node_modules.is_dir() and not node_modules_link.exists() and not node_modules_link.is_symlink():
+            node_modules_link.symlink_to(node_modules.resolve())
+
+        if asset_maps is None:
+            self.write_assets_json(app_name, dist_dir, assets_dir)
+        else:
+            from pilot.core.app.prebuilt_assets import PAGE_ISLAND_URL
+
+            for name, entries in asset_maps.items():
+                self.merge_json(assets_dir / name, entries, replacing=f"/assets/{app_name}/", keeping=PAGE_ISLAND_URL)
         print(f"  Linked {app_link} -> {app_public_dir.resolve()}")
+
+    def build_page_islands(self) -> None:
+        """Build every app's page islands, as Frappe's `after_app_build` hook does. Frappe
+        without them (version-16) has no script."""
+        frappe_path = self.bench.apps_path / "frappe"
+        script = frappe_path / "ui" / "vite" / "island" / "build-pages.js"
+        if not script.exists():
+            return
+        self.ensure_yarn_install(script.parent / "toolchain")
+        print("  Building Frappe UI page islands...")
+        sys.stdout.flush()
+        self.run_compiler(["node", str(script), "--production"], cwd=frappe_path, stream_output=True)
 
     def write_assets_json(self, app_name: str, dist_dir: Path, assets_dir: Path) -> None:
         assets = {
@@ -190,8 +227,9 @@ class PythonAssetBuilder:
         return entries
 
     @staticmethod
-    def merge_json(path: Path, new_entries: dict) -> None:
-        """Merge under the lock: several apps' builds write this file at once."""
+    def merge_json(path: Path, new_entries: dict, replacing: str = "", keeping: str = "") -> None:
+        """Merge under the lock: several apps' builds write this file at once. Entries under
+        `replacing` are dropped first, except those under `keeping`."""
         from pilot.internal.atomic_file import exclusive_file_lock, replace_private_text_locked
 
         with exclusive_file_lock(path):
@@ -199,5 +237,11 @@ class PythonAssetBuilder:
             if path.exists():
                 with contextlib.suppress(json.JSONDecodeError):
                     existing = json.loads(path.read_text())
+            if replacing:
+                existing = {
+                    key: url
+                    for key, url in existing.items()
+                    if not str(url).startswith(replacing) or (keeping and str(url).startswith(keeping))
+                }
             existing.update(new_entries)
             replace_private_text_locked(path, json.dumps(existing, indent="\t", sort_keys=True) + "\n")
