@@ -69,14 +69,18 @@ jobs:
             exit 1
           fi
           tag="assets-${GITHUB_REF_NAME//\//-}"
+          # Another workflow on the same branch can create the release first.
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --prerelease --target "$GITHUB_SHA" \
-              --title "Assets for $GITHUB_REF_NAME" --notes "Prebuilt assets that Pilot downloads. Do not edit."
+              --title "Assets for $GITHUB_REF_NAME" --notes "Prebuilt assets that Pilot downloads. Do not edit." \
+              || gh release view "$tag" >/dev/null
           fi
           gh release upload "$tag" dist/* --clobber
 
           # Keep the newest commits of each kind: two files (archive and checksum) per commit.
-          tagged=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" --jq '.[].commit.sha' | tr '\n' ' ')
+          # The release's own assets-<branch> tag does not make its commit a release.
+          tagged=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" \
+            --jq '.[] | select(.name | startswith("assets-") | not) | .commit.sha' | tr '\n' ' ')
           release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq .id)
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
             --jq '.[] | "\(.created_at) \(.id) \(.name)"' \
