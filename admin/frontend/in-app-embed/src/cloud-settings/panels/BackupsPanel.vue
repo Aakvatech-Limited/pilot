@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { createBackup, deleteBackup, getBackupDownloadLinks, getBackups } from '@frappe/cloud-sdk'
 import { Badge, Button, Dialog, Dropdown, ErrorMessage } from 'frappe-ui'
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
 import { openExternal } from '../external'
-import { settleTask, type Store } from '../store'
+import { getErrorMessage, type Store, settleTask } from '../store'
 
 interface Props {
   store: Store
@@ -12,7 +13,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const store = props.store
 
 const FILE_LABELS = {
   database: __('Download Database'),
@@ -44,9 +44,9 @@ const load = async () => {
   error.value = ''
 
   try {
-    backups.value = await store.api.getBackups()
+    backups.value = await getBackups()
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   }
 }
 
@@ -99,7 +99,7 @@ const backUp = async () => {
   error.value = ''
 
   try {
-    const { task_id } = await store.api.createBackup()
+    const { task_id } = await createBackup()
 
     if (!(await settleTask(task_id, () => gone, __("Couldn't back up the site.")))) return
 
@@ -107,7 +107,7 @@ const backUp = async () => {
 
     frappe.show_alert({ message: __('Backup done.'), indicator: 'green' })
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   } finally {
     creating.value = false
   }
@@ -119,14 +119,14 @@ const download = async (backup, file) => {
   if (!backup.is_offsite) return openExternal(`/backups/${encodeURIComponent(file.filename)}`)
 
   try {
-    const links = await store.api.getBackupDownloadLinks(backup.timestamp)
+    const links = await getBackupDownloadLinks(backup.timestamp)
     const url = links[LINK_KEYS[file.kind]]
 
     if (!url) throw new Error(__('This file is not in the offsite backup.'))
 
     openExternal(url)
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   }
 }
 
@@ -141,7 +141,7 @@ const confirmDelete = async () => {
   error.value = ''
 
   try {
-    const { task_id } = await store.api.deleteBackup(deleteTarget.value.timestamp)
+    const { task_id } = await deleteBackup(deleteTarget.value.timestamp)
 
     if (!(await settleTask(task_id, () => gone, __("Couldn't delete the backup.")))) return
 
@@ -149,7 +149,7 @@ const confirmDelete = async () => {
 
     frappe.show_alert({ message: __('Backup deleted.'), indicator: 'green' })
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   } finally {
     deleting.value = false
   }

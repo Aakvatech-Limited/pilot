@@ -40,8 +40,15 @@ export default defineConfig({
     },
   ],
 
+  resolve: {
+    alias: {
+      "@frappe/cloud-sdk": path.resolve(__dirname, "../cloud-sdk/src/index.ts"),
+    },
+  },
+
   server: {
     host: "::",
+    fs: { allow: [".", "../cloud-sdk"] },
     warmup: { clientFiles: ["./src/cloud-settings/index.ts"] },
   },
 

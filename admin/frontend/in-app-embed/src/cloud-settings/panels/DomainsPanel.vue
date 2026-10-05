@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { addDomain, getDomainDnsRecords, removeDomain, setPrimaryDomain } from '@frappe/cloud-sdk'
 import { Badge, Button, Dialog, Dropdown, ErrorMessage, TextInput } from 'frappe-ui'
 import { computed, inject, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
 import { openExternal } from '../external'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -94,7 +95,7 @@ watch(normalizedDomain, (domain) => {
 
 const loadDnsRecords = async (domain) => {
   try {
-    const response = await store.api.getDomainDnsRecords(domain)
+    const response = await getDomainDnsRecords(domain)
 
     if (domain === normalizedDomain.value) dnsRecords.value = response.records || []
   } catch {}
@@ -106,7 +107,7 @@ const confirmAdd = async () => {
   if (!canAdd.value) return
 
   await run(async () => {
-    await store.api.addDomain(domain)
+    await addDomain(domain)
 
     input.value = ''
 
@@ -135,7 +136,7 @@ const makePrimary = (domain) => {
   busyDomain.value = domain
 
   run(async () => {
-    await store.api.setPrimaryDomain(domain)
+    await setPrimaryDomain(domain)
     await store.loadDomains(true)
   })
 }
@@ -150,7 +151,7 @@ const confirmRemove = () => {
   busyDomain.value = removeTarget.value
 
   run(async () => {
-    await store.api.removeDomain(removeTarget.value)
+    await removeDomain(removeTarget.value)
     await store.loadDomains(true)
   })
 }
@@ -162,7 +163,7 @@ const run = async (action) => {
   try {
     await action()
   } catch (exception) {
-    store.state.domainsError = store.api.getErrorMessage(exception)
+    store.state.domainsError = getErrorMessage(exception)
   } finally {
     working.value = false
     busyDomain.value = ''

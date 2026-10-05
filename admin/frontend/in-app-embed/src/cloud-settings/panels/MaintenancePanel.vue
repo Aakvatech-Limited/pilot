@@ -1,15 +1,15 @@
 <script setup lang="ts">
+import { clearCache, migrate } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage, SettingsRow } from 'frappe-ui'
 import { onBeforeUnmount, ref } from 'vue'
 import Panel from '../components/Panel.vue'
-import { settleTask, type Store } from '../store'
+import { getErrorMessage, type Store, settleTask } from '../store'
 
 interface Props {
   store: Store
 }
 
-const props = defineProps<Props>()
-const store = props.store
+defineProps<Props>()
 
 const actions = [
   {
@@ -18,7 +18,7 @@ const actions = [
     description: __('Drops cached pages and settings. Safe to run any time something looks stale.'),
     label: __('Clear cache'),
     done: __('Cache cleared.'),
-    run: () => store.api.clearCache(),
+    run: () => clearCache(),
   },
   {
     key: 'migrate',
@@ -28,7 +28,7 @@ const actions = [
     ),
     label: __('Migrate'),
     done: __('Migrations finished.'),
-    run: () => store.api.migrate(),
+    run: () => migrate(),
   },
 ]
 
@@ -51,7 +51,7 @@ const run = async (action) => {
 
     frappe.show_alert({ message: action.done, indicator: 'green' })
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   } finally {
     running.value = ''
   }

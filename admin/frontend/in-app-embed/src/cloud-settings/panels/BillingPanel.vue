@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { getAccountUrl, reconcilePaymentSetup, removePaymentMethod } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import AddPaymentCard from '../components/AddPaymentCard.vue'
 import BillingProfileCard from '../components/BillingProfileCard.vue'
 import Panel from '../components/Panel.vue'
 import { openExternal } from '../external'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -25,7 +26,7 @@ const load = async () => {
   await store.loadBilling(true)
 
   try {
-    await store.api.reconcilePaymentSetup()
+    await reconcilePaymentSetup()
     await store.loadBilling(true)
   } catch {}
 }
@@ -63,10 +64,10 @@ const removeCard = async () => {
   removeError.value = ''
 
   try {
-    await store.api.removePaymentMethod(billing.value.payment_method.name)
+    await removePaymentMethod(billing.value.payment_method.name)
     await store.loadBilling(true)
   } catch (exception) {
-    removeError.value = store.api.getErrorMessage(exception)
+    removeError.value = getErrorMessage(exception)
   } finally {
     removing.value = false
   }
@@ -81,13 +82,13 @@ const openChangePlan = async () => {
   try {
     const response = store.state.context?.account_url
       ? { url: store.state.context.account_url }
-      : await store.api.getAccountUrl()
+      : await getAccountUrl()
 
     if (!response?.url) throw new Error(__('Central is not configured.'))
 
     openExternal(response.url)
   } catch (exception) {
-    changePlanError.value = store.api.getErrorMessage(exception)
+    changePlanError.value = getErrorMessage(exception)
   } finally {
     openingChangePlan.value = false
   }

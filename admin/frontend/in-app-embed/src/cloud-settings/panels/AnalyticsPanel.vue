@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { getAnalytics, getUptime } from '@frappe/cloud-sdk'
 import { Select, Tooltip } from 'frappe-ui'
 import { AreaChart } from 'frappe-ui/charts'
 import { computed, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -11,7 +12,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const store = props.store
 
 const WINDOWS = [
   { label: __('30 minutes'), value: '30m' },
@@ -43,14 +43,14 @@ const load = async () => {
 
   try {
     const [monitoring, checks] = await Promise.all([
-      store.api.getAnalytics(window.value),
-      store.api.getUptime(window.value),
+      getAnalytics(window.value),
+      getUptime(window.value),
     ])
 
     analytics.value = monitoring
     uptime.value = checks
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   }
 }
 

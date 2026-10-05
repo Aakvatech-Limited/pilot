@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { installApp, isMigrationConflict, uninstallApp, updateApps } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage, Select, TextInput } from 'frappe-ui'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import ActionableError from '../components/ActionableError.vue'
@@ -6,7 +7,13 @@ import AppRow from '../components/AppRow.vue'
 import Panel from '../components/Panel.vue'
 import UninstallAppDialog from '../components/UninstallAppDialog.vue'
 import UpdateAppsDialog from '../components/UpdateAppsDialog.vue'
-import { type Store, getRememberedTasks, rememberTask, waitForTask } from '../store'
+import {
+  getErrorMessage,
+  getRememberedTasks,
+  rememberTask,
+  type Store,
+  waitForTask,
+} from '../store'
 
 interface Props {
   store: Store
@@ -102,23 +109,23 @@ const clearFilters = () => {
   category.value = ''
 }
 
-const install = (app) => runAction(app, 'install', () => store.api.installApp(app.name))
+const install = (app) => runAction(app, 'install', () => installApp(app.name))
 
 const askUninstall = (app) => {
   uninstallTarget.value = app
   showUninstall.value = true
 }
 
-const uninstall = (app, mode) => runAction(app, mode, () => store.api.uninstallApp(app.name, mode))
-const updateOne = (app) => runAction(app, 'update', () => store.api.updateApps([app.name]))
+const uninstall = (app, mode) => runAction(app, mode, () => uninstallApp(app.name, mode))
+const updateOne = (app) => runAction(app, 'update', () => updateApps([app.name]))
 
 const asBlocker = (exception) => {
-  if (!store.api.isMigrationConflict(exception)) return null
+  if (!isMigrationConflict(exception)) return null
 
   const server = store.state.context.server_url
 
   return {
-    message: store.api.getErrorMessage(exception),
+    message: getErrorMessage(exception),
     actionLabel: server ? __('Open updates') : '',
     actionUrl: server ? `${server.replace(/\/$/, '')}/updates` : '',
   }
@@ -130,7 +137,7 @@ const updateAll = async ({ apps, taskId }) => {
   blocker.value = null
 
   try {
-    const { task_id } = taskId ? { task_id: taskId } : await store.api.updateApps(apps)
+    const { task_id } = taskId ? { task_id: taskId } : await updateApps(apps)
 
     rememberTask(site, '*', { taskId: task_id, verb: 'update' })
 
@@ -147,7 +154,7 @@ const updateAll = async ({ apps, taskId }) => {
     if (blocker.value) {
       showUpdates.value = false
     } else {
-      updateAllError.value = store.api.getErrorMessage(exception)
+      updateAllError.value = getErrorMessage(exception)
 
       if (!showUpdates.value) notify(updateAllError.value, 'red')
     }
@@ -187,7 +194,7 @@ const runAction = async (app, verb, action) => {
     blocker.value = asBlocker(exception)
 
     if (!blocker.value) {
-      errors[app.name] = store.api.getErrorMessage(exception)
+      errors[app.name] = getErrorMessage(exception)
 
       notify(errors[app.name], 'red')
     }

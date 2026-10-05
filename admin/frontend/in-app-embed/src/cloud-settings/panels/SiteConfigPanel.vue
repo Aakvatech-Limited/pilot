@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { getSiteConfig, updateSiteConfig } from '@frappe/cloud-sdk'
 import { Button, Dialog, Dropdown, ErrorMessage, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
-import type { Store } from '../store'
+import { getErrorMessage, type Store } from '../store'
 
 interface Props {
   store: Store
@@ -11,7 +12,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const store = props.store
 
 const columns = [
   { label: __('Key'), key: 'key', class: 'w-1/3' },
@@ -32,9 +32,9 @@ const load = async () => {
   error.value = ''
 
   try {
-    config.value = await store.api.getSiteConfig()
+    config.value = await getSiteConfig()
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
   }
 }
 
@@ -75,11 +75,11 @@ const save = async (patch) => {
   error.value = ''
 
   try {
-    config.value = await store.api.updateSiteConfig(patch)
+    config.value = await updateSiteConfig(patch)
 
     return true
   } catch (exception) {
-    error.value = store.api.getErrorMessage(exception)
+    error.value = getErrorMessage(exception)
 
     return false
   } finally {
