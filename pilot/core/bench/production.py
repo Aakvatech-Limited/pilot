@@ -39,15 +39,18 @@ class BenchProduction:
         manager = cast("ManagedProcessManager", ProcessManager.for_bench(self.bench))
         on_progress("Stopping the running processes")
         manager.stop()
-        on_progress("Rewriting the bench configuration")
-        self.bench.write_common_site_config()
-        regenerate_nginx(self.bench)
-        on_progress("Installing the new process set")
-        manager.write_config()
-        manager.install_config()
-        manager.reload_manager_config()
-        on_progress("Starting the new process set")
-        manager.start_workload()
+        # A failed step must not leave the sites down.
+        try:
+            on_progress("Rewriting the bench configuration")
+            self.bench.write_common_site_config()
+            regenerate_nginx(self.bench)
+            on_progress("Installing the new process set")
+            manager.write_config()
+            manager.install_config()
+            manager.reload_manager_config()
+        finally:
+            on_progress("Starting the new process set")
+            manager.start_workload()
 
     def remove_production(self, on_progress: Callable[[str], None]) -> None:
         production = self.bench.config.production
