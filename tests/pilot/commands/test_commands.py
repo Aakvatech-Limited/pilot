@@ -500,9 +500,13 @@ def test_remove_app_full_flow_no_sites(tmp_path: Path) -> None:
     (bench.sites_path / "apps.txt").write_text("frappe\nerpnext\n")
 
     cmd = RemoveAppCommand(bench, app_name="erpnext", skip_confirm=True)
-    with patch("pilot.managers.environment.PythonEnvManager.uninstall_app"):
+    with (
+        patch("pilot.managers.environment.PythonEnvManager.uninstall_app"),
+        patch.object(type(bench), "reload_workers") as mock_reload,
+    ):
         cmd.run()
 
+    mock_reload.assert_called_once()
     assert not app_dir.exists()
     remaining = [line for line in (bench.sites_path / "apps.txt").read_text().splitlines() if line.strip()]
     assert "erpnext" not in remaining
@@ -1444,3 +1448,21 @@ def test_set_admin_password_generates_one_when_left_blank(tmp_path: Path, monkey
 
     generated = capsys.readouterr().out.split("Generated password (shown once): ", 1)[1].strip()
     assert BenchConfig.read(tmp_path).admin.verify_password(generated)
+
+
+def test_new_app_reloads_workers_so_sites_can_import_it(tmp_path: Path) -> None:
+    from pilot.commands.apps.new import NewAppCommand
+
+    bench = make_bench(tmp_path)
+    bench.create_directories()
+    cmd = NewAppCommand(bench, app_name="demo_app", description="Demo", email="dev@example.com")
+
+    with (
+        patch.object(type(bench), "new_app") as mock_new_app,
+        patch.object(type(bench), "reload_workers") as mock_reload,
+        patch("sys.stdin.isatty", return_value=False),
+    ):
+        cmd.run()
+
+    mock_new_app.assert_called_once()
+    mock_reload.assert_called_once()

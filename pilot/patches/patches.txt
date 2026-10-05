@@ -5,3 +5,4 @@ merge_common_config
 hash_admin_password
 move_site_backups
 raise_mariadb_memory_high
+add_supervisord_boot_entry

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -402,6 +403,31 @@ def test_systemd_unit_part_of_target(tmp_path: Path) -> None:
     assert "PartOf=test-bench.target" in unit
 
 
+def test_systemd_workload_stops_before_redis(tmp_path: Path) -> None:
+    """Stopped together, a lite runner's job worker retries redis until its drain timeout."""
+    from pilot.managers.processes.local import ProcessDefinition
+    from pilot.managers.processes.systemd import SystemdRenderer
+
+    renderer = SystemdRenderer("test-bench")
+    web = renderer.render(ProcessDefinition(name="web", argv=["web"], log_file=tmp_path / "web.log"))
+    redis = renderer.render(ProcessDefinition(name="redis_queue", argv=["redis"], log_file=tmp_path / "r.log"))
+
+    assert "After=test-bench-redis_cache.service test-bench-redis_queue.service" in web
+    assert "After=" not in redis
+
+
+def test_supervisor_redis_starts_first_and_stops_last(tmp_path: Path) -> None:
+    from pilot.managers.processes.local import ProcessDefinition
+    from pilot.managers.processes.supervisor import SupervisorRenderer
+
+    renderer = SupervisorRenderer("test-bench", tmp_path)
+    redis = renderer.render(ProcessDefinition(name="redis_queue", argv=["redis"], log_file=tmp_path / "r.log"))
+    web = renderer.render(ProcessDefinition(name="web", argv=["web"], log_file=tmp_path / "web.log"))
+
+    assert "priority=100" in redis
+    assert "priority" not in web
+
+
 def test_systemd_unit_redis_gets_stop_timeout(tmp_path: Path) -> None:
     """The redis stop grace reaches the systemd renderer from the definition."""
     from pilot.managers.processes.local import ProcessDefinition
@@ -757,3 +783,23 @@ def test_an_idle_admin_socket_is_activated(tmp_path: Path, monkeypatch) -> None:
     calls = _admin_activation(tmp_path, monkeypatch, socket_active=False, service_changed=False, socket_changed=False)
 
     assert ["restart", "test-bench-admin.socket"] in calls
+
+
+def test_supervisor_starts_again_after_a_reboot(tmp_path: Path, monkeypatch) -> None:
+    """The bench owns its supervisord, so an @reboot entry brings the bench back."""
+    from pilot.managers.cron import CronManager
+    from pilot.managers.processes.supervisor import SupervisorProcessManager
+
+    crontab: list[str] = []
+    monkeypatch.setattr(CronManager, "_read_crontab", lambda self: list(crontab))
+    monkeypatch.setattr(CronManager, "_write_crontab", lambda self, lines: crontab.__setitem__(slice(None), lines))
+    monkeypatch.setattr(CronManager, "_lock", lambda self: contextlib.nullcontext())
+    manager = SupervisorProcessManager(make_bench(tmp_path))
+    monkeypatch.setattr(manager, "is_alive", lambda: False)
+
+    manager.install_config()
+    entry = next(line for line in crontab if line.startswith("@reboot"))
+    assert f"-c {manager.supervisor_conf_path}" in entry
+
+    manager.shutdown()
+    assert not any(line.startswith("@reboot") for line in crontab)

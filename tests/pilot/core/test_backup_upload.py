@@ -62,14 +62,17 @@ def test_a_chunk_beyond_the_announced_size_is_refused(tmp_path: Path) -> None:
         _send(_upload(tmp_path, size=4), 0, b"hello")
 
 
-def test_a_chunk_that_ends_early_is_dropped_so_it_can_be_sent_again(tmp_path: Path) -> None:
+def test_a_chunk_that_ends_early_keeps_what_arrived_and_resumes_after_it(tmp_path: Path) -> None:
+    # A dropped connection must not cost the part of a 256 MB chunk that already arrived.
     upload = _upload(tmp_path)
     _send(upload, 0, b"hello")
 
-    with pytest.raises(BenchError, match="ended before"):
+    with pytest.raises(UploadOffsetError) as error:
         upload.write_chunk("database", 5, io.BytesIO(b"wo"), 5)
 
-    assert upload.files["database"]["received"] == 5
+    assert error.value.received == 7
+    assert upload.files["database"]["received"] == 7
+    assert _send(upload, 7, b"rld") == 10
 
 
 def test_an_incomplete_upload_cannot_be_claimed_by_a_restore(tmp_path: Path) -> None:

@@ -156,6 +156,27 @@ class App:
         return self._repository.repo.head_sha
 
     @property
+    def has_source_changes(self) -> bool:
+        """Local edits that published assets lack. Files the asset build rewrites do not count,
+        or one server build would rule out prebuilt assets for good."""
+        from pilot.core.app.prebuilt_assets import build_output_paths
+
+        repo = self._repository.repo
+        if repo.has_unpushed_commits:
+            return True
+        outputs = build_output_paths(self)
+        return any(
+            Path(path).name != "components.d.ts"
+            and not any(path == output or path.startswith(f"{output}/") for output in outputs)
+            for path in repo.changed_paths
+        )
+
+    @property
+    def has_page_islands(self) -> bool:
+        """Whether the app has Frappe UI pages, whose islands Frappe builds."""
+        return any((self.path / self.config.name).glob("*/page/*/*.island.js"))
+
+    @property
     def current_branch(self) -> str:
         """The branch checked out on disk, empty when HEAD is detached."""
         return self._repository.repo.branch

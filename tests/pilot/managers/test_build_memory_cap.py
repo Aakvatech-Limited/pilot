@@ -86,6 +86,7 @@ def _host(
     monkeypatch.setattr(build_memory, "can_read_memory", lambda: reads_memory)
     monkeypatch.setattr(python_assets, "can_cap_memory", lambda: caps_memory)
     _free_memory(monkeypatch, free_mb)
+    monkeypatch.setattr(build_memory, "free_swap_mb", lambda: 2048)
     monkeypatch.setattr(python_assets, "run_command", lambda argv, **kwargs: calls.append(argv))
     return calls
 
@@ -107,6 +108,17 @@ def test_a_host_that_can_cap_runs_the_build_in_a_capped_scope(monkeypatch: pytes
 
     assert calls[0][0] == "systemd-run"
     assert f"MemoryMax={int(4096 * BUILD_MEMORY_SHARE)}M" in calls[0]
+    # Small hosts finish large frontend builds only by swapping past the cap, but not into all of it.
+    assert f"MemorySwapMax={int(2048 * BUILD_MEMORY_SHARE)}M" in calls[0]
+
+
+def test_free_swap_is_read_from_meminfo_and_absent_swap_is_none(tmp_path: Path) -> None:
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemAvailable:    2097152 kB\nSwapFree:        1048576 kB\n")
+    assert build_memory.free_swap_mb(meminfo) == 1024
+
+    meminfo.write_text("MemAvailable:    2097152 kB\n")
+    assert build_memory.free_swap_mb(meminfo) == 0
 
 
 def test_a_linux_host_without_memory_control_builds_uncapped(monkeypatch: pytest.MonkeyPatch) -> None:

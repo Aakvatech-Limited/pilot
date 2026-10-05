@@ -23,6 +23,7 @@ commit=$(git -C "$app_dir" rev-parse HEAD)
 # several SPAs. Prints "<build_dir> <out_dir> <index_html_path>" per SPA, relative to the checkout.
 spa_settings() {
     python3 - "$app_dir/pyproject.toml" <<'EOF'
+import posixpath
 import sys
 import tomllib
 
@@ -32,16 +33,29 @@ try:
 except FileNotFoundError:
     assets = []
 for spa in [assets] if isinstance(assets, dict) else assets:
-    keys = ("build_dir", "out_dir", "index_html_path")
-    print(" ".join(str(spa.get(key, "")).removeprefix("./") or "-" for key in keys))
+    build_dir = posixpath.normpath(str(spa.get("build_dir", "")) or ".")
+    paths = [build_dir]
+    for key in ("out_dir", "index_html_path"):
+        path = str(spa.get(key, ""))
+        # Vite-style "../" paths are relative to build_dir, others to the checkout.
+        base = build_dir if path.startswith("../") else "."
+        path = posixpath.normpath(posixpath.join(base, path)) if path else ""
+        if path.startswith(".."):
+            sys.exit(f"error: {key} {spa[key]!r} points outside the app")
+        paths.append(path)
+    print(" ".join(path if path not in ("", ".") else "-" for path in paths))
 EOF
 }
-mapfile -t spas < <(spa_settings)
+# A substitution, so a malformed pyproject.toml stops the build.
+spa_output=$(spa_settings)
+spas=()
+[ -n "$spa_output" ] && mapfile -t spas <<< "$spa_output"
 has_build_script() {
     python3 -c 'import json, sys; sys.exit("build" not in json.load(open(sys.argv[1])).get("scripts", {}))' \
         "$app_dir/package.json" 2>/dev/null
 }
-if [ ${#spas[@]} -eq 0 ] && has_build_script; then
+# Frappe's own build script is the esbuild bundler, not a SPA.
+if [ "$app" != frappe ] && [ ${#spas[@]} -eq 0 ] && has_build_script; then
     echo "error: $app has a build script but declares no [tool.bench.assets]; declare each SPA it builds" >&2
     exit 1
 fi
@@ -51,13 +65,18 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 bench="$work/bench"
 mkdir -p "$bench/apps" "$bench/sites/assets"
-git clone --quiet --depth 1 --branch "$frappe_branch" https://github.com/frappe/frappe "$bench/apps/frappe"
+# When the app is frappe itself, the checkout is the framework that gets built.
+apps=(frappe)
+if [ "$app" != frappe ]; then
+    git clone --quiet --depth 1 --branch "$frappe_branch" https://github.com/frappe/frappe "$bench/apps/frappe"
+    apps+=("$app")
+fi
 # A copy, not a symlink: frappe-ui finds the app by walking up the real path to apps/.
 cp -a "$app_dir" "$bench/apps/$app"
 app_dir="$bench/apps/$app"
-printf 'frappe\n%s\n' "$app" > "$bench/sites/apps.txt"
+printf '%s\n' "${apps[@]}" > "$bench/sites/apps.txt"
 # esbuild writes into sites/assets/<app>/dist; Frappe links that to the app's public/.
-for name in frappe "$app"; do
+for name in "${apps[@]}"; do
     ln -s "$bench/apps/$name/$name/public" "$bench/sites/assets/$name"
 done
 # Some SPAs import their dev ports from here at build time; these are Frappe's defaults.
@@ -65,7 +84,8 @@ echo '{"webserver_port": 8000, "socketio_port": 9000}' > "$bench/sites/common_si
 
 echo "==> Installing JS dependencies"
 (cd "$bench/apps/frappe" && yarn install --frozen-lockfile --silent)
-build_dirs=("")
+build_dirs=()
+[ "$app" != frappe ] && build_dirs+=("")
 for spa in "${spas[@]}"; do
     read -r build_dir _ _ <<< "$spa"
     [ "$build_dir" != "-" ] && build_dirs+=("$build_dir")
@@ -73,6 +93,13 @@ done
 for dir in "${build_dirs[@]}"; do
     if [ -f "$app_dir/${dir:+$dir/}package.json" ]; then
         (cd "$app_dir/$dir" && yarn install --frozen-lockfile --silent)
+    fi
+done
+
+# As `bench build` does: bundles import "<app>/public/node_modules/...", such as Frappe's desk.bundle.scss.
+for name in "${apps[@]}"; do
+    if [ -d "$bench/apps/$name/node_modules" ]; then
+        ln -sfn "$bench/apps/$name/node_modules" "$bench/apps/$name/$name/public/node_modules"
     fi
 done
 
@@ -94,20 +121,48 @@ for spa in "${spas[@]}"; do
         paths+=("$path")
     done
 done
+# Ignored files the build writes outside dist and the SPAs, such as a generated tailwind.css.
+while IFS= read -r path; do
+    path=${path%/}
+    case "$path" in */node_modules | */node_modules/*) continue ;; esac
+    covered=
+    for published in "${paths[@]}"; do
+        case "$path" in "$published" | "$published"/*) covered=1 ;; esac
+    done
+    [ -z "$covered" ] && paths+=("$path")
+done < <(git -C "$app_dir" ls-files --others --ignored --exclude-standard --directory -- "$app/public" "$app/www")
+
 if [ ${#paths[@]} -eq 0 ]; then
-    echo "error: $app has no assets to publish" >&2
-    exit 1
+    # Only an app with nothing to build may publish nothing.
+    if [ -f "$app_dir/package.json" ] || [ -n "$(find "$app_dir/$app/public" -name '*.bundle.*' -print -quit 2>/dev/null)" ]; then
+        echo "error: $app has no assets to publish" >&2
+        exit 1
+    fi
+    echo "==> $app has no assets; publishing an empty archive"
 fi
 
 echo "==> Packing"
-python3 - "$app" "$commit" "${paths[@]}" > "$work/manifest.json" <<'EOF'
+# The app's assets.json entries, including keys file names do not tell (islands).
+python3 - "$app" "$commit" "$bench/sites/assets" "${paths[@]}" > "$work/manifest.json" <<'EOF'
 import json
 import sys
+from pathlib import Path
 
-app, commit, *paths = sys.argv[1:]
-print(json.dumps({"app": app, "commit": commit, "paths": paths}, indent=1))
+app, commit, assets_dir, *paths = sys.argv[1:]
+manifest = {"app": app, "commit": commit, "paths": paths}
+# Page islands belong to each bench, not to the archive.
+page_islands = "/assets/frappe/dist/page-island/"
+for name in ("assets.json", "assets-rtl.json"):
+    source = Path(assets_dir) / name
+    entries = json.loads(source.read_text()) if source.exists() else {}
+    manifest[name] = {
+        key: url for key, url in entries.items() if url.startswith(f"/assets/{app}/") and not url.startswith(page_islands)
+    }
+print(json.dumps(manifest, indent=1))
 EOF
 archive="$app-$commit.tar.gz"
-tar -czf "$out_dir/$archive" -C "$work" manifest.json -C "$app_dir" "${paths[@]}"
+tar_args=(--exclude=frappe/public/dist/page-island -C "$work" manifest.json)
+[ ${#paths[@]} -gt 0 ] && tar_args+=(-C "$app_dir" "${paths[@]}")
+tar -czf "$out_dir/$archive" "${tar_args[@]}"
 (cd "$out_dir" && sha256sum "$archive" > "$archive.sha256")
 echo "==> Wrote $out_dir/$archive"

@@ -1157,3 +1157,24 @@ def test_backup_upload_chunks_stream_to_the_admin_without_the_waf(tmp_path: Path
 
     assert "modsecurity off;" in location
     assert "proxy_request_buffering off;" in location
+
+
+def test_nginx_in_sbin_is_found_without_sbin_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Debian leaves /usr/sbin off a normal user's PATH.
+    sbin = tmp_path / "sbin"
+    sbin.mkdir()
+    (sbin / "nginx").write_text("#!/bin/sh\n")
+    (sbin / "nginx").chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path / "bin"))
+    monkeypatch.setattr("pilot.managers.platform._EXTRA_BIN_DIRS", (str(sbin),))
+
+    assert NginxManager(_make_bench(tmp_path, _BASE_DATA)).is_installed()
+
+
+def test_only_the_bad_gateway_page_retries_on_its_own() -> None:
+    from pilot.managers.nginx import ERROR_PAGES, render_error_html
+
+    # 502 is what nginx shows while the bench boots or restarts.
+    pages = {code: render_error_html(code, *text) for code, text in ERROR_PAGES.items()}
+    assert '<meta http-equiv="refresh" content="5">' in pages[502]
+    assert all("http-equiv" not in page for code, page in pages.items() if code != 502)

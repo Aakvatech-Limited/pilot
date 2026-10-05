@@ -122,9 +122,10 @@ class BackupUpload:
             with path.open("r+b") as target:
                 target.seek(offset)
                 target.truncate()
-                if _copy(stream, target, length) != length:
-                    target.truncate(offset)
-                    raise BenchError("The chunk ended before all its bytes arrived. Send it again.")
+                copied = _copy(stream, target, length)
+        if copied != length:
+            # Keep the prefix that arrived; the client resumes after it.
+            raise UploadOffsetError(offset + copied)
         return offset + length
 
     def claim(self, parts: list[str]) -> Path:

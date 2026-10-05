@@ -37,7 +37,6 @@ def test_build_assets_for_app_installs_js_deps_before_frappe_build_runs(tmp_path
     events: list[str] = []
 
     with (
-        patch("pilot.managers.python_assets.git_has_local_changes", return_value=True),
         patch(
             "pilot.managers.python_assets.run_command",
             side_effect=lambda *a, **k: events.append("run_command"),
@@ -48,7 +47,9 @@ def test_build_assets_for_app_installs_js_deps_before_frappe_build_runs(tmp_path
             side_effect=lambda path: events.append(f"ensure_yarn_install:{path.name}"),
         ),
     ):
-        builder.build_assets_for_app(make_app(app_path))
+        app = make_app(app_path)
+        app.has_source_changes = True
+        builder.build_assets_for_app(app)
 
     assert events.index("ensure_yarn_install:frontend") < events.index("run_command")
 
@@ -103,3 +104,20 @@ def test_ensure_yarn_install_skips_when_integrity_is_current(tmp_path: Path) -> 
         make_builder().ensure_yarn_install(tmp_path)
 
     run_command.assert_not_called()
+
+
+def test_page_islands_are_built_with_frappe_s_own_script(tmp_path: Path) -> None:
+    manager = MagicMock()
+    manager.bench.apps_path = tmp_path / "apps"
+    builder = PythonAssetBuilder(manager)
+    script = tmp_path / "apps" / "frappe" / "ui" / "vite" / "island" / "build-pages.js"
+
+    with patch.object(builder, "run_compiler") as compile_islands, patch.object(builder, "ensure_yarn_install"):
+        builder.build_page_islands()
+        compile_islands.assert_not_called()  # version-16 has no page islands
+
+        script.parent.mkdir(parents=True)
+        script.write_text("")
+        builder.build_page_islands()
+
+    assert compile_islands.call_args.args[0] == ["node", str(script), "--production"]

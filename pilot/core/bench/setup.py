@@ -114,7 +114,7 @@ class ProductionSetup:
             )
         if letsencrypt_email_required(self.bench) and not self.bench.config.letsencrypt.email:
             raise BenchError(
-                "A contact email is required with --tls for Let's Encrypt. Pass --letsencrypt-email <email>, or set letsencrypt.email in bench.toml."
+                "A contact email is required with --tls for Let's Encrypt. Pass --letsencrypt-email <email>, or set letsencrypt.email in common_config.toml."
             )
 
     def _installed_manager(self) -> str | None:
@@ -167,8 +167,17 @@ class ProductionSetup:
             return
 
         configurator = LogsConfigurator(self.bench)
-        configurator.setup()
-        configurator.install(telemetry)
+        try:
+            configurator.setup()
+            configurator.install(telemetry)
+        except BenchError as exc:
+            # Debian and Ubuntu do not package fluent-bit; shipping logs must not block a deploy.
+            print(
+                f"Warning: logs are not shipped: {str(exc).rstrip('.')}. Sites and metrics are unaffected. "
+                "Install fluent-bit (https://docs.fluentbit.io/manual/installation/linux), then run "
+                "'pilot setup telemetry'.",
+                file=sys.stderr,
+            )
 
     def _persist_production_state(self) -> None:
         """Write the production state to bench.toml LAST, so the switcher never
@@ -181,6 +190,12 @@ class ProductionSetup:
                 "admin": {"domain": admin.domain, "tls": admin.tls, "enabled": True},
             }
         )
+        if self._email_arg:
+            from pilot.config.common import CommonConfig
+
+            # Later cert refreshes read the email from shared config.
+            with CommonConfig.open(self.bench.path.parent) as common:
+                common.letsencrypt.email = self._email_arg
 
     def _require_linux(self) -> None:
         from pilot.managers.platform import is_linux

@@ -118,6 +118,13 @@ export const sitesApi = {
       unwrap(request.post(`sites/${encodeURIComponent(name)}/uploads`, { json: { files } }).json()),
     status: (name: string, uploadId: string): Promise<BackupUploadStatus> =>
       unwrap(request.get(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`).json()),
+    // False only when the server no longer has the upload; other failures reject.
+    exists: async (name: string, uploadId: string): Promise<boolean> => {
+      const response = await request.get(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`)
+      if (response.ok) return true
+      if (response.status === 404 || response.status === 422) return false
+      throw Object.assign(new Error('Could not check the upload.'), { status: response.status })
+    },
     cancel: (name: string, uploadId: string): Promise<Record<string, never>> =>
       unwrap(request.delete(`sites/${encodeURIComponent(name)}/uploads/${uploadId}`).json()),
     // XMLHttpRequest, because fetch cannot report upload progress.
@@ -151,9 +158,15 @@ export const sitesApi = {
             }
           })()
           if (xhr.status < 300) resolve(body.received)
-          else reject(new Error(apiErrorMessage(body, 'Could not upload the file.')))
+          else
+            reject(
+              Object.assign(new Error(apiErrorMessage(body, 'Could not upload the file.')), {
+                status: xhr.status,
+              }),
+            )
         }
-        xhr.onerror = () => reject(new Error('The upload lost its connection.'))
+        xhr.onerror = () =>
+          reject(Object.assign(new Error('The upload lost its connection.'), { status: 0 }))
         xhr.onabort = () => reject(new DOMException('The upload was cancelled.', 'AbortError'))
         signal.addEventListener('abort', () => xhr.abort(), { once: true })
         xhr.send(chunk)
