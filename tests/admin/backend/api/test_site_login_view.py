@@ -125,15 +125,15 @@ def test_login_link_rejects_missing_and_symlinked_sites(tmp_path: Path) -> None:
 
 
 def test_a_login_token_naming_an_email_signs_that_user_in() -> None:
-    from admin.backend.api.v1.sites.core import login_user
+    from admin.backend.internal.session import Session
 
     claims = {"scope": "site", "sub": "asha@example.com", "name": "Asha Rao"}
 
-    assert login_user(claims) == ("asha@example.com", "Asha Rao")
+    assert Session.get_login_user(claims) == ("asha@example.com", "Asha Rao")
 
 
 def test_a_login_token_without_an_email_signs_administrator_in() -> None:
-    from admin.backend.api.v1.sites.core import login_user
+    from admin.backend.internal.session import Session
 
     for claims in ({"sub": "admin"}, {"sub": "not an email"}, {}, None):
-        assert login_user(claims) == ("Administrator", "")
+        assert Session.get_login_user(claims) == ("Administrator", "")
