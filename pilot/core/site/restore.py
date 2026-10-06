@@ -4,6 +4,7 @@ import gzip
 import json
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -154,23 +155,27 @@ class SiteRestore:
         """`extract_files` for an archive as it downloads. tar cannot detect compression
         on a pipe, so a .tgz needs -z."""
         compression = ["-z"] if stream.name.endswith(".tgz") else []
-        process = subprocess.Popen(
-            ["tar", "xf", "-", *compression, "--strip", "2", "--wildcards", f"*/{part}/files"],
-            cwd=self.site.path,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        assert process.stdin is not None and process.stderr is not None
-        try:
-            with stream.open() as source:
-                shutil.copyfileobj(source, process.stdin)
-        except BrokenPipeError:
-            pass  # tar exited; its stderr says why
-        finally:
-            process.stdin.close()
-            error = process.stderr.read().decode(errors="replace").strip()
-        if process.wait() != 0:
-            raise BenchError(f"Extracting the {part} files failed: {error}")
+        # A file, not a pipe: tar blocks on a full stderr pipe and stops reading the archive.
+        with tempfile.TemporaryFile() as stderr:
+            process = subprocess.Popen(
+                ["tar", "xf", "-", *compression, "--strip", "2", "--wildcards", f"*/{part}/files"],
+                cwd=self.site.path,
+                stdin=subprocess.PIPE,
+                stderr=stderr,
+            )
+            assert process.stdin is not None
+            try:
+                with stream.open() as source:
+                    shutil.copyfileobj(source, process.stdin)
+            except BrokenPipeError:
+                pass  # tar exited; its stderr says why
+            finally:
+                process.stdin.close()
+                return_code = process.wait()
+            if return_code != 0:
+                stderr.seek(0)
+                error = stderr.read().decode(errors="replace").strip()
+                raise BenchError(f"Extracting the {part} files failed: {error}")
 
     def import_database_stream(self, open_dump: Callable[[], IO[bytes]]) -> None:
         """Replace the site's MariaDB database with the dump as it streams in, so a large
