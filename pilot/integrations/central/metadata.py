@@ -133,6 +133,9 @@ def apply_central_config(
         return False
 
     config_patch = metadata.get_config_patch()
+    if "central" in config_patch.common_config:
+        raise CentralClientError("Instance metadata 'pilot-common-config' must not change central settings.")
+
     if on_credentials is not None:
         on_credentials(credentials)
 

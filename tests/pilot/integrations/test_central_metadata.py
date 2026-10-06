@@ -188,6 +188,16 @@ def test_a_bad_config_patch_leaves_the_host_awaiting(tmp_path: Path) -> None:
     assert BenchConfig.read(bench.path).central.bootstrapped is False
 
 
+@pytest.mark.parametrize("central", [{"bootstrapped": True}, {"enabled": False}, None])
+def test_a_patch_cannot_change_the_bootstrap_state(tmp_path: Path, central) -> None:
+    bench = _awaiting_bench(tmp_path)
+
+    with pytest.raises(CentralClientError, match="central settings"):
+        apply_central_config(bench, _FakeMetadata(json.dumps(_ATTRIBUTE), common_config={"central": central}))
+
+    assert BenchConfig.read(bench.path).central.is_awaiting_bootstrap is True
+
+
 def test_a_config_attribute_that_is_not_an_object_raises() -> None:
     metadata = _FakeMetadata(json.dumps(_ATTRIBUTE), bench_config=["s3"])
 
