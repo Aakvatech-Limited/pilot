@@ -11,6 +11,7 @@ import { apiErrorMessage, hasApiError } from '@/api/client'
 import { sitesApi } from '@/api/sites'
 import type { SiteAnalytics, Timeline } from '@/types/siteMonitoring'
 import { errorMessage } from '@/utils/error'
+import { withDateTime } from '@/utils/time'
 
 interface Props {
   siteName: string
@@ -57,7 +58,7 @@ const axisMin = computed(() => axisMax.value - (data.value?.window_seconds ?? 0)
 const timelineConfig = (timeline: Timeline | undefined, valueLabel: string): BarChartProps => {
   const categories = timeline?.categories ?? []
   return {
-    data: timeline?.points ?? [],
+    data: withDateTime(timeline?.points ?? []),
     x: 'time',
     y: categories,
     stacked: true,
