@@ -221,7 +221,6 @@ class PythonEnvManager:
                     [get_yarn_bin(), "install", "--frozen-lockfile"],
                     cwd=app.path,
                     stream_output=True,
-                    # Some hosts stall Node/libuv filesystem work with io_uring.
                     env={**os.environ, "UV_USE_IO_URING": "0"},
                 )
 

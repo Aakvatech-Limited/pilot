@@ -42,6 +42,13 @@ def test_framework_branches_offer_v15_and_preserve_v16_default(tmp_path: Path) -
     assert response.status_code == 200
     assert BenchConfig.read(tmp_path).apps[0].branch == "version-15"
 
+    started = start_setup(client)
+
+    assert started.status_code == 202
+    assert started.get_json()["command"] == "wizard-setup"
+    assert started.get_json()["status"] == "queued"
+    assert BenchConfig.read(tmp_path).apps[0].branch == "version-15"
+
 
 def save_configuration(client):
     return client.put(
