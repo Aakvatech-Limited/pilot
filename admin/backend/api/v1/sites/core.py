@@ -188,7 +188,8 @@ def rename_site(name: str):
 
     new_name = fields["new_name"]
     keep_old_hostname = data.get("keep_old_hostname", True)
-    if not isinstance(keep_old_hostname, bool):
+    make_primary = data.get("make_primary", False)
+    if not isinstance(keep_old_hostname, bool) or not isinstance(make_primary, bool):
         return invalid_fields()
     err = validate_site_name(new_name) or new_site_name_error(bench_root, new_name)
     if err:
@@ -200,6 +201,7 @@ def rename_site(name: str):
             site=name,
             new_name=new_name,
             keep_old_hostname=keep_old_hostname,
+            make_primary=make_primary,
             idempotency_key=request.headers.get("Idempotency-Key"),
             # Hold both hostnames until the old provider route is retained or released.
             resource_key=[

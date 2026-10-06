@@ -259,10 +259,11 @@ class Site:
         new_name: str,
         on_progress: Callable[[str], None] = lambda message: None,
         keep_old_hostname: bool = True,
+        make_primary: bool = False,
     ) -> None:
         from pilot.core.site.rename import SiteRename
 
-        SiteRename(self, new_name, keep_old_hostname).run(on_progress)
+        SiteRename(self, new_name, keep_old_hostname, make_primary).run(on_progress)
 
     def _provider_domains(self) -> list[str]:
         """Capture provider-owned domains before the site config is removed."""
