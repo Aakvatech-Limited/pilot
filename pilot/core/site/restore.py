@@ -4,6 +4,7 @@ import gzip
 import json
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from pilot.core.site import Site
 
 RESTORE_PARTS = ("database", "public", "private", "config")
+# The end of tar's error output says why it failed.
+_STDERR_TAIL_BYTES = 4096
 # Keys that tie a config to its own database, cache, host or Pilot, so they stay as this site has them.
 LOCAL_CONFIG_PREFIXES = ("db_", "redis_", "pilot_", "atlas_")
 LOCAL_CONFIG_KEYS = frozenset({"rds_db", "host_name", "installed_apps", "maintenance_mode", "pause_scheduler"})
@@ -109,16 +112,18 @@ class SiteRestore:
         """Files go first: a stream that fails then stops the restore before the database is dropped."""
         for part in ("public", "private"):
             if part in parts:
-                on_progress(f"Restoring {part} files...")
                 if stream := run.streams.get(part):
+                    on_progress(f"Downloading and restoring {part} files...")
                     self.extract_files_stream(stream, part)
                 else:
+                    on_progress(f"Restoring {part} files...")
                     self.extract_files(run.files[part], part)
         if "database" in parts:
-            on_progress("Restoring the database...")
             if stream := run.streams.get("database"):
+                on_progress("Downloading and restoring the database...")
                 self.import_database_stream(stream.open)
             else:
+                on_progress("Restoring the database...")
                 self.site.restore(str(run.files["database"]))
             self.site.set_config_values(self.get_restored_database_config(run))
         if "config" in parts:
@@ -152,23 +157,26 @@ class SiteRestore:
         """`extract_files` for an archive as it downloads. tar cannot detect compression
         on a pipe, so a .tgz needs -z."""
         compression = ["-z"] if stream.name.endswith(".tgz") else []
-        process = subprocess.Popen(
-            ["tar", "xf", "-", *compression, "--strip", "2", "--wildcards", f"*/{part}/files"],
-            cwd=self.site.path,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        assert process.stdin is not None and process.stderr is not None
-        try:
-            with stream.open() as source:
-                shutil.copyfileobj(source, process.stdin)
-        except BrokenPipeError:
-            pass  # tar exited; its stderr says why
-        finally:
-            process.stdin.close()
-            error = process.stderr.read().decode(errors="replace").strip()
-        if process.wait() != 0:
-            raise BenchError(f"Extracting the {part} files failed: {error}")
+        with tempfile.TemporaryFile() as stderr:
+            process = subprocess.Popen(
+                ["tar", "xf", "-", *compression, "--strip", "2", "--wildcards", f"*/{part}/files"],
+                cwd=self.site.path,
+                stdin=subprocess.PIPE,
+                stderr=stderr,
+            )
+            assert process.stdin is not None
+            try:
+                with stream.open() as source:
+                    shutil.copyfileobj(source, process.stdin)
+            except BrokenPipeError:
+                pass  # tar exited; its stderr says why
+            finally:
+                process.stdin.close()
+                return_code = process.wait()
+            if return_code != 0:
+                stderr.seek(max(0, stderr.seek(0, 2) - _STDERR_TAIL_BYTES))
+                error = stderr.read().decode(errors="replace").strip()
+                raise BenchError(f"Extracting the {part} files failed: {error}")
 
     def import_database_stream(self, open_dump: Callable[[], IO[bytes]]) -> None:
         """Replace the site's MariaDB database with the dump as it streams in, so a large

@@ -104,9 +104,8 @@ class RestoreSiteTask(Task):
         return run
 
     def get_streamed_parts(self, available: dict[str, str]) -> list[str]:
-        """The parts the restore reads as they download, so they need no copy on disk.
-        Only MariaDB can import a database stream."""
-        streamable = ["public", "private", *(["database"] if self.bench.config.db_type == "mariadb" else [])]
+        """The parts the restore reads as they download, so they need no copy on disk."""
+        streamable = ["public", "private", *(["database"] if self.is_database_streamable else [])]
         return [part for part in streamable if part in self.parts and available.get(part)]
 
     @step("restore", lambda self: f"Restore {', '.join(self.parts)} into {self.site}")
@@ -120,9 +119,19 @@ class RestoreSiteTask(Task):
         return bool({"public", "private"} & set(self.parts))
 
     @property
+    def is_database_streamable(self) -> bool:
+        """Only MariaDB imports a database as it downloads."""
+        return self.bench.config.db_type == "mariadb"
+
+    @property
     def fetch_label(self) -> str:
+        """Streamed parts download in the restore step, so this step only prepares them."""
+        is_database_downloaded = "database" in self.parts and not self.is_database_streamable
+        verb = "Download" if is_database_downloaded else "Prepare"
         if self.frappe_cloud_backup:
-            return f"Download backup from Frappe Cloud ({self.frappe_cloud_backup})"
+            return f"{verb} the Frappe Cloud backup ({self.frappe_cloud_backup})"
+        if self.remote_site:
+            return f"{verb} the backup from {self.remote_site}"
         return f"Get the backup from {self.source_label}"
 
     @property
