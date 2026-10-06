@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import cached_property
 from pathlib import Path
-from typing import IO, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from pilot.config import SiteConfig
 from pilot.utils import run_command
@@ -124,13 +124,12 @@ class Site:
         run: BackupRun,
         parts: list[str],
         on_progress: Callable[[str], None] = print,
-        open_dump: Callable[[], IO[bytes]] | None = None,
         skip_failing_patches: bool = False,
     ) -> None:
         """Restore `parts` of a backup run in maintenance mode, then migrate."""
         from pilot.core.site.restore import SiteRestore
 
-        SiteRestore(self).restore(run, parts, on_progress, open_dump, skip_failing_patches)
+        SiteRestore(self).restore(run, parts, on_progress, skip_failing_patches)
 
     def set_config_values(self, values: dict) -> None:
         """Write keys into site_config.json under its lock."""
