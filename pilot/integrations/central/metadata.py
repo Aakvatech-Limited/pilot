@@ -20,7 +20,7 @@ REQUIRED_KEYS = ("central_endpoint", "central_auth_token", "jwks_url", "jwks_aud
 # The cloud caps each metadata value at 1 KiB, so each config file has its own attribute.
 CONFIG_ATTRIBUTES = {
     "common_config": "pilot-common-config",
-    "bench_config": "pilot-bench-config",
+    "bench_config": "pilot-config",
     "common_site_config": "pilot-common-site-config",
 }
 

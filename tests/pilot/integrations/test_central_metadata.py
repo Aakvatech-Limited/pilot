@@ -201,7 +201,7 @@ def test_a_patch_cannot_change_the_bootstrap_state(tmp_path: Path, central) -> N
 def test_a_config_attribute_that_is_not_an_object_raises() -> None:
     metadata = _FakeMetadata(json.dumps(_ATTRIBUTE), bench_config=["s3"])
 
-    with pytest.raises(CentralClientError, match="pilot-bench-config"):
+    with pytest.raises(CentralClientError, match="pilot-config"):
         metadata.get_config_patch()
 
 
