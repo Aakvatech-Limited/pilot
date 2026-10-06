@@ -90,6 +90,7 @@ def test_a_streamed_extraction_with_much_error_output_does_not_hang(tmp_path: Pa
 
     assert not worker.is_alive()
     assert len(errors) == 1 and "eee" in str(errors[0])
+    assert len(str(errors[0])) < 5000  # only the end of the error output
 
 
 def test_a_failed_file_stream_stops_the_restore_before_the_database(tmp_path: Path) -> None:

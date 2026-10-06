@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from pilot.core.site import Site
 
 RESTORE_PARTS = ("database", "public", "private", "config")
+# The end of tar's error output says why it failed.
+_STDERR_TAIL_BYTES = 4096
 # Keys that tie a config to its own database, cache, host or Pilot, so they stay as this site has them.
 LOCAL_CONFIG_PREFIXES = ("db_", "redis_", "pilot_", "atlas_")
 LOCAL_CONFIG_KEYS = frozenset({"rds_db", "host_name", "installed_apps", "maintenance_mode", "pause_scheduler"})
@@ -155,7 +157,6 @@ class SiteRestore:
         """`extract_files` for an archive as it downloads. tar cannot detect compression
         on a pipe, so a .tgz needs -z."""
         compression = ["-z"] if stream.name.endswith(".tgz") else []
-        # A file, not a pipe: tar blocks on a full stderr pipe and stops reading the archive.
         with tempfile.TemporaryFile() as stderr:
             process = subprocess.Popen(
                 ["tar", "xf", "-", *compression, "--strip", "2", "--wildcards", f"*/{part}/files"],
@@ -173,7 +174,7 @@ class SiteRestore:
                 process.stdin.close()
                 return_code = process.wait()
             if return_code != 0:
-                stderr.seek(0)
+                stderr.seek(max(0, stderr.seek(0, 2) - _STDERR_TAIL_BYTES))
                 error = stderr.read().decode(errors="replace").strip()
                 raise BenchError(f"Extracting the {part} files failed: {error}")
 

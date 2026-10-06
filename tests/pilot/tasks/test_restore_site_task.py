@@ -112,6 +112,13 @@ def test_a_frappe_cloud_restore_names_its_first_step_with_the_backup_id(tmp_path
     assert task.fetch_label == "Prepare the Frappe Cloud backup (backup-1)"
 
 
+def test_a_database_that_cannot_stream_is_named_as_a_download(tmp_path: Path) -> None:
+    task, bench = _task(tmp_path, parts=["database"], remote_site="old.example.com", backup_timestamp="2")
+    bench.config.db_type = "postgres"
+
+    assert task.fetch_label == "Download the backup from old.example.com"
+
+
 def test_a_remote_restore_of_only_the_site_config_downloads_only_the_config(tmp_path: Path) -> None:
     task, _ = _task(tmp_path, parts=["config"], remote_site="old.example.com", remote_password="pw", backup_timestamp="2")
     remote = MagicMock()
