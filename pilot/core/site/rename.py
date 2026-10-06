@@ -238,7 +238,6 @@ class SiteRename:
 
         # A canonical host naming the old site has to move with it, or nginx
         # redirects every request to a hostname this site no longer answers to.
-        # `make_primary` makes the new name canonical, so the site's links use it.
         primary = (config.get("host_name") or "").split("://", 1)[-1]
         if self.make_primary or (primary and normalize_host(primary) == normalize_host(self.old_name)):
             scheme = (
