@@ -221,7 +221,6 @@ const restore = async () => {
   try {
     const data = await submit()
     if (data.task_id) {
-      // A query change after the push would cancel it, so the query goes first.
       await setRestoreQuery()
       open.value = false
       openTaskDetailPage(router, data.task_id)
