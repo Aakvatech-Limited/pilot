@@ -1,18 +1,23 @@
 <script setup lang="ts">
+import { useTranslation } from '../translation'
 import {
   addPaymentMethod,
   confirmPaymentMethod,
   confirmPaymentMethodCheckout,
   createPaymentMethodCheckout,
   getPaymentGateways,
-} from '@frappe/cloud-sdk'
+} from '@frappe/cloud-sdk/api'
 import { Button, ErrorMessage, Skeleton, TextInput } from 'frappe-ui'
+import type { PaymentCheckout, PaymentGateway, PaymentMethodSetup } from '@frappe/cloud-sdk'
 import { computed, onMounted, ref, watch } from 'vue'
 import RazorpayLogo from '../assets/Razorpay-1.svg?inline'
 import StripeLogo from '../assets/Stripe.svg?inline'
 import UpiLogo from '../assets/UPI-1.svg?inline'
 import { openExternal } from '../external'
-import { getErrorMessage, type Store } from '../store'
+import { useErrorMessage, type Store } from '../store'
+
+const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store
@@ -22,7 +27,7 @@ const props = defineProps<Props>()
 const emit = defineEmits(['close'])
 const store = props.store
 
-const GATEWAY_LOGO = { Stripe: StripeLogo, Razorpay: RazorpayLogo }
+const GATEWAY_LOGO: Record<string, string> = { Stripe: StripeLogo, Razorpay: RazorpayLogo }
 const RAZORPAY_SDK = 'https://checkout.razorpay.com/v1/checkout.js'
 
 const METHODS = [
@@ -42,11 +47,11 @@ const METHODS = [
 
 const accountUrl = computed(() => store.state.context.account_url || '')
 
-const gateways = ref(null)
+const gateways = ref<PaymentGateway[] | null>(null)
 const method = ref('Card')
 const selected = ref('')
 const contact = ref('')
-const checkout = ref(null)
+const checkout = ref<PaymentCheckout | null>(null)
 const message = ref('')
 const working = ref(false)
 const error = ref('')
@@ -91,7 +96,7 @@ const load = async () => {
 onMounted(load)
 
 const start = () => {
-  if (!canContinue.value) return
+  if (!canContinue.value || !gateway.value) return
 
   return gateway.value.adapter_key === 'Razorpay' ? startRazorpay() : startStripe()
 }
@@ -126,7 +131,25 @@ const startRazorpay = async () => {
   }
 }
 
-const openRazorpayCheckout = (handles) => {
+interface RazorpayResponse {
+  razorpay_payment_id: string
+  razorpay_order_id: string
+  razorpay_signature: string
+}
+
+interface RazorpayInstance {
+  on: (event: string, handler: (response: { error?: { description?: string } }) => void) => void
+  open: () => void
+}
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => RazorpayInstance
+  }
+}
+
+const openRazorpayCheckout = (handles: PaymentMethodSetup) => {
+  if (!window.Razorpay) throw new Error(__('Could not load Razorpay Checkout.'))
   const rzp = new window.Razorpay({
     key: handles.key_id,
     order_id: handles.order_id,
@@ -136,7 +159,7 @@ const openRazorpayCheckout = (handles) => {
     description:
       method.value === 'UPI Autopay' ? __('Set up UPI Autopay') : __('Save card for billing'),
     prefill: handles.prefill || {},
-    handler: (response) => confirmRazorpay(handles.payment_method, response),
+    handler: (response: RazorpayResponse) => confirmRazorpay(handles.payment_method, response),
     modal: {
       ondismiss: () => {
         working.value = false
@@ -153,7 +176,7 @@ const openRazorpayCheckout = (handles) => {
   rzp.open()
 }
 
-const confirmRazorpay = async (paymentMethod, response) => {
+const confirmRazorpay = async (paymentMethod: string, response: RazorpayResponse) => {
   await run(async () => {
     const result = await confirmPaymentMethod({
       payment_method: paymentMethod,
@@ -174,13 +197,13 @@ const confirmRazorpay = async (paymentMethod, response) => {
 }
 
 const loadRazorpay = () => {
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     if (window.Razorpay) return resolve()
 
     const script = document.createElement('script')
 
     script.src = RAZORPAY_SDK
-    script.onload = resolve
+    script.onload = () => resolve()
     script.onerror = () => reject(new Error(__('Could not load Razorpay Checkout.')))
 
     document.body.appendChild(script)
@@ -188,8 +211,10 @@ const loadRazorpay = () => {
 }
 
 const check = async () => {
+  const reference = checkout.value?.reference
+  if (!reference) return
   await run(async () => {
-    const result = await confirmPaymentMethodCheckout(checkout.value.reference)
+    const result = await confirmPaymentMethodCheckout(reference)
 
     if (result.active) {
       await store.loadBilling(true)
@@ -203,7 +228,7 @@ const check = async () => {
   })
 }
 
-const run = async (action) => {
+const run = async (action: () => Promise<void>) => {
   working.value = true
   error.value = ''
   message.value = ''
@@ -217,7 +242,7 @@ const run = async (action) => {
   }
 }
 
-const tileClass = (isSelected) => [
+const tileClass = (isSelected: boolean) => [
   'grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 rounded-6 border p-3.5 text-left disabled:opacity-60',
   isSelected ? 'border-outline-gray-4' : 'border-outline-gray-2 hover:border-outline-gray-3',
 ]
