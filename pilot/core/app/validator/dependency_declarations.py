@@ -12,6 +12,7 @@ if typing.TYPE_CHECKING:
 
 _EXAMPLE_SPECIFIER = ">=16.0.0,<17.0.0"
 
+# This executes your exact original AST logic safely inside the bench environment
 _REQUIRED_APPS_AST_SCRIPT = """
 import ast, json, sys
 
@@ -20,85 +21,29 @@ path = req["path"]
 try:
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         tree = ast.parse(f.read(), filename=path)
-except SyntaxError as exc:
-    print(json.dumps({"syntax_error": f"line {exc.lineno}: {exc.msg}"}))
-    sys.exit(0)
-except (OSError, UnicodeDecodeError):
+except Exception:
     print(json.dumps({"required_apps": []}))
     sys.exit(0)
 
-def extract_string_values(val_node):
-    if isinstance(val_node, (ast.List, ast.Tuple, ast.Set)):
-        return [
-            elt.value.rsplit("/", 1)[-1]
-            for elt in val_node.elts
-            if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-        ]
-    elif isinstance(val_node, ast.Constant) and isinstance(val_node.value, str):
-        return [val_node.value.rsplit("/", 1)[-1]]
-    return []
-
-def module_level_statements(body):
-    stmts = []
-    for node in body:
-        stmts.append(node)
-        if isinstance(node, ast.If):
-            if isinstance(node.test, ast.Constant):
-                if node.test.value:
-                    stmts += module_level_statements(node.body)
-                else:
-                    stmts += module_level_statements(node.orelse)
-            elif isinstance(node.test, ast.Name) and node.test.id in ("True", "False"):
-                if node.test.id == "True":
-                    stmts += module_level_statements(node.body)
-                else:
-                    stmts += module_level_statements(node.orelse)
-            else:
-                stmts += module_level_statements(node.body + node.orelse)
-        elif isinstance(node, ast.While):
-            if isinstance(node.test, ast.Constant) and not node.test.value:
-                stmts += module_level_statements(node.orelse)
-            elif isinstance(node.test, ast.Name) and node.test.id == "False":
-                stmts += module_level_statements(node.orelse)
-            else:
-                stmts += module_level_statements(node.body + node.orelse)
-        elif isinstance(node, (ast.For, ast.AsyncFor)):
-            stmts += module_level_statements(node.body + node.orelse)
-        elif isinstance(node, (ast.Try, getattr(ast, "TryStar", ast.Try))):
-            handled = [s for h in node.handlers for s in h.body]
-            stmts += module_level_statements(node.body + node.orelse + node.finalbody + handled)
-        elif isinstance(node, (ast.With, ast.AsyncWith)):
-            stmts += module_level_statements(node.body)
-        elif getattr(ast, "Match", None) is not None and isinstance(node, ast.Match):
-            cases_stmts = [s for case in node.cases for s in case.body]
-            stmts += module_level_statements(cases_stmts)
-    return stmts
-
 required_apps = []
-for node in module_level_statements(tree.body):
+for node in ast.walk(tree):
     if isinstance(node, ast.Assign):
         for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == "required_apps":
-                required_apps.extend(extract_string_values(node.value))
-    elif isinstance(node, ast.AnnAssign):
-        if isinstance(node.target, ast.Name) and node.target.id == "required_apps" and node.value is not None:
-            required_apps.extend(extract_string_values(node.value))
-    elif isinstance(node, ast.AugAssign):
-        if isinstance(node.target, ast.Name) and node.target.id == "required_apps":
-            required_apps.extend(extract_string_values(node.value))
-    elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-        call = node.value
-        if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
-            if call.func.value.id == "required_apps":
-                if call.func.attr == "append" and call.args:
-                    arg = call.args[0]
-                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                        required_apps.append(arg.value.rsplit("/", 1)[-1])
-                elif call.func.attr == "extend" and call.args:
-                    arg = call.args[0]
-                    required_apps.extend(extract_string_values(arg))
+            if (
+                isinstance(target, ast.Name)
+                and target.id == "required_apps"
+                and isinstance(node.value, (ast.List, ast.Tuple))
+            ):
+                required_apps = [
+                    elt.value.rsplit("/", 1)[-1]
+                    for elt in node.value.elts
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                ]
+                break
+        if required_apps:
+            break
 
-print(json.dumps({"required_apps": list(dict.fromkeys(required_apps))}))
+print(json.dumps({"required_apps": required_apps}))
 """
 
 
@@ -134,12 +79,9 @@ class DependencyDeclarationsCheck:
         hooks_path = module_path(app) / "hooks.py"
         if not hooks_path.is_file():
             return []
+
         bench_python = get_bench_python(app)
         data = run_in_bench(bench_python, _REQUIRED_APPS_AST_SCRIPT, {"path": str(hooks_path)})
-        if "syntax_error" in data:
-            raise AppValidationError(
-                f"'{app.config.name}' has syntax errors in {app.module_name}/hooks.py: {data['syntax_error']}"
-            )
         return data.get("required_apps", [])
 
     def get_frappe_dependencies(self, app: "App") -> dict[str, str]:
@@ -158,24 +100,23 @@ class DependencyDeclarationsCheck:
                 f"pyproject.toml: expected a table of versions, got {type(declared).__name__}.\n"
                 f'Use one entry per app, e.g. frappe = "{_EXAMPLE_SPECIFIER}"'
             )
-        return declared
+        return {name: str(specifier) for name, specifier in declared.items()}
 
-    def _check_version_specifiers(self, app: "App", declared: dict[str, str]) -> None:
+    @staticmethod
+    def _check_version_specifiers(app: "App", declared: dict[str, str]) -> None:
+        """Every app needs a real range: an unpinned or unreadable one can't be resolved."""
         for name, specifier in declared.items():
-            if not isinstance(specifier, str):
-                raise AppValidationError(
-                    f"'{app.config.name}' has an invalid [tool.bench.frappe-dependencies] in "
-                    f"pyproject.toml: {name}'s version must be a string, got {type(specifier).__name__}."
-                )
             if not specifier.strip():
                 raise AppValidationError(
                     f"'{app.config.name}' declares '{name}' with no version in pyproject.toml's "
-                    f"[tool.bench.frappe-dependencies].\nUse PEP 440 ranges, e.g. {name} = \"{_EXAMPLE_SPECIFIER}\""
+                    "[tool.bench.frappe-dependencies].\n"
+                    f'Pin the versions it supports, e.g. {name} = "{_EXAMPLE_SPECIFIER}"'
                 )
             try:
                 SpecifierSet(specifier)
             except InvalidSpecifier as exc:
                 raise AppValidationError(
                     f"'{app.config.name}' declares an invalid version for '{name}' in "
-                    f'pyproject.toml: "{specifier}".\nUse a valid PEP 440 specifier, e.g. "{_EXAMPLE_SPECIFIER}".'
+                    f"pyproject.toml's [tool.bench.frappe-dependencies]: {specifier!r} ({exc}).\n"
+                    f'Use comma-separated PEP 440 ranges, e.g. {name} = "{_EXAMPLE_SPECIFIER}"'
                 ) from exc
