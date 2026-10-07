@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { addDomain, getDomainDnsRecords, removeDomain, setPrimaryDomain } from '@frappe/cloud-sdk'
+import { useTranslation } from '../translation'
+import { addDomain, getDomainDnsRecords, removeDomain, setPrimaryDomain } from '@frappe/cloud-sdk/api'
+import type { DnsRecord, Domain } from '@frappe/cloud-sdk'
 import { Badge, Button, Dialog, Dropdown, ErrorMessage, TextInput } from 'frappe-ui'
-import { computed, inject, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
 import { openExternal } from '../external'
 import { getErrorMessage, type Store } from '../store'
+
+const __ = useTranslation()
 
 interface Props {
   store: Store
@@ -16,7 +20,7 @@ const props = defineProps<Props>()
 const store = props.store
 
 const input = ref('')
-const dnsRecords = ref([])
+const dnsRecords = ref<DnsRecord[]>([])
 const working = ref(false)
 const removeTarget = ref('')
 const showRemove = ref(false)
@@ -31,14 +35,7 @@ watch(
   { immediate: true },
 )
 
-const domains = computed(() => {
-  const rows = store.state.domains?.domains
-  const routes = rows
-    ?.filter((row) => typeof row.domain === 'object')
-    .map(({ domain }) => ({ ...domain, is_default: domain.is_site }))
-
-  return routes?.length ? routes : rows
-})
+const domains = computed(() => store.state.domains?.domains)
 
 const columns = [
   { label: __('Domain'), key: 'domain', class: 'w-1/2' },
@@ -82,7 +79,8 @@ const canAdd = computed(
   () => Boolean(normalizedDomain.value) && !domainError.value && !working.value,
 )
 
-let dnsTimer
+let dnsTimer: ReturnType<typeof setTimeout> | undefined
+onBeforeUnmount(() => clearTimeout(dnsTimer))
 
 watch(normalizedDomain, (domain) => {
   clearTimeout(dnsTimer)
@@ -93,7 +91,7 @@ watch(normalizedDomain, (domain) => {
   dnsTimer = setTimeout(() => loadDnsRecords(domain), 400)
 })
 
-const loadDnsRecords = async (domain) => {
+const loadDnsRecords = async (domain: string) => {
   try {
     const response = await getDomainDnsRecords(domain)
 
@@ -115,9 +113,9 @@ const confirmAdd = async () => {
   })
 }
 
-const urlFor = (row) => `${row.public_scheme || (row.tls ? 'https' : 'http')}://${row.domain}`
+const urlFor = (row: Domain) => `${row.public_scheme || (row.tls ? 'https' : 'http')}://${row.domain}`
 
-const menuOptions = (row) =>
+const menuOptions = (row: Domain) =>
   [
     !row.is_primary && {
       label: __('Make primary'),
@@ -127,12 +125,12 @@ const menuOptions = (row) =>
     !row.is_default && {
       label: __('Remove'),
       icon: 'lucide-trash-2',
-      theme: 'red',
+      theme: 'red' as const,
       onClick: () => askRemove(row.domain),
     },
-  ].filter(Boolean)
+  ].filter((item) => item !== false)
 
-const makePrimary = (domain) => {
+const makePrimary = (domain: string) => {
   busyDomain.value = domain
 
   run(async () => {
@@ -141,7 +139,7 @@ const makePrimary = (domain) => {
   })
 }
 
-const askRemove = (domain) => {
+const askRemove = (domain: string) => {
   removeTarget.value = domain
   showRemove.value = true
 }
@@ -156,7 +154,7 @@ const confirmRemove = () => {
   })
 }
 
-const run = async (action) => {
+const run = async (action: () => Promise<void>) => {
   working.value = true
   store.state.domainsError = ''
 

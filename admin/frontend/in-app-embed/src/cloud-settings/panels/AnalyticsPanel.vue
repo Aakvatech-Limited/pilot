@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { getAnalytics, getUptime } from '@frappe/cloud-sdk'
+import { useTranslation } from '../translation'
+import { getAnalytics, getUptime } from '@frappe/cloud-sdk/api'
+import type { Analytics, Timeline, Uptime } from '@frappe/cloud-sdk'
+import type { AreaChartProps, ChartPalette, TimeGrain } from 'frappe-ui/charts'
 import { Select, Tooltip } from 'frappe-ui'
 import { AreaChart } from 'frappe-ui/charts'
 import { computed, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import { getErrorMessage, type Store } from '../store'
+
+const __ = useTranslation()
 
 interface Props {
   store: Store
@@ -22,7 +27,7 @@ const WINDOWS = [
   { label: __('1 week'), value: '1w' },
 ]
 
-const TIME_GRAIN = {
+const TIME_GRAIN: Record<string, TimeGrain> = {
   '30m': 'minute',
   '1h': 'minute',
   '6h': 'hour',
@@ -34,8 +39,8 @@ const TIME_GRAIN = {
 const GRID = { show: true, lineStyle: { type: 'dashed', color: 'var(--outline-gray-2)' } }
 
 const window = ref('24h')
-const analytics = ref(null)
-const uptime = ref(null)
+const analytics = ref<Analytics | null>(null)
+const uptime = ref<Uptime | null>(null)
 const error = ref('')
 
 const load = async () => {
@@ -64,10 +69,10 @@ watch(
 
 watch(window, load)
 
-const total = (timeline) =>
-  (timeline?.points || []).reduce((sum, point) => sum + (point[timeline.categories[0]] || 0), 0)
+const total = (timeline?: Timeline) =>
+  (timeline?.points || []).reduce((sum, point) => sum + (point[timeline?.categories[0] || ''] || 0), 0)
 
-const chartConfig = (timeline, palette = 'categorical') => {
+const chartConfig = (timeline?: Timeline, palette: ChartPalette = 'categorical'): AreaChartProps => {
   const now = analytics.value?.now ?? Date.now()
 
   return {
@@ -95,7 +100,7 @@ const charts = computed(() => [
   },
   {
     title: __('Background jobs'),
-    config: chartConfig(analytics.value?.background_jobs_over_time, ['#8b5cf6']),
+    config: chartConfig(analytics.value?.background_jobs_over_time),
   },
 ])
 
@@ -125,10 +130,10 @@ const hasUptime = computed(() => (uptime.value?.buckets || []).some((bucket) => 
 
 const topPages = computed(() => {
   const timeline = analytics.value?.top_paths
-  const counts = {}
+  const counts: Record<string, number> = {}
 
   for (const point of timeline?.points || []) {
-    for (const path of timeline.categories) counts[path] = (counts[path] || 0) + (point[path] || 0)
+    for (const path of timeline?.categories || []) counts[path] = (counts[path] || 0) + (point[path] || 0)
   }
 
   const pages = Object.entries(counts)
@@ -141,7 +146,7 @@ const topPages = computed(() => {
   return pages.map((page) => ({ ...page, width: `${(page.count / max) * 100}%` }))
 })
 
-const uptimeClass = (bucket) => {
+const uptimeClass = (bucket: Uptime['buckets'][number]) => {
   if (!bucket.checks) return 'bg-surface-gray-3'
   if (bucket.percent >= 99.9) return 'bg-surface-green-3'
   if (bucket.percent >= 95) return 'bg-surface-amber-3'
@@ -149,7 +154,7 @@ const uptimeClass = (bucket) => {
   return 'bg-surface-red-5'
 }
 
-const formatTime = (time) =>
+const formatTime = (time: number) =>
   new Date(time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 </script>
 
@@ -163,7 +168,7 @@ const formatTime = (time) =>
     @retry="load"
   >
     <template #actions>
-      <Select v-model="window" class="col-start-2 row-span-2 row-start-1 w-36" :options="WINDOWS" />
+      <Select v-model="window" :aria-label="__('Time period')" class="col-start-2 row-span-2 row-start-1 w-36" :options="WINDOWS" />
     </template>
 
     <div class="grid gap-3 sm:grid-cols-3">
@@ -182,7 +187,7 @@ const formatTime = (time) =>
       </section>
     </div>
 
-    <section v-if="hasUptime" class="mt-4 rounded-6 border border-outline-gray-2 p-4">
+    <section v-if="hasUptime && uptime" class="mt-4 rounded-6 border border-outline-gray-2 p-4">
       <h3 class="mb-3 text-base-medium text-ink-gray-8">{{ __("Uptime") }}</h3>
 
       <div class="flex h-8 gap-1">

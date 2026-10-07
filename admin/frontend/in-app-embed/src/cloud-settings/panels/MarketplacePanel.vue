@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { installApp, isMigrationConflict, uninstallApp, updateApps } from '@frappe/cloud-sdk'
+import { useTranslation } from '../translation'
+import { installApp, isMigrationConflict, uninstallApp, updateApps } from '@frappe/cloud-sdk/api'
+import type { MarketplaceApp, TaskSubmission } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage, Select, TextInput } from 'frappe-ui'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import ActionableError from '../components/ActionableError.vue'
@@ -7,6 +9,7 @@ import AppRow from '../components/AppRow.vue'
 import Panel from '../components/Panel.vue'
 import UninstallAppDialog from '../components/UninstallAppDialog.vue'
 import UpdateAppsDialog from '../components/UpdateAppsDialog.vue'
+import { notify } from '../notify'
 import {
   getErrorMessage,
   getRememberedTasks,
@@ -14,6 +17,8 @@ import {
   type Store,
   waitForTask,
 } from '../store'
+
+const __ = useTranslation()
 
 interface Props {
   store: Store
@@ -45,13 +50,13 @@ const ACTION = {
 
 const query = ref('')
 const category = ref('')
-const pending = reactive({})
-const errors = reactive({})
+const pending = reactive<Record<string, string>>({})
+const errors = reactive<Record<string, string>>({})
 const showUpdates = ref(false)
 const updatingAll = ref(false)
 const updateAllError = ref('')
-const blocker = ref(null)
-const uninstallTarget = ref(null)
+const blocker = ref<{ message: string; actionLabel: string; actionUrl: string } | null>(null)
+const uninstallTarget = ref<MarketplaceApp | null>(null)
 const showUninstall = ref(false)
 
 let gone = false
@@ -109,17 +114,17 @@ const clearFilters = () => {
   category.value = ''
 }
 
-const install = (app) => runAction(app, 'install', () => installApp(app.name))
+const install = (app: MarketplaceApp) => runAction(app, 'install', () => installApp(app.name))
 
-const askUninstall = (app) => {
+const askUninstall = (app: MarketplaceApp) => {
   uninstallTarget.value = app
   showUninstall.value = true
 }
 
-const uninstall = (app, mode) => runAction(app, mode, () => uninstallApp(app.name, mode))
-const updateOne = (app) => runAction(app, 'update', () => updateApps([app.name]))
+const uninstall = (app: MarketplaceApp, mode: 'uninstall' | 'disable') => runAction(app, mode, () => uninstallApp(app.name, mode))
+const updateOne = (app: MarketplaceApp) => runAction(app, 'update', () => updateApps([app.name]))
 
-const asBlocker = (exception) => {
+const asBlocker = (exception: unknown) => {
   if (!isMigrationConflict(exception)) return null
 
   const server = store.state.context.server_url
@@ -131,7 +136,8 @@ const asBlocker = (exception) => {
   }
 }
 
-const updateAll = async ({ apps, taskId }) => {
+const updateAll = async ({ apps, taskId }: { apps?: string[]; taskId?: string }) => {
+  let finished = false
   updatingAll.value = true
   updateAllError.value = ''
   blocker.value = null
@@ -142,6 +148,7 @@ const updateAll = async ({ apps, taskId }) => {
     rememberTask(site, '*', { taskId: task_id, verb: 'update' })
 
     const done = await settle(task_id, ACTION.update, __('all apps'))
+    finished = done === true
 
     await store.loadMarketplace(true)
 
@@ -149,6 +156,7 @@ const updateAll = async ({ apps, taskId }) => {
 
     showUpdates.value = false
   } catch (exception) {
+    finished = true
     blocker.value = asBlocker(exception)
 
     if (blocker.value) {
@@ -159,12 +167,13 @@ const updateAll = async ({ apps, taskId }) => {
       if (!showUpdates.value) notify(updateAllError.value, 'red')
     }
   } finally {
-    rememberTask(site, '*')
+    if (finished) rememberTask(site, '*')
     updatingAll.value = false
   }
 }
 
-const runAction = async (app, verb, action) => {
+const runAction = async (app: Pick<MarketplaceApp, 'name' | 'title'>, verb: keyof typeof ACTION, action: () => TaskSubmission | Promise<TaskSubmission>) => {
+  let finished = false
   errors[app.name] = ''
   blocker.value = null
   pending[app.name] = verb
@@ -175,6 +184,7 @@ const runAction = async (app, verb, action) => {
     rememberTask(site, app.name, { taskId: task_id, verb })
 
     const done = await settle(task_id, ACTION[verb], app.title)
+    finished = done === true
 
     delete errors[app.name]
     await store.loadMarketplace(true)
@@ -191,6 +201,7 @@ const runAction = async (app, verb, action) => {
 
     notify(__('{0} {1}.', [app.title, ACTION[verb].done]), 'green')
   } catch (exception) {
+    finished = true
     blocker.value = asBlocker(exception)
 
     if (!blocker.value) {
@@ -199,7 +210,7 @@ const runAction = async (app, verb, action) => {
       notify(errors[app.name], 'red')
     }
   } finally {
-    rememberTask(site, app.name)
+    if (finished) rememberTask(site, app.name)
     delete pending[app.name]
   }
 }
@@ -214,11 +225,13 @@ const resumeTasks = () => {
 
     const app = marketplace.value?.apps?.find((row) => row.name === name) || { name, title: name }
 
-    runAction(app, task.verb, () => ({ task_id: task.taskId }))
+    if (task.verb === 'install' || task.verb === 'uninstall' || task.verb === 'disable' || task.verb === 'update') {
+      runAction(app, task.verb, () => ({ task_id: task.taskId }))
+    }
   }
 }
 
-const settle = async (taskId, action, label) => {
+const settle = async (taskId: string, action: { verb: string; progress: string }, label: string) => {
   if (!taskId) return true
 
   const outcome = await waitForTask(taskId, () => gone)
@@ -239,9 +252,6 @@ const settle = async (taskId, action, label) => {
   }
 }
 
-const notify = (message, indicator = 'green') => {
-  frappe.show_alert({ message, indicator })
-}
 </script>
 
 <template>
@@ -265,9 +275,9 @@ const notify = (message, indicator = 'green') => {
     </template>
 
     <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <TextInput v-model="query" class="flex-1" :placeholder="__('Search apps')" />
+      <TextInput v-model="query" class="flex-1" :aria-label="__('Search apps')" :placeholder="__('Search apps')" />
 
-      <Select v-model="category" class="sm:w-44" :options="categoryOptions" />
+      <Select v-model="category" :aria-label="__('Category')" class="sm:w-44" :options="categoryOptions" />
     </div>
 
     <ErrorMessage :message="loadFailed ? '' : error" class="mt-2" />

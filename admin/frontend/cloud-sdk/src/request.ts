@@ -9,16 +9,21 @@ const parseServerMessages = (raw?: string): string[] => {
   if (!raw) return []
 
   try {
-    return JSON.parse(raw)
-      .map((item: string) => JSON.parse(item).message)
-      .filter(Boolean)
-      .map((message: string) => message.replace(/<[^>]*>/g, ''))
+    const messages: unknown = JSON.parse(raw)
+    if (!Array.isArray(messages)) return []
+
+    return messages.flatMap((item: unknown) => {
+      const entry = typeof item === 'string' ? JSON.parse(item) : item
+      const message = entry?.message
+      return typeof message === 'string' ? [message.replace(/<[^>]*>/g, '')] : []
+    })
   } catch {
     return []
   }
 }
 
 const fallbackMessage = (status: number, excType?: string) => {
+  if (status === 0) return 'Could not reach Cloud Settings. Please try again.'
   if (status === 403) return "You don't have permission to do this."
   if (excType) return `${excType}. Please try again.`
 
@@ -45,7 +50,6 @@ export class CloudSettingsError extends Error {
 export const isMigrationConflict = (exception: unknown) =>
   exception instanceof CloudSettingsError && exception.excType === 'CloudMigrationConflictError'
 
-// encode sameas desk frappe.call
 const encodeValue = (value: unknown) => {
   if (value == null) return ''
 
@@ -58,7 +62,7 @@ const csrfToken = () => {
   return page.frappe?.csrf_token || page.csrf_token || ''
 }
 
-export const call = async <T = any>(
+export const call = async <T = unknown>(
   method: string,
   args: Record<string, unknown> = {},
   type: 'GET' | 'POST' = 'POST',
@@ -68,15 +72,26 @@ export const call = async <T = any>(
 
   for (const [key, value] of Object.entries(args)) params.append(key, encodeValue(value))
 
-  const response = await fetch(type === 'GET' ? `${url}?${params}` : url, {
-    method: type,
-    body: type === 'POST' ? params : undefined,
-    headers: { Accept: 'application/json', 'X-Frappe-CSRF-Token': csrfToken() },
-  })
+  let response: Response
+  try {
+    response = await fetch(type === 'GET' ? `${url}?${params}` : url, {
+      method: type,
+      body: type === 'POST' ? params : undefined,
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json', 'X-Frappe-CSRF-Token': csrfToken() },
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch (cause) {
+    throw new CloudSettingsError(0, { exc_type: cause instanceof Error ? cause.name : 'NetworkError' })
+  }
 
-  const body = await response.json().catch(() => ({}))
+  const parsed: unknown = await response.json().catch(() => ({}))
+  const body = parsed && typeof parsed === 'object' ? parsed : {}
 
   if (!response.ok) throw new CloudSettingsError(response.status, body)
+  if (!Object.hasOwn(body, 'message')) {
+    throw new CloudSettingsError(response.status, { exc_type: 'InvalidResponse' })
+  }
 
-  return body.message
+  return (body as { message: T }).message
 }

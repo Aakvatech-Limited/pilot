@@ -4,15 +4,19 @@ import {
   getDomains,
   getMarketplaceApps,
   getTask,
-} from '@frappe/cloud-sdk'
+} from '@frappe/cloud-sdk/api'
 import { reactive } from 'vue'
+import type { BillingSummary, CloudContext, Domains, Marketplace } from '@frappe/cloud-sdk'
+import { translate as __ } from './translation'
+import { notify } from './notify'
 
 export const getErrorMessage = (exception: unknown, fallback?: string) => {
   if (!(exception instanceof CloudSettingsError)) {
-    return (exception as Error | undefined)?.message || fallback || __('Something went wrong.')
+    return (exception instanceof Error ? exception.message : '') || fallback || __('Something went wrong.')
   }
 
   if (exception.serverMessages.length) return exception.message
+  if (exception.status === 0) return __('Could not reach Cloud Settings. Please try again.')
   if (exception.status === 403) return __("You don't have permission to do this.")
   if (exception.excType) return __('{0}. Please try again.', [exception.excType])
 
@@ -25,8 +29,6 @@ const MAX_WAIT = 3 * 60 * 1000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 type TaskOutcome = 'success' | 'failed' | 'timeout' | 'gone' | 'error' | 'cancelled'
-
-type Payload = Record<string, any> | null
 
 export const waitForTask = async (
   taskId: string,
@@ -72,10 +74,7 @@ export const settleTask = async (taskId: string, isCancelled: () => boolean, fai
   if (outcome === 'failed' || outcome === 'error') throw new Error(failure)
 
   if (outcome !== 'cancelled') {
-    frappe.show_alert({
-      message: __('Still running in the background. Check back in a bit.'),
-      indicator: 'orange',
-    })
+    notify(__('Still running in the background. Check back in a bit.'), 'orange')
   }
 
   return false
@@ -106,12 +105,12 @@ export const rememberTask = (site: string, name: string, task?: RememberedTask) 
 
 export const createStore = (context?: CloudContext) => {
   const state = reactive({
-    context: context || {},
-    billing: null as Payload,
+    context: context || { enabled: false },
+    billing: null as BillingSummary | null,
     billingError: '',
-    marketplace: null as Payload,
+    marketplace: null as Marketplace | null,
     marketplaceError: '',
-    domains: null as Payload,
+    domains: null as Domains | null,
     domainsError: '',
   })
 

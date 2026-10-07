@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { getBillingProfile, saveBillingProfile } from '@frappe/cloud-sdk'
+import { useTranslation } from '../translation'
+import { getBillingProfile, saveBillingProfile } from '@frappe/cloud-sdk/api'
 import { Button, ErrorMessage, Select, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { getErrorMessage, type Store } from '../store'
+
+const __ = useTranslation()
 
 interface Props {
   store: Store
@@ -12,9 +15,9 @@ const props = defineProps<Props>()
 const emit = defineEmits(['close', 'saved'])
 const store = props.store
 
-const REQUIRED = ['currency', 'legal_name', 'address_line1', 'city', 'state', 'country', 'pincode']
+const REQUIRED: (keyof typeof form)[] = ['currency', 'legal_name', 'address_line1', 'city', 'state', 'country', 'pincode']
 
-const FIELDS = [
+const FIELDS: { key: keyof typeof form; label: string; type?: 'text' | 'email'; placeholder?: string; full?: boolean }[] = [
   { key: 'legal_name', label: __('Legal name') },
   {
     key: 'email',
@@ -47,7 +50,7 @@ const form = reactive({
   gstin: '',
 })
 
-const currencies = ref([])
+const currencies = ref<{ label: string; value: string }[]>([])
 const loaded = ref(false)
 const working = ref(false)
 const error = ref('')
@@ -68,7 +71,7 @@ const load = async () => {
       typeof c === 'string' ? { label: c, value: c } : c,
     )
 
-    for (const key of Object.keys(form)) form[key] = profile[key] || ''
+    for (const key of Object.keys(form) as (keyof typeof form)[]) form[key] = profile[key] || ''
 
     loaded.value = true
   } catch (exception) {

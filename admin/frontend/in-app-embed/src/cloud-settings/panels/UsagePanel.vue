@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { getStorage, refreshStorage } from '@frappe/cloud-sdk'
+import { useTranslation } from '../translation'
+import { getStorage, refreshStorage } from '@frappe/cloud-sdk/api'
+import type { Storage } from '@frappe/cloud-sdk'
 import { Button, ErrorMessage } from 'frappe-ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Scrollbar from '../components/Scrollbar.vue'
 import { getErrorMessage, type Store, settleTask } from '../store'
+
+const __ = useTranslation()
 
 interface Props {
   store: Store
@@ -21,9 +25,9 @@ const colors = {
   other: { bar: 'var(--surface-gray-4)', icon: 'var(--ink-gray-5)' },
 }
 
-const units = { MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 }
+const units: Record<string, number> = { MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 }
 
-const fileIcons = {
+const fileIcons: Record<string, string> = {
   json: 'lucide-file-json',
   lock: 'lucide-file-lock',
   db: 'lucide-database',
@@ -34,9 +38,9 @@ const fileIcons = {
   log: 'lucide-file-text',
 }
 
-const iconFor = (name) => fileIcons[name.split('.').pop()] || 'lucide-file'
+const iconFor = (name: string) => fileIcons[name.split('.').pop() || ''] || 'lucide-file'
 
-const usage = ref(null)
+const usage = ref<Storage | null>(null)
 const error = ref('')
 const refreshing = ref(false)
 
@@ -64,7 +68,7 @@ watch(
   { immediate: true },
 )
 
-const formatBytes = (bytes) => {
+const formatBytes = (bytes: number) => {
   const names = ['B', 'KB', 'MB', 'GB', 'TB']
   const power = bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 4) : 0
 
@@ -81,7 +85,7 @@ const quota = computed(() => {
 
 const total = computed(() => (usage.value?.database_bytes || 0) + (usage.value?.bytes || 0))
 
-const hardwareIcons = {
+const hardwareIcons: Record<string, { icon: string; tint: string }> = {
   cpu: { icon: 'lucide-cpu', tint: 'bg-surface-gray-2 text-ink-gray-5' },
   memory: { icon: 'lucide-memory-stick', tint: 'bg-surface-gray-2 text-ink-gray-5' },
 }
@@ -97,9 +101,9 @@ const hardware = computed(() =>
     })),
 )
 
-const bySize = (items) => [...items].sort((a, b) => b.bytes - a.bytes)
+const bySize = <T extends { bytes: number }>(items: T[]) => [...items].sort((a, b) => b.bytes - a.bytes)
 
-const entries = (items, prefix) =>
+const entries = (items: { name: string; bytes: number }[] | undefined, prefix: string) =>
   bySize(items || []).map((item) => ({
     key: `${prefix}:${item.name}`,
     label: item.name,
@@ -107,7 +111,7 @@ const entries = (items, prefix) =>
   }))
 
 const nodes = computed(() => {
-  const site = usage.value || {}
+  const site: Partial<Storage> = usage.value || {}
 
   return bySize([
     {
@@ -166,11 +170,11 @@ const blocks = computed(() => {
 
   const free = quota.value - total.value
 
-  return [...used, { key: 'free', label: __('Free'), bytes: free, share: free / scale }]
+  return [...used, { key: 'free', label: __('Free'), bytes: free, share: free / scale, color: undefined }]
 })
 
 const measuredAt = computed(() =>
-  new Date(usage.value?.collected_at).toLocaleString(undefined, {
+  new Date(usage.value?.collected_at || '').toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }),
