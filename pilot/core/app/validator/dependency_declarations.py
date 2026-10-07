@@ -1,16 +1,48 @@
 from __future__ import annotations
 
-import ast
 import typing
 
 from pilot._vendor.packaging.specifiers import InvalidSpecifier, SpecifierSet
-from pilot.core.app.validator.base import bench_table, module_path, read_pyproject
+from pilot.core.app.validator.base import bench_table, get_bench_python, module_path, read_pyproject
+from pilot.core.app.validator.utils.bench_runner import run_in_bench
 from pilot.exceptions import AppValidationError
 
 if typing.TYPE_CHECKING:
     from pilot.core.app import App
 
 _EXAMPLE_SPECIFIER = ">=16.0.0,<17.0.0"
+
+_REQUIRED_APPS_AST_SCRIPT = """
+import ast, json, sys
+
+req = json.load(sys.stdin)
+path = req["path"]
+try:
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        tree = ast.parse(f.read(), filename=path)
+except SyntaxError as exc:
+    print(json.dumps({"syntax_error": f"line {exc.lineno}: {exc.msg}"}))
+    sys.exit(0)
+except (OSError, UnicodeDecodeError):
+    print(json.dumps({"required_apps": []}))
+    sys.exit(0)
+
+required_apps = []
+for node in tree.body:
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "required_apps":
+                if isinstance(node.value, (ast.List, ast.Tuple)):
+                    required_apps = [
+                        elt.value.rsplit("/", 1)[-1]
+                        for elt in node.value.elts
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                    ]
+                elif isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    required_apps = [node.value.value.rsplit("/", 1)[-1]]
+
+print(json.dumps({"required_apps": required_apps}))
+"""
 
 
 class DependencyDeclarationsCheck:
@@ -43,22 +75,15 @@ class DependencyDeclarationsCheck:
     def get_hooks_required_apps(self, app: "App") -> list[str]:
         """Parse hooks.py (guaranteed present by RepoStructureCheck) for required_apps."""
         hooks_path = module_path(app) / "hooks.py"
-        tree = ast.parse(hooks_path.read_text(), filename=str(hooks_path))
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if (
-                        isinstance(target, ast.Name)
-                        and target.id == "required_apps"
-                        and isinstance(node.value, (ast.List, ast.Tuple))
-                    ):
-                        return [
-                            elt.value.rsplit("/", 1)[-1]
-                            for elt in node.value.elts
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                        ]
-        return []
+        if not hooks_path.is_file():
+            return []
+        bench_python = get_bench_python(app)
+        data = run_in_bench(bench_python, _REQUIRED_APPS_AST_SCRIPT, {"path": str(hooks_path)})
+        if "syntax_error" in data:
+            raise AppValidationError(
+                f"'{app.config.name}' has syntax errors in {app.module_name}/hooks.py: {data['syntax_error']}"
+            )
+        return data.get("required_apps", [])
 
     def get_frappe_dependencies(self, app: "App") -> dict[str, str]:
         """The `[tool.bench.frappe-dependencies]` table as {app: version specifier}."""
@@ -76,23 +101,24 @@ class DependencyDeclarationsCheck:
                 f"pyproject.toml: expected a table of versions, got {type(declared).__name__}.\n"
                 f'Use one entry per app, e.g. frappe = "{_EXAMPLE_SPECIFIER}"'
             )
-        return {name: str(specifier) for name, specifier in declared.items()}
+        return declared
 
-    @staticmethod
-    def _check_version_specifiers(app: "App", declared: dict[str, str]) -> None:
-        """Every app needs a real range: an unpinned or unreadable one can't be resolved."""
+    def _check_version_specifiers(self, app: "App", declared: dict[str, str]) -> None:
         for name, specifier in declared.items():
+            if not isinstance(specifier, str):
+                raise AppValidationError(
+                    f"'{app.config.name}' has an invalid [tool.bench.frappe-dependencies] in "
+                    f"pyproject.toml: {name}'s version must be a string, got {type(specifier).__name__}."
+                )
             if not specifier.strip():
                 raise AppValidationError(
                     f"'{app.config.name}' declares '{name}' with no version in pyproject.toml's "
-                    "[tool.bench.frappe-dependencies].\n"
-                    f'Pin the versions it supports, e.g. {name} = "{_EXAMPLE_SPECIFIER}"'
+                    f"[tool.bench.frappe-dependencies].\nUse PEP 440 ranges, e.g. {name} = \"{_EXAMPLE_SPECIFIER}\""
                 )
             try:
                 SpecifierSet(specifier)
             except InvalidSpecifier as exc:
                 raise AppValidationError(
                     f"'{app.config.name}' declares an invalid version for '{name}' in "
-                    f"pyproject.toml's [tool.bench.frappe-dependencies]: {specifier!r} ({exc}).\n"
-                    f'Use comma-separated PEP 440 ranges, e.g. {name} = "{_EXAMPLE_SPECIFIER}"'
+                    f'pyproject.toml: "{specifier}".\nUse a valid PEP 440 specifier, e.g. "{_EXAMPLE_SPECIFIER}".'
                 ) from exc
