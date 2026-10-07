@@ -55,11 +55,23 @@ def module_level_statements(body):
                     stmts += module_level_statements(node.orelse)
             else:
                 stmts += module_level_statements(node.body + node.orelse)
-        elif isinstance(node, ast.Try):
+        elif isinstance(node, ast.While):
+            if isinstance(node.test, ast.Constant) and not node.test.value:
+                stmts += module_level_statements(node.orelse)
+            elif isinstance(node.test, ast.Name) and node.test.id == "False":
+                stmts += module_level_statements(node.orelse)
+            else:
+                stmts += module_level_statements(node.body + node.orelse)
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            stmts += module_level_statements(node.body + node.orelse)
+        elif isinstance(node, (ast.Try, getattr(ast, "TryStar", ast.Try))):
             handled = [s for h in node.handlers for s in h.body]
             stmts += module_level_statements(node.body + node.orelse + node.finalbody + handled)
         elif isinstance(node, (ast.With, ast.AsyncWith)):
             stmts += module_level_statements(node.body)
+        elif getattr(ast, "Match", None) is not None and isinstance(node, ast.Match):
+            cases_stmts = [s for case in node.cases for s in case.body]
+            stmts += module_level_statements(cases_stmts)
     return stmts
 
 required_apps = []

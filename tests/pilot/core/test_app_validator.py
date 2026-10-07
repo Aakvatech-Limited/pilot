@@ -1389,6 +1389,40 @@ def test_dependency_declarations_extracts_nested_and_conditional_required_apps(t
         Validator(app, checks=[DependencyDeclarationsCheck()]).validate()
 
 
+def test_dependency_declarations_extracts_from_module_level_loops_and_match(tmp_path: Path) -> None:
+    """Verifies that required_apps set inside module-level for, while, or match blocks are found."""
+    app_for = _make_app(
+        tmp_path / "app_for",
+        "app_for",
+        '[project]\nname = "app_for"\n\n[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {
+            "app_for/hooks.py": (
+                "required_apps = []\n"
+                "for app in ['erpnext']:\n"
+                "    required_apps.append('erpnext')\n"
+            ),
+        },
+    )
+    with pytest.raises(AppValidationError, match="erpnext"):
+        Validator(app_for, checks=[DependencyDeclarationsCheck()]).validate()
+
+    app_match = _make_app(
+        tmp_path / "app_match",
+        "app_match",
+        '[project]\nname = "app_match"\n\n[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {
+            "app_match/hooks.py": (
+                "mode = 'full'\n"
+                "match mode:\n"
+                "    case 'full':\n"
+                "        required_apps = ['hrms']\n"
+            ),
+        },
+    )
+    with pytest.raises(AppValidationError, match="hrms"):
+        Validator(app_match, checks=[DependencyDeclarationsCheck()]).validate()
+
+
 def test_dependency_declarations_ignores_functions_and_inactive_branches(tmp_path: Path) -> None:
     """Verifies that required_apps inside functions or inactive branches are ignored."""
     app = _make_app(
