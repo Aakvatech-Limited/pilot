@@ -6,11 +6,15 @@ import {
   getTask,
 } from '@frappe/cloud-sdk/api'
 import { reactive } from 'vue'
-import type { BillingSummary, CloudContext, Domains, Marketplace } from '@frappe/cloud-sdk'
-import { translate as __ } from './translation'
-import { notify } from './notify'
+import type { BillingSummary, CloudContext, Domains, Marketplace, CloudSettingsTranslator } from '@frappe/cloud-sdk'
+import { translate, useTranslation } from './translation'
+import { toast } from 'frappe-ui'
 
-export const getErrorMessage = (exception: unknown, fallback?: string) => {
+export const getErrorMessage = (
+  exception: unknown,
+  fallback?: string,
+  __: CloudSettingsTranslator = translate,
+) => {
   if (!(exception instanceof CloudSettingsError)) {
     return (exception instanceof Error ? exception.message : '') || fallback || __('Something went wrong.')
   }
@@ -21,6 +25,11 @@ export const getErrorMessage = (exception: unknown, fallback?: string) => {
   if (exception.excType) return __('{0}. Please try again.', [exception.excType])
 
   return __('Something went wrong. Please try again.')
+}
+
+export const useErrorMessage = () => {
+  const translate = useTranslation()
+  return (exception: unknown, fallback?: string) => getErrorMessage(exception, fallback, translate)
 }
 
 const POLL_INTERVAL = 2500
@@ -48,6 +57,8 @@ export const waitForTask = async (
       continue
     }
 
+    if (isCancelled()) return 'cancelled'
+
     const status = task?.status
 
     if (!status) return 'gone'
@@ -67,14 +78,19 @@ export const waitForTask = async (
   return 'cancelled'
 }
 
-export const settleTask = async (taskId: string, isCancelled: () => boolean, failure: string) => {
+export const settleTask = async (
+  taskId: string,
+  isCancelled: () => boolean,
+  failure: string,
+  __: CloudSettingsTranslator = translate,
+) => {
   const outcome = await waitForTask(taskId, isCancelled)
 
   if (outcome === 'success') return true
   if (outcome === 'failed' || outcome === 'error') throw new Error(failure)
 
   if (outcome !== 'cancelled') {
-    notify(__('Still running in the background. Check back in a bit.'), 'orange')
+    toast.warning(__('Still running in the background. Check back in a bit.'))
   }
 
   return false
@@ -103,7 +119,7 @@ export const rememberTask = (site: string, name: string, task?: RememberedTask) 
   } catch {}
 }
 
-export const createStore = (context?: CloudContext) => {
+export const createStore = (context?: CloudContext, translator: CloudSettingsTranslator = translate) => {
   const state = reactive({
     context: context || { enabled: false },
     billing: null as BillingSummary | null,
@@ -122,7 +138,7 @@ export const createStore = (context?: CloudContext) => {
     try {
       state.billing = await getBilling()
     } catch (exception) {
-      state.billingError = getErrorMessage(exception)
+      state.billingError = getErrorMessage(exception, undefined, translator)
     }
   }
 
@@ -134,7 +150,7 @@ export const createStore = (context?: CloudContext) => {
     try {
       state.marketplace = await getMarketplaceApps()
     } catch (exception) {
-      state.marketplaceError = getErrorMessage(exception)
+      state.marketplaceError = getErrorMessage(exception, undefined, translator)
     }
   }
 
@@ -146,7 +162,7 @@ export const createStore = (context?: CloudContext) => {
     try {
       state.domains = await getDomains()
     } catch (exception) {
-      state.domainsError = getErrorMessage(exception)
+      state.domainsError = getErrorMessage(exception, undefined, translator)
     }
   }
 

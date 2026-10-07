@@ -122,13 +122,13 @@ providePortalTarget(overlays)
 
 const isOpen = ref(props.open)
 const tab = ref(getFirstTab())
-const store = ref(createStore(props.context))
+const store = ref(createStore(props.context, __))
 
 watch(
   () => props.open,
   (open) => {
     if (open) {
-      store.value = createStore(props.context)
+      store.value = createStore(props.context, __)
       tab.value = getFirstTab()
     }
 

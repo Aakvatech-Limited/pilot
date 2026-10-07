@@ -12,7 +12,6 @@ const page = globalThis as typeof globalThis & {
 
 page.FrappeCloudSettings = { isCloudSettingsAvailable, ...controller }
 
-// Desk versions that already load this bundle keep the same entry point.
 if (page.frappe) page.frappe.cloudSettings = {
   show: (context, options = {}) => mountCloudSettings(context, options),
 }

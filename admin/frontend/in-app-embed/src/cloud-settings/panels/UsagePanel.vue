@@ -6,9 +6,10 @@ import { Button, ErrorMessage } from 'frappe-ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Scrollbar from '../components/Scrollbar.vue'
-import { getErrorMessage, type Store, settleTask } from '../store'
+import { useErrorMessage, type Store, settleTask } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store
@@ -187,7 +188,7 @@ const refresh = async () => {
   try {
     const { task_id } = await refreshStorage()
 
-    if (!(await settleTask(task_id, () => gone, __("Couldn't measure usage.")))) return
+    if (!(await settleTask(task_id, () => gone, __("Couldn't measure usage."), __))) return
 
     await load()
   } catch (exception) {

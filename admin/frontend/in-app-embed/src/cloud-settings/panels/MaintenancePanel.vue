@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { useTranslation } from '../translation'
 import { clearCache, migrate } from '@frappe/cloud-sdk/api'
-import { Button, ErrorMessage } from 'frappe-ui'
+import { Button, ErrorMessage, toast } from 'frappe-ui'
 import { onBeforeUnmount, ref } from 'vue'
 import Panel from '../components/Panel.vue'
-import { notify } from '../notify'
-import { getErrorMessage, type Store, settleTask } from '../store'
+import { useErrorMessage, type Store, settleTask } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store
@@ -50,10 +50,10 @@ const run = async (action: typeof actions[number]) => {
   try {
     const { task_id } = await action.run()
 
-    if (!(await settleTask(task_id, () => gone, __("Couldn't finish: {0}.", [action.title]))))
+    if (!(await settleTask(task_id, () => gone, __("Couldn't finish: {0}.", [action.title]), __)))
       return
 
-    notify(action.done)
+    toast.success(action.done)
   } catch (exception) {
     error.value = getErrorMessage(exception)
   } finally {

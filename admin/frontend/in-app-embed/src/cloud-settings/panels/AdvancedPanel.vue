@@ -5,9 +5,10 @@ import { Button, ErrorMessage, SettingsRow } from 'frappe-ui'
 import { computed, ref } from 'vue'
 import Panel from '../components/Panel.vue'
 import { openExternal } from '../external'
-import { getErrorMessage, type Store } from '../store'
+import { useErrorMessage, type Store } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store

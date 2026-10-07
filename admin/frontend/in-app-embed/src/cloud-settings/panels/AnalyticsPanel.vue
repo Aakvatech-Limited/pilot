@@ -7,9 +7,10 @@ import { Select, Tooltip } from 'frappe-ui'
 import { AreaChart } from 'frappe-ui/charts'
 import { computed, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
-import { getErrorMessage, type Store } from '../store'
+import { useErrorMessage, type Store } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store

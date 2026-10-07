@@ -2,15 +2,15 @@
 import { useTranslation } from '../translation'
 import { createBackup, deleteBackup, getBackupDownloadLinks, getBackups } from '@frappe/cloud-sdk/api'
 import type { Backup, BackupFile, Backups } from '@frappe/cloud-sdk'
-import { Badge, Button, Dialog, Dropdown, ErrorMessage } from 'frappe-ui'
+import { Badge, Button, Dialog, Dropdown, ErrorMessage, toast } from 'frappe-ui'
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
 import { openExternal } from '../external'
-import { notify } from '../notify'
-import { getErrorMessage, type Store, settleTask } from '../store'
+import { useErrorMessage, type Store, settleTask } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store
@@ -106,11 +106,11 @@ const backUp = async () => {
   try {
     const { task_id } = await createBackup()
 
-    if (!(await settleTask(task_id, () => gone, __("Couldn't back up the site.")))) return
+    if (!(await settleTask(task_id, () => gone, __("Couldn't back up the site."), __))) return
 
     await load()
 
-    notify(__('Backup done.'))
+    toast.success(__('Backup done.'))
   } catch (exception) {
     error.value = getErrorMessage(exception)
   } finally {
@@ -149,11 +149,11 @@ const confirmDelete = async () => {
   try {
     const { task_id } = await deleteBackup(deleteTarget.value.timestamp)
 
-    if (!(await settleTask(task_id, () => gone, __("Couldn't delete the backup.")))) return
+    if (!(await settleTask(task_id, () => gone, __("Couldn't delete the backup."), __))) return
 
     await load()
 
-    notify(__('Backup deleted.'))
+    toast.success(__('Backup deleted.'))
   } catch (exception) {
     error.value = getErrorMessage(exception)
   } finally {

@@ -38,6 +38,7 @@ class BillingSimulation:
             "supported_currencies": ["USD"],
         }
 
+    @property
     def summary(self) -> dict:
         return {
             "currency": "USD",
@@ -56,7 +57,7 @@ class BillingSimulation:
 
     def call(self, method: str, data: dict, base_url: str) -> dict | list:
         if method == "get_billing_summary":
-            return self.summary()
+            return self.summary
         if method == "get_billing_profile":
             return self.profile
         if method == "save_billing_profile":

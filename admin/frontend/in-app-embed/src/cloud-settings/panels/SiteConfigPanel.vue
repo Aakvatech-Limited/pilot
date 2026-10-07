@@ -6,9 +6,10 @@ import { Button, Dialog, Dropdown, ErrorMessage, TextInput } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import Panel from '../components/Panel.vue'
 import Table from '../components/Table.vue'
-import { getErrorMessage, type Store } from '../store'
+import { useErrorMessage, type Store } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store

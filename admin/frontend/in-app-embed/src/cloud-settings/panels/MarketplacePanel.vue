@@ -2,16 +2,15 @@
 import { useTranslation } from '../translation'
 import { installApp, isMigrationConflict, uninstallApp, updateApps } from '@frappe/cloud-sdk/api'
 import type { MarketplaceApp, TaskSubmission } from '@frappe/cloud-sdk'
-import { Button, ErrorMessage, Select, TextInput } from 'frappe-ui'
+import { Button, ErrorMessage, Select, TextInput, toast } from 'frappe-ui'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import ActionableError from '../components/ActionableError.vue'
 import AppRow from '../components/AppRow.vue'
 import Panel from '../components/Panel.vue'
 import UninstallAppDialog from '../components/UninstallAppDialog.vue'
 import UpdateAppsDialog from '../components/UpdateAppsDialog.vue'
-import { notify } from '../notify'
 import {
-  getErrorMessage,
+  useErrorMessage,
   getRememberedTasks,
   rememberTask,
   type Store,
@@ -19,6 +18,7 @@ import {
 } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store
@@ -152,7 +152,7 @@ const updateAll = async ({ apps, taskId }: { apps?: string[]; taskId?: string })
 
     await store.loadMarketplace(true)
 
-    if (done) notify(__('{0} {1}.', [__('All apps'), ACTION.update.done]), 'green')
+    if (done) toast.success(__('{0} {1}.', [__('All apps'), ACTION.update.done]))
 
     showUpdates.value = false
   } catch (exception) {
@@ -164,7 +164,7 @@ const updateAll = async ({ apps, taskId }: { apps?: string[]; taskId?: string })
     } else {
       updateAllError.value = getErrorMessage(exception)
 
-      if (!showUpdates.value) notify(updateAllError.value, 'red')
+      if (!showUpdates.value) toast.error(updateAllError.value)
     }
   } finally {
     if (finished) rememberTask(site, '*')
@@ -199,7 +199,7 @@ const runAction = async (app: Pick<MarketplaceApp, 'name' | 'title'>, verb: keyo
       )
     }
 
-    notify(__('{0} {1}.', [app.title, ACTION[verb].done]), 'green')
+    toast.success(__('{0} {1}.', [app.title, ACTION[verb].done]))
   } catch (exception) {
     finished = true
     blocker.value = asBlocker(exception)
@@ -207,7 +207,7 @@ const runAction = async (app: Pick<MarketplaceApp, 'name' | 'title'>, verb: keyo
     if (!blocker.value) {
       errors[app.name] = getErrorMessage(exception)
 
-      notify(errors[app.name], 'red')
+      toast.error(errors[app.name])
     }
   } finally {
     if (finished) rememberTask(site, app.name)
@@ -242,12 +242,11 @@ const settle = async (taskId: string, action: { verb: string; progress: string }
   }
 
   if (outcome !== 'cancelled') {
-    notify(
+    toast.warning(
       __(
         '{0} {1} is taking longer than expected. It will keep running in the background — reopen to check.',
         [action.progress, label],
       ),
-      'orange',
     )
   }
 }

@@ -3,9 +3,10 @@ import { useTranslation } from '../translation'
 import { getBillingProfile, saveBillingProfile } from '@frappe/cloud-sdk/api'
 import { Button, ErrorMessage, Select, Skeleton, TextInput } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { getErrorMessage, type Store } from '../store'
+import { useErrorMessage, type Store } from '../store'
 
 const __ = useTranslation()
+const getErrorMessage = useErrorMessage()
 
 interface Props {
   store: Store
