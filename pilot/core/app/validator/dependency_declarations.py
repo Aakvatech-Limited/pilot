@@ -28,20 +28,48 @@ except (OSError, UnicodeDecodeError):
     sys.exit(0)
 
 required_apps = []
-for node in tree.body:
+for node in ast.walk(tree):
     if isinstance(node, ast.Assign):
         for target in node.targets:
             if isinstance(target, ast.Name) and target.id == "required_apps":
-                if isinstance(node.value, (ast.List, ast.Tuple)):
-                    required_apps = [
-                        elt.value.rsplit("/", 1)[-1]
-                        for elt in node.value.elts
-                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                    ]
+                if isinstance(node.value, (ast.List, ast.Tuple, ast.Set)):
+                    for elt in node.value.elts:
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            required_apps.append(elt.value.rsplit("/", 1)[-1])
                 elif isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                    required_apps = [node.value.value.rsplit("/", 1)[-1]]
+                    required_apps.append(node.value.value.rsplit("/", 1)[-1])
+    elif isinstance(node, ast.AnnAssign):
+        if isinstance(node.target, ast.Name) and node.target.id == "required_apps" and node.value is not None:
+            if isinstance(node.value, (ast.List, ast.Tuple, ast.Set)):
+                for elt in node.value.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        required_apps.append(elt.value.rsplit("/", 1)[-1])
+            elif isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                required_apps.append(node.value.value.rsplit("/", 1)[-1])
+    elif isinstance(node, ast.AugAssign):
+        if isinstance(node.target, ast.Name) and node.target.id == "required_apps":
+            if isinstance(node.value, (ast.List, ast.Tuple, ast.Set)):
+                for elt in node.value.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        required_apps.append(elt.value.rsplit("/", 1)[-1])
+            elif isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                required_apps.append(node.value.value.rsplit("/", 1)[-1])
+    elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+        call = node.value
+        if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
+            if call.func.value.id == "required_apps":
+                if call.func.attr == "append" and call.args:
+                    arg = call.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        required_apps.append(arg.value.rsplit("/", 1)[-1])
+                elif call.func.attr == "extend" and call.args:
+                    arg = call.args[0]
+                    if isinstance(arg, (ast.List, ast.Tuple, ast.Set)):
+                        for elt in arg.elts:
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                required_apps.append(elt.value.rsplit("/", 1)[-1])
 
-print(json.dumps({"required_apps": required_apps}))
+print(json.dumps({"required_apps": list(dict.fromkeys(required_apps))}))
 """
 
 

@@ -1370,3 +1370,36 @@ def test_import_check_resolves_relative_imports_via_bench_python(tmp_path: Path)
         ImportCheck._resolve_relative_parts(app, sub_file, "escaped", 3, 3)
 
 
+def test_dependency_declarations_extracts_nested_and_conditional_required_apps(tmp_path: Path) -> None:
+    """Verifies that required_apps inside conditional or nested blocks are found."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {
+            "myapp/hooks.py": (
+                "if True:\n"
+                "    required_apps = ['erpnext']\n"
+                "else:\n"
+                "    required_apps = ['hrms']\n"
+            ),
+        },
+    )
+    with pytest.raises(AppValidationError, match="erpnext"):
+        Validator(app, checks=[DependencyDeclarationsCheck()]).validate()
+
+
+def test_get_bench_python_retains_venv_symlink_path(tmp_path: Path) -> None:
+    """Verifies get_bench_python returns the venv binary path without resolving symlink to base interpreter."""
+    app = _make_app(tmp_path, "myapp", '[project]\nname = "myapp"\n', {"myapp/hooks.py": ""})
+    venv_bin = tmp_path / "env" / "bin" / "python"
+    venv_bin.parent.mkdir(parents=True, exist_ok=True)
+    venv_bin.symlink_to(sys.executable)
+
+    resolved = get_bench_python(app)
+    assert resolved == str(venv_bin)
+    # Ensure it didn't resolve to the base sys.executable path
+    if Path(sys.executable) != venv_bin:
+        assert resolved != str(Path(sys.executable).resolve())
+
+
