@@ -12,7 +12,6 @@ if typing.TYPE_CHECKING:
 
 _EXAMPLE_SPECIFIER = ">=16.0.0,<17.0.0"
 
-# This executes your exact original AST logic safely inside the bench environment
 _REQUIRED_APPS_AST_SCRIPT = """
 import ast, json, sys
 
