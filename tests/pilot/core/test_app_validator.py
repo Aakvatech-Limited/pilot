@@ -1389,6 +1389,26 @@ def test_dependency_declarations_extracts_nested_and_conditional_required_apps(t
         Validator(app, checks=[DependencyDeclarationsCheck()]).validate()
 
 
+def test_dependency_declarations_ignores_functions_and_inactive_branches(tmp_path: Path) -> None:
+    """Verifies that required_apps inside functions or inactive branches are ignored."""
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench.frappe-dependencies]\nfrappe = ">=15"\n',
+        {
+            "myapp/hooks.py": (
+                "def helper():\n"
+                "    required_apps = ['inactive_func_app']\n"
+                "    return required_apps\n\n"
+                "if False:\n"
+                "    required_apps = ['inactive_branch_app']\n"
+            ),
+        },
+    )
+    # Should not raise missing dependency error because required_apps is empty
+    Validator(app, checks=[DependencyDeclarationsCheck()]).validate()
+
+
 def test_get_bench_python_retains_venv_symlink_path(tmp_path: Path) -> None:
     """Verifies get_bench_python returns the venv binary path without resolving symlink to base interpreter."""
     app = _make_app(tmp_path, "myapp", '[project]\nname = "myapp"\n', {"myapp/hooks.py": ""})
