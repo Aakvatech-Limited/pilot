@@ -4,19 +4,32 @@ import {
   getDomains,
   getMarketplaceApps,
   getTask,
-} from '@frappe/cloud-sdk'
+} from '@frappe/cloud-sdk/api'
 import { reactive } from 'vue'
+import type { BillingSummary, CloudContext, Domains, Marketplace, CloudSettingsTranslator } from '@frappe/cloud-sdk'
+import { translate, useTranslation } from './translation'
+import { toast } from 'frappe-ui'
 
-export const getErrorMessage = (exception: unknown, fallback?: string) => {
+export const getErrorMessage = (
+  exception: unknown,
+  fallback?: string,
+  __: CloudSettingsTranslator = translate,
+) => {
   if (!(exception instanceof CloudSettingsError)) {
-    return (exception as Error | undefined)?.message || fallback || __('Something went wrong.')
+    return (exception instanceof Error ? exception.message : '') || fallback || __('Something went wrong.')
   }
 
   if (exception.serverMessages.length) return exception.message
+  if (exception.status === 0) return __('Could not reach Cloud Settings. Please try again.')
   if (exception.status === 403) return __("You don't have permission to do this.")
   if (exception.excType) return __('{0}. Please try again.', [exception.excType])
 
   return __('Something went wrong. Please try again.')
+}
+
+export const useErrorMessage = () => {
+  const translate = useTranslation()
+  return (exception: unknown, fallback?: string) => getErrorMessage(exception, fallback, translate)
 }
 
 const POLL_INTERVAL = 2500
@@ -25,8 +38,6 @@ const MAX_WAIT = 3 * 60 * 1000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 type TaskOutcome = 'success' | 'failed' | 'timeout' | 'gone' | 'error' | 'cancelled'
-
-type Payload = Record<string, any> | null
 
 export const waitForTask = async (
   taskId: string,
@@ -45,6 +56,8 @@ export const waitForTask = async (
       await sleep(POLL_INTERVAL)
       continue
     }
+
+    if (isCancelled()) return 'cancelled'
 
     const status = task?.status
 
@@ -65,17 +78,19 @@ export const waitForTask = async (
   return 'cancelled'
 }
 
-export const settleTask = async (taskId: string, isCancelled: () => boolean, failure: string) => {
+export const settleTask = async (
+  taskId: string,
+  isCancelled: () => boolean,
+  failure: string,
+  __: CloudSettingsTranslator = translate,
+) => {
   const outcome = await waitForTask(taskId, isCancelled)
 
   if (outcome === 'success') return true
   if (outcome === 'failed' || outcome === 'error') throw new Error(failure)
 
   if (outcome !== 'cancelled') {
-    frappe.show_alert({
-      message: __('Still running in the background. Check back in a bit.'),
-      indicator: 'orange',
-    })
+    toast.warning(__('Still running in the background. Check back in a bit.'))
   }
 
   return false
@@ -104,14 +119,14 @@ export const rememberTask = (site: string, name: string, task?: RememberedTask) 
   } catch {}
 }
 
-export const createStore = (context?: CloudContext) => {
+export const createStore = (context?: CloudContext, translator: CloudSettingsTranslator = translate) => {
   const state = reactive({
-    context: context || {},
-    billing: null as Payload,
+    context: context || { enabled: false },
+    billing: null as BillingSummary | null,
     billingError: '',
-    marketplace: null as Payload,
+    marketplace: null as Marketplace | null,
     marketplaceError: '',
-    domains: null as Payload,
+    domains: null as Domains | null,
     domainsError: '',
   })
 
@@ -123,7 +138,7 @@ export const createStore = (context?: CloudContext) => {
     try {
       state.billing = await getBilling()
     } catch (exception) {
-      state.billingError = getErrorMessage(exception)
+      state.billingError = getErrorMessage(exception, undefined, translator)
     }
   }
 
@@ -135,7 +150,7 @@ export const createStore = (context?: CloudContext) => {
     try {
       state.marketplace = await getMarketplaceApps()
     } catch (exception) {
-      state.marketplaceError = getErrorMessage(exception)
+      state.marketplaceError = getErrorMessage(exception, undefined, translator)
     }
   }
 
@@ -147,7 +162,7 @@ export const createStore = (context?: CloudContext) => {
     try {
       state.domains = await getDomains()
     } catch (exception) {
-      state.domainsError = getErrorMessage(exception)
+      state.domainsError = getErrorMessage(exception, undefined, translator)
     }
   }
 
