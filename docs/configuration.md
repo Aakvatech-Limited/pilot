@@ -251,8 +251,7 @@ Outgoing mail lives in the bench's `sites/common_site_config.json`, under the ke
   "auto_email_id": "alerts@example.com",
   "mail_login": "alerts@example.com",
   "mail_password": "secret",
-  "use_tls": 1,
-  "always_use_account_email_id_as_sender": 1
+  "use_tls": 1
 }
 ```
 
@@ -262,9 +261,8 @@ Outgoing mail lives in the bench's `sites/common_site_config.json`, under the ke
 - `auto_email_id` is the address alerts are sent from, and the login name by default
 - `mail_login` only when the server expects a login name that is not that address
 - a relay that takes no credentials gets `disable_mail_smtp_authentication` instead of a password
-- `always_use_account_email_id_as_sender` makes every site send from `auto_email_id`, because most mail servers refuse a sender address that is not the login. Pilot writes it with the other keys.
 
-Each site's `site_config.json` has `email_sender_name`, the display name on the mail the site sends through this mailbox. Pilot sets it to the first label of the site name when it creates the site, such as `acme` for `acme.example.com`, and changes it when the site is renamed. A value that you set yourself stays.
+Each site's `site_config.json` has `email_sender_name`, the display name on mail that the site sends through this mailbox without a sender name of its own, such as a password reset. Mail that a user sends keeps that user's name. A restore keeps the target site's value. Pilot sets it to the first label of the site name when it creates the site, such as `acme` for `acme.example.com`, and changes it when the site is renamed. A value that you set yourself stays.
 
 The certificate is verified in both modes, so a server with a self-signed certificate is refused rather than trusted silently.
 

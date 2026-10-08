@@ -391,13 +391,3 @@ def test_alerts_reach_central_when_it_is_managed(tmp_path: Path) -> None:
     client.return_value.notify_central.assert_called_once_with(
         event="cpu", message="high", context={}, reference_name=bench.config.name
     )
-
-
-def test_sites_always_send_from_the_mailbox_address(tmp_path: Path) -> None:
-    """A mailbox provider refuses a From address that is not the login."""
-    (tmp_path / "common_site_config.json").write_text("{}")
-
-    MailConfig(server="smtp.test", email="alerts@test", password="secret").write(tmp_path)
-
-    config = json.loads((tmp_path / "common_site_config.json").read_text())
-    assert config["always_use_account_email_id_as_sender"] == 1

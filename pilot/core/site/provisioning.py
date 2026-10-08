@@ -66,13 +66,7 @@ class SiteProvisioner:
         return site
 
     def write_email_sender_name(self, site: "Site") -> None:
-        from pilot.core.site.config import set_site_config_values
-
-        set_site_config_values(
-            self.bench.sites_path,
-            site.config.name,
-            {"email_sender_name": email_sender_name(site.config.name)},
-        )
+        site.set_config_values({"email_sender_name": email_sender_name(site.config.name)})
 
     def write_route_policy(self, site: "Site") -> None:
         """Persist provider route metadata after site creation."""

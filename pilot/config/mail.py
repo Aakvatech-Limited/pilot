@@ -21,7 +21,6 @@ CONFIG_KEYS = (
     "auto_email_id",
     "use_tls",
     "disable_mail_smtp_authentication",
-    "always_use_account_email_id_as_sender",
 )
 
 
@@ -114,8 +113,6 @@ class MailConfig:
             config["mail_port"] = endpoint.port
             config["auto_email_id"] = endpoint.sender
             config["use_tls"] = 0 if endpoint.is_ssl else 1
-            # Mailbox providers refuse a From address that is not the login or its alias.
-            config["always_use_account_email_id_as_sender"] = 1
             if endpoint.username:
                 config["mail_login"] = endpoint.username
                 config["mail_password"] = self.password
