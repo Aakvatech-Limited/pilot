@@ -69,7 +69,7 @@ const timelineConfig = (timeline: Timeline | undefined, valueLabel: string): Bar
     },
     yAxis: { min: 0, title: valueLabel, echartOptions: { splitLine: GRID } },
     seriesConfig: Object.fromEntries(
-      categories.map((name, i) => [name, { color: PALETTE[i % PALETTE.length] }]),
+      categories.map((name, i) => [name, { label: name, color: PALETTE[i % PALETTE.length] }]),
     ),
   }
 }
