@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue'
 
+import CopyBtn from '@/components/common/CopyBtn.vue'
 import LogView from '@/components/logs/LogView.vue'
 import TaskStep from '@/components/tasks/TaskStep.vue'
 
 import { STEP_MARKER_RE, type StepSection, useTaskSteps } from '@/composables/tasks/useTaskSteps'
-import { processLine } from '@/utils/ansi'
+import { processLine, processPlainLine } from '@/utils/ansi'
 
 interface Props {
   rawLines?: string[]
@@ -27,12 +28,12 @@ const taskRef = computed(() => ({ status: props.taskStatus }))
 
 const { stepSections, hasSteps, stepDuration } = useTaskSteps(rawLinesRef, streamingRef, taskRef)
 const processedLines = computed(() => props.rawLines.map(processLine))
+const logText = computed(() => props.rawLines.map(processPlainLine).join('\n'))
 
-const sectionLines = (section: StepSection) => {
+const sectionRawLines = (section: StepSection) => {
   return props.rawLines
     .slice(section.lineStart, section.lineEnd)
     .filter((line) => !STEP_MARKER_RE.test(line))
-    .map(processLine)
 }
 
 const sectionHasOutput = (section: StepSection) => {
@@ -43,6 +44,13 @@ const sectionHasOutput = (section: StepSection) => {
 </script>
 
 <template>
+  <div v-if="logText.trim()" class="flex justify-end mb-2">
+    <CopyBtn
+      :text="logText"
+      label="Copy logs"
+      class="flex items-center gap-1.5 px-2 py-1 rounded-4 text-sm text-ink-gray-7 hover:bg-surface-gray-1"
+    />
+  </div>
   <div
     v-if="hasSteps"
     class="flex flex-col gap-1 p-1 border border-outline-gray-2 rounded-6 min-w-0"
@@ -53,7 +61,8 @@ const sectionHasOutput = (section: StepSection) => {
       :label="section.label"
       :status="section.status"
       :duration="stepDuration(section)"
-      :lines="sectionLines(section)"
+      :lines="sectionRawLines(section).map(processLine)"
+      :raw-lines="sectionRawLines(section)"
       :has-output="sectionHasOutput(section)"
       :streaming="streaming && section.status === 'running'"
     />

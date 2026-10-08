@@ -4,12 +4,14 @@ import { ref, watch } from 'vue'
 
 import CopyBtn from '@/components/common/CopyBtn.vue'
 import LogView from '@/components/logs/LogView.vue'
+import { processPlainLine } from '@/utils/ansi'
 
 interface Props {
   label: string
   status?: string
   duration?: string | null
   lines?: string[]
+  rawLines?: string[]
   hasOutput?: boolean
   streaming?: boolean
 }
@@ -18,6 +20,7 @@ const props = withDefaults(defineProps<Props>(), {
   status: 'pending',
   duration: null,
   lines: () => [],
+  rawLines: () => [],
   hasOutput: false,
   streaming: false,
 })
@@ -82,8 +85,9 @@ const toggle = () => {
     <div v-if="expanded && hasOutput" class="relative mt-1">
       <LogView :lines="lines" :streaming="streaming" />
       <CopyBtn
-        :text="lines.join('\n')"
-        class="top-2 right-4 absolute bg-surface-gray-1 p-1 rounded-4 text-ink-gray-5 hover:text-ink-gray-8 transition-colors"
+        :text="rawLines.map(processPlainLine).join('\n')"
+        label="Copy logs"
+        class="top-2 right-4 absolute flex items-center gap-1.5 bg-surface-gray-1 p-1 rounded-4 text-sm text-ink-gray-5 hover:text-ink-gray-8 transition-colors"
       />
     </div>
   </div>

@@ -25,6 +25,7 @@ export const escapeHtml = (text: string) => {
 const ansiToHtml = (text: string) => {
   let html = ''
   let openSpans = 0
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI sequences start with ESC.
   for (const part of text.split(/(\x1b\[[0-9;]*[A-Za-z])/)) {
     if (part.startsWith('\x1b[') && part.endsWith('m')) {
       for (const code of part.slice(2, -1).split(';')) {
@@ -57,4 +58,9 @@ const applyCarriageReturns = (raw: string) => {
 
 export const processLine = (raw: string) => {
   return ansiToHtml(applyCarriageReturns(raw))
+}
+
+export const processPlainLine = (raw: string) => {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI sequences start with ESC.
+  return applyCarriageReturns(raw).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
 }

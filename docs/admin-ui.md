@@ -53,6 +53,8 @@ The update-status button is opt-in per route through `meta.showUpdateStatus`.
 
 The UI should treat task ids as the handle for long work.
 
+Use `Copy logs` above task output to copy all loaded lines, including collapsed steps. The copy action inside an expanded step copies only that step's output. Both actions copy plain text and show `Copied` when the clipboard write succeeds.
+
 ## Setup
 
 The Frappe branch picker lists the branches reported by the repository. Type a different full branch name and select `Use branch` to choose it. `Set up bench` saves the selection before setup starts. The wizard restores a saved custom branch even when the repository list does not contain it.

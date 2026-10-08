@@ -3,6 +3,7 @@ import { ref } from 'vue'
 
 interface Props {
   text: string
+  label?: string
 }
 
 const props = defineProps<Props>()
@@ -44,8 +45,9 @@ const copy = async (event: MouseEvent) => {
 </script>
 
 <template>
-  <button type="button" :aria-label="copied ? 'Copied' : 'Copy'" @click.stop="copy">
+  <button type="button" :aria-label="copied ? 'Copied' : label || 'Copy'" @click.stop="copy">
     <span v-if="copied" class="size-3.5 fade-in lucide-check" />
     <span v-else class="size-3.5 fade-in lucide-clipboard" />
+    <span v-if="label">{{ copied ? 'Copied' : label }}</span>
   </button>
 </template>
