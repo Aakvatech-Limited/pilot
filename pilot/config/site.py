@@ -3,6 +3,11 @@ from dataclasses import dataclass, field
 from pilot.config.route import RoutePolicy
 
 
+def email_sender_name(site_name: str) -> str:
+    """Display name on mail a site sends through the bench mailbox: `acme` for `acme.example.com`."""
+    return site_name.split(".", 1)[0]
+
+
 @dataclass
 class SiteDomain:
     """One hostname a site answers on, and where its TLS terminates."""

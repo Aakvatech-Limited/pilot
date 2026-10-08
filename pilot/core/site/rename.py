@@ -49,6 +49,7 @@ class SiteRename:
             self._pin_certificate_name()
             self._carry_old_hostname()
             self._refresh_pilot_auth_token()
+            self._rename_email_sender_name()
             self._update_default_site(self.old_name, self.new_name)
             self._rename_in_bench_toml(self.old_name, self.new_name)
             self._retarget_hostname_aliases(self.old_name, self.new_name)
@@ -261,6 +262,16 @@ class SiteRename:
 
         self._old_pilot_auth_token = token
         config["pilot_auth_token"] = Session(self.bench).issue_pilot_token(self.new_name)
+        self._write_site_config(config)
+
+    def _rename_email_sender_name(self) -> None:
+        """Follow the new name unless someone set their own sender name."""
+        from pilot.config.site import email_sender_name
+
+        config = self._read_site_config()
+        if config.get("email_sender_name") != email_sender_name(self.old_name):
+            return
+        config["email_sender_name"] = email_sender_name(self.new_name)
         self._write_site_config(config)
 
     def _revoke_old_pilot_auth_token(self) -> None:

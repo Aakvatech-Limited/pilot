@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from pilot.config import SiteConfig
+from pilot.config.site import email_sender_name
 from pilot.exceptions import BenchError
 
 if TYPE_CHECKING:
@@ -50,6 +51,7 @@ class SiteProvisioner:
         )
         on_progress(f"Creating site '{self.name}'...")
         site.create(db_type=self.db_type)
+        self.write_email_sender_name(site)
         self.write_route_policy(site)
         self.install_apps(site, on_progress)
         self.write_pilot_communication_config(site)
@@ -62,6 +64,15 @@ class SiteProvisioner:
         if origin_tls:
             self.obtain_cert(site, on_progress)
         return site
+
+    def write_email_sender_name(self, site: "Site") -> None:
+        from pilot.core.site.config import set_site_config_values
+
+        set_site_config_values(
+            self.bench.sites_path,
+            site.config.name,
+            {"email_sender_name": email_sender_name(site.config.name)},
+        )
 
     def write_route_policy(self, site: "Site") -> None:
         """Persist provider route metadata after site creation."""
