@@ -191,7 +191,7 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
         <template #title>{{ __("Cloud Settings") }}</template>
 
         <Button
-          class="absolute right-3 top-3 z-20"
+          class="cloud-settings-close absolute right-3 top-3 z-20 max-sm:size-10"
           variant="ghost"
           icon="lucide-x"
           :aria-label="__('Close Cloud Settings')"
@@ -199,7 +199,7 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
         />
 
         <div class="shrink-0 border-b border-outline-gray-1 bg-surface-sidebar px-4 pb-4 pt-3 sm:hidden">
-          <p class="mb-3 pr-8 text-base-semibold text-ink-gray-8">{{ __('Cloud Settings') }}</p>
+          <p class="mb-3 pr-12 text-base-semibold text-ink-gray-8">{{ __('Cloud Settings') }}</p>
           <Select
             v-model="tab"
             :label="__('Panel')"
