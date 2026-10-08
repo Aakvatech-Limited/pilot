@@ -88,7 +88,10 @@ export default defineConfig(({ mode }) => ({
         format: mode === 'sdk' ? 'es' : 'iife',
         name: mode === 'sdk' ? undefined : 'FrappeCloudSettingsEmbed',
         entryFileNames: "cloud-settings.js",
+        chunkFileNames: "chunks/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
+        // Desk loads one classic script, which cannot import chunks.
+        codeSplitting: mode === 'sdk',
       },
     },
   },
