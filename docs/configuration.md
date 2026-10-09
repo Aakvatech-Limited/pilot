@@ -256,7 +256,8 @@ Outgoing mail lives in the bench's `sites/common_site_config.json`, under the ke
 ```
 
 - `mail_server` is the outgoing mail server, `mail_port` the port it listens on
-- `use_tls` upgrades the connection with STARTTLS; `0` connects over SSL instead
+- `use_tls` upgrades the connection with STARTTLS
+- `use_ssl` connects over SSL instead, with `use_tls` set to `0`. The framework reads `use_ssl` from Frappe v16 with frappe/frappe#44142.
 - `mail_port` may be left at `0`, which means 465 with SSL and 587 with STARTTLS
 - `auto_email_id` is the address alerts are sent from, and the login name by default
 - `mail_login` only when the server expects a login name that is not that address
