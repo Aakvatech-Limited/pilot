@@ -56,7 +56,8 @@ jobs:
           cp tests/fixtures/ci_common_config.toml benches/common_config.toml
 
       - name: Pilot init
-        run: pilot init -b ci-bench
+        # Frappe v16's dev extra cannot resolve: pypika-stubs needs pypika<0.49.
+        run: pilot init -b ci-bench --no-dev
         timeout-minutes: 45
 
       - name: Create sites

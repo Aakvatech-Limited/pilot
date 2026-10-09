@@ -129,6 +129,8 @@ jobs:
           # CI validates this branch's frontend, so build the admin UI from source.
           E2E_BUILD_ADMIN: "1"
           E2E_DB_TYPE: ${{ matrix.db_type }}
+          # Frappe v16's dev extra cannot resolve: pypika-stubs needs pypika<0.49.
+          E2E_SKIP_DEV_EXTRA: "1"
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Upload Playwright traces

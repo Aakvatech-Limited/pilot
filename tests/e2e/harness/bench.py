@@ -88,7 +88,17 @@ class Bench:
                 f"(unset PILOT_BIN, or point it at {REPO_ROOT / 'bin' / 'pilot'}); an installed "
                 f"`pilot` from a non-editable pip install writes next to its site-packages."
             )
+        if os.environ.get("E2E_SKIP_DEV_EXTRA") == "1":
+            self._skip_dev_extra()
         self._info = self._read_config()
+
+    def _skip_dev_extra(self) -> None:
+        """Install apps without their dev extras, as `pilot init --no-dev` does."""
+        toml = self.dir / "bench.toml"
+        text = toml.read_text()
+        if "install_dev_extra = true" not in text:
+            raise RuntimeError(f"{toml} has no install_dev_extra = true to turn off")
+        toml.write_text(text.replace("install_dev_extra = true", "install_dev_extra = false", 1))
 
     @contextlib.contextmanager
     def github_connected(self) -> Iterator[None]:
