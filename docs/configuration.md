@@ -263,7 +263,7 @@ Outgoing mail lives in the bench's `sites/common_site_config.json`, under the ke
 - `mail_login` only when the server expects a login name that is not that address
 - a relay that takes no credentials gets `disable_mail_smtp_authentication` instead of a password
 
-Each site's `site_config.json` has `email_sender_name`, the display name on mail that the site sends through this mailbox without a sender name of its own, such as a password reset. Mail that a user sends keeps that user's name. A restore keeps the target site's value. Pilot sets it to the first label of the site name when it creates the site, such as `acme` for `acme.example.com`, and changes it when the site is renamed. A value that you set yourself stays.
+Each site's `site_config.json` has `email_sender_name`, the display name on mail that the site sends through this mailbox without a sender name of its own, such as a password reset. Mail that a user sends keeps that user's name. A restore keeps the target site's value. Pilot sets it from the first label of the site name when it creates the site, and changes it when the site is renamed. It changes `-` and `_` to spaces and starts each word with a capital letter, such as `Acme Corp` for `acme-corp.example.com`. A rename keeps a value that you set yourself.
 
 The certificate is verified in both modes, so a server with a self-signed certificate is refused rather than trusted silently.
 
