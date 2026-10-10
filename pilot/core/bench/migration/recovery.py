@@ -94,3 +94,26 @@ def reconcile_orphaned_migrations(bench) -> list[str]:
             continue
         changed.append(operation.id)
     return changed
+
+
+def stop_migration(bench, operation_id: str):
+    """Cancel only the currently running task in a migration chain."""
+    from pilot.internal.tasks.runner import is_command_cancellable_while_running
+
+    operation = bench.migrations.get(operation_id)
+    if operation.is_resolved or operation.state.is_failure or not operation.chain:
+        raise MigrationStateError("Migration is not active")
+    entry = operation.chain[-1]
+    task_id = entry["task_id"]
+    task_store = TaskStore(bench.path)
+    if task_store.read_status(task_id) != TaskStatus.RUNNING:
+        raise MigrationStateError("No running migration task to stop; use recovery instead")
+    if entry.get("command") not in {"migrate", "migration-backup", "update"}:
+        raise MigrationStateError("Current migration phase does not support Force Stop")
+    if not is_command_cancellable_while_running(entry["command"]):
+        # Migration recovery is explicit, but bypassing task cancellation policy
+        # must not silently override restrictions.
+        raise MigrationStateError("The task is not cancellable while running")
+
+    TaskProcess(bench.path).cancel(task_id)
+    return reconcile_migration(bench, operation_id)
