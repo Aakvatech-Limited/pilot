@@ -12,6 +12,37 @@ from pilot.internal.tasks.store import TaskStore
 _INTERRUPTED = {TaskStatus.FAILED, TaskStatus.KILLED}
 
 
+def _verify_task_stopped(processes, tasks, task_id: str) -> None:
+    record = processes.read(task_id)
+    if record is not None:
+        ownership = processes.ownership(task_id)
+        if ownership not in (ProcessOwnership.DEAD, ProcessOwnership.STALE):
+            raise MigrationStateError(f"Task process ownership is {ownership.value}")
+        if processes._inspector.owned_pids(record.identity):
+            raise MigrationStateError("Task descendants are still running")
+        return
+    markers = ["pilot.internal.tasks.wrapper", str(tasks.task_dir(task_id))]
+    try:
+        pid = processes._inspector.get_pid_matching(markers, tasks.read_pid(task_id))
+    except OSError as error:
+        raise MigrationStateError("Cannot verify task process absence") from error
+    if pid is not None:
+        raise MigrationStateError("Task wrapper is still running")
+
+
+def _mark_interrupted_phase(operation, phase: str, site_name: str | None) -> None:
+    if phase == "migrating":
+        if not site_name:
+            raise MigrationStateError("Migration task does not identify a site")
+        site = operation.site(site_name)
+        site.migration_status = "failed"
+        operation._union_touched_tables(site)
+    elif phase == "backing_up":
+        if not site_name:
+            raise MigrationStateError("Backup task does not identify a site")
+        operation.site(site_name).backup_status = "failed"
+
+
 def reconcile_migration(bench, operation_id: str, *, force: bool = False):
     """Mark an interrupted chain as needing attention only after checking ownership."""
     tasks = TaskStore(bench.path)
@@ -31,35 +62,10 @@ def reconcile_migration(bench, operation_id: str, *, force: bool = False):
         if status not in _INTERRUPTED:
             raise MigrationStateError(f"Task {task_id} is {status.value}, not interrupted")
 
-        record = processes.read(task_id)
-        if record is not None:
-            ownership = processes.ownership(task_id)
-            if ownership not in (ProcessOwnership.DEAD, ProcessOwnership.STALE):
-                raise MigrationStateError(f"Task process ownership is {ownership.value}")
-            if processes._inspector.owned_pids(record.identity):
-                raise MigrationStateError("Task descendants are still running")
-        else:
-            # An externally killed wrapper may have already been cleaned up.
-            markers = ["pilot.internal.tasks.wrapper", str(tasks.task_dir(task_id))]
-            try:
-                pid = processes._inspector.get_pid_matching(markers, tasks.read_pid(task_id))
-            except OSError as error:
-                raise MigrationStateError("Cannot verify task process absence") from error
-            if pid is not None:
-                raise MigrationStateError("Task wrapper is still running")
-
+        _verify_task_stopped(processes, tasks, task_id)
         phase = operation.state.name
         site_name = entry.get("site")
-        if phase == "migrating":
-            if not site_name:
-                raise MigrationStateError("Migration task does not identify a site")
-            operation.site(site_name).migration_status = "failed"
-            operation._union_touched_tables(operation.site(site_name))
-        elif phase == "backing_up":
-            if not site_name:
-                raise MigrationStateError("Backup task does not identify a site")
-            operation.site(site_name).backup_status = "failed"
-
+        _mark_interrupted_phase(operation, phase, site_name)
         operation.diagnosis = {
             "phase": phase,
             "message": f"Task {task_id} ended ({status.value}) without finalizing its migration.",
