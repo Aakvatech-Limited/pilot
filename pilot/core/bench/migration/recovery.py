@@ -82,6 +82,12 @@ def reconcile_migration(bench, operation_id: str, *, force: bool = False):
             "forced": force,
         })
         operation._enter_needs_attention(phase, site_name)
+        bench.audit_action("migration", {
+            "event": "reconcile_interrupted",
+            "operation_id": operation_id,
+            "task_id": task_id,
+            "forced": force,
+        })
         return operation
 
 
@@ -121,5 +127,11 @@ def stop_migration(bench, operation_id: str):
         # must not silently override restrictions.
         raise MigrationStateError("The task is not cancellable while running")
 
-    TaskProcess(bench.path).cancel(task_id)
+    process = TaskProcess(bench.path)
+    record = process.read(task_id)
+    if record is None:
+        raise MigrationStateError("Task process identity is unavailable")
+    process.cancel(task_id)
+    if process._inspector.owned_pids(record.identity):
+        raise MigrationStateError("Migration descendants are still running")
     return reconcile_migration(bench, operation_id)
