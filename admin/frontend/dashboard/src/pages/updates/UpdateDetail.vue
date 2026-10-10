@@ -37,6 +37,7 @@ const error = ref('')
 const confirmSkip = ref(false)
 const confirmRestore = ref(false)
 const confirmForceRecovery = ref(false)
+const confirmForceStop = ref(false)
 const recovering = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -150,6 +151,19 @@ const doRecover = async (force = false) => {
   } finally {
     recovering.value = false
     confirmForceRecovery.value = false
+  }
+}
+
+const doForceStop = async () => {
+  recovering.value = true
+  try {
+    op.value = await updatesApi.stop(props.operationId)
+    await load()
+  } catch (caught) {
+    error.value = errorMessage(caught, 'Could not stop migration.')
+  } finally {
+    recovering.value = false
+    confirmForceStop.value = false
   }
 }
 
@@ -282,11 +296,28 @@ onUnmounted(() => clearTimeout(timer))
         </p>
         <div class="mt-3 flex flex-wrap gap-2">
           <Button :loading="recovering" @click="doRecover(false)">Recover interrupted migration</Button>
+          <Button variant="subtle" :disabled="recovering" @click="confirmForceStop = true">
+            Force Stop Migration
+          </Button>
           <Button variant="subtle" :disabled="recovering" @click="confirmForceRecovery = true">
             Force set to Needs Attention
           </Button>
         </div>
       </section>
+      <Dialog v-model="confirmForceStop" title="Stop migration task?">
+        <div class="space-y-3 p-4">
+          <p class="text-p-sm text-ink-gray-7">
+            This terminates only verified task processes. Partial database changes may remain.
+            It does not restart or stop MariaDB.
+          </p>
+          <div class="flex justify-end gap-2">
+            <Button variant="subtle" @click="confirmForceStop = false">Cancel</Button>
+            <Button theme="red" :loading="recovering" @click="doForceStop">
+              Confirm Force Stop
+            </Button>
+          </div>
+        </div>
+      </Dialog>
       <Dialog v-model="confirmForceRecovery" title="Force migration into Needs Attention?">
         <div class="space-y-3 p-4">
           <p class="text-p-sm text-ink-gray-7">
