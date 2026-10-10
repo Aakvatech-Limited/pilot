@@ -119,6 +119,7 @@ def _source_config(tmp_path: Path) -> Path:
         "host_name": "https://source.example.com",
         "pilot_auth_token": "source-token",
         "maintenance_mode": 1,
+        "email_sender_name": "Source",
     }
     config.write_text(json.dumps(source_config))
     return config
