@@ -45,9 +45,8 @@ def test_live_or_successful_task_is_not_reconciled(tmp_path, status):
     bench, operation, _, tasks, processes = _bench(tmp_path, status)
     with patch("pilot.core.bench.migration.recovery.TaskStore", return_value=tasks), patch(
         "pilot.core.bench.migration.recovery.TaskProcess", return_value=processes
-    ):
-        with pytest.raises(MigrationStateError):
-            reconcile_migration(bench, "op-1")
+    ), pytest.raises(MigrationStateError):
+        reconcile_migration(bench, "op-1")
     operation._enter_needs_attention.assert_not_called()
 
 
@@ -57,7 +56,6 @@ def test_owned_process_is_not_reconciled(tmp_path):
     )
     with patch("pilot.core.bench.migration.recovery.TaskStore", return_value=tasks), patch(
         "pilot.core.bench.migration.recovery.TaskProcess", return_value=processes
-    ):
-        with pytest.raises(MigrationStateError):
-            reconcile_migration(bench, "op-1")
+    ), pytest.raises(MigrationStateError):
+        reconcile_migration(bench, "op-1")
     operation._enter_needs_attention.assert_not_called()
