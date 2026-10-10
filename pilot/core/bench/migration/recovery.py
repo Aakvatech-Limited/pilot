@@ -71,7 +71,7 @@ def reconcile_migration(bench, operation_id: str, *, force: bool = False):
             "message": f"Task {task_id} ended ({status.value}) without finalizing its migration.",
             "output_excerpt": "",
         }
-        operation.decisions.append({
+        operation.recovery_events.append({
             "action": "reconcile_interrupted",
             "task_id": task_id,
             "at": datetime.now(UTC).isoformat(),
