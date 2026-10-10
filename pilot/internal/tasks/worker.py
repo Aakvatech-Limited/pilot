@@ -76,6 +76,11 @@ class TaskWorker:
     def _work_once(self, pid: int) -> None:
         self._wake.clear()
         blocking_task = self._processes.reconcile()
+        if blocking_task is None:
+            from pilot.core.bench import Bench
+            from pilot.core.bench.migration.recovery import reconcile_orphaned_migrations
+
+            reconcile_orphaned_migrations(Bench(self._bench_root))
         if blocking_task is not None:
             status = WorkerStatus.DRAINING if self._intent_stopped() else WorkerStatus.RUNNING
             self._write_state(status, pid, blocking_task)
