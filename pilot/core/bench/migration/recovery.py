@@ -28,7 +28,7 @@ def reconcile_migration(bench, operation_id: str, *, force: bool = False):
         entry = operation.chain[-1]
         task_id = entry["task_id"]
         status = tasks.read_status(task_id)
-        if status not in _INTERRUPTED:
+        if status not in _INTERRUPTED and not (force and status == TaskStatus.RUNNING):
             raise MigrationStateError(f"Task {task_id} is {status.value}, not interrupted")
 
         record = processes.read(task_id)
@@ -60,6 +60,10 @@ def reconcile_migration(bench, operation_id: str, *, force: bool = False):
                 raise MigrationStateError("Backup task does not identify a site")
             operation.site(site_name).backup_status = "failed"
 
+        if force and status == TaskStatus.RUNNING:
+            from pilot.internal.tasks.process import TaskProcess
+
+            TaskProcess(bench.path).interrupt(task_id)
         operation.diagnosis = {
             "phase": phase,
             "message": f"Task {task_id} ended ({status.value}) without finalizing its migration.",
