@@ -78,6 +78,12 @@ def reconcile_migration(bench, operation_id: str, *, force: bool = False):
             "forced": force,
         })
         operation._enter_needs_attention(phase, site_name)
+        bench.audit_action("migration", {
+            "event": "reconcile_interrupted",
+            "operation_id": operation_id,
+            "task_id": task_id,
+            "forced": force,
+        })
         return operation
 
 
