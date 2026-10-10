@@ -14,19 +14,11 @@ import {
   providePortalTarget,
 } from 'frappe-ui'
 import { ConfigProvider } from 'reka-ui'
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import type { CloudContext, CloudSettingsOptions } from '@frappe/cloud-sdk'
 
 import FrappeCloudLogo from './components/FrappeCloudLogo.vue'
-import AdvancedPanel from './panels/AdvancedPanel.vue'
-import AnalyticsPanel from './panels/AnalyticsPanel.vue'
-import BackupsPanel from './panels/BackupsPanel.vue'
-import BillingPanel from './panels/BillingPanel.vue'
-import DomainsPanel from './panels/DomainsPanel.vue'
-import MaintenancePanel from './panels/MaintenancePanel.vue'
-import MarketplacePanel from './panels/MarketplacePanel.vue'
-import SiteConfigPanel from './panels/SiteConfigPanel.vue'
-import UsagePanel from './panels/UsagePanel.vue'
+import PanelFallback from './components/PanelFallback.vue'
 import { createStore } from './store'
 import TailwindStyles from './TailwindStyles.vue'
 
@@ -43,6 +35,26 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits(['close'])
 const __ = props.options.translate ?? translate
 provide('cloudSettingsTranslate', __)
+
+// Each panel loads when it is first shown, so opening the dialog fetches only the active panel.
+const lazyPanel = (loader: Parameters<typeof defineAsyncComponent>[0]) =>
+  defineAsyncComponent({
+    loader,
+    loadingComponent: PanelFallback,
+    errorComponent: PanelFallback,
+    delay: 150,
+    onError: (_error, retry, fail, attempts) => (attempts < 3 ? retry() : fail()),
+  })
+
+const BillingPanel = lazyPanel(() => import('./panels/BillingPanel.vue'))
+const MarketplacePanel = lazyPanel(() => import('./panels/MarketplacePanel.vue'))
+const AnalyticsPanel = lazyPanel(() => import('./panels/AnalyticsPanel.vue'))
+const DomainsPanel = lazyPanel(() => import('./panels/DomainsPanel.vue'))
+const BackupsPanel = lazyPanel(() => import('./panels/BackupsPanel.vue'))
+const UsagePanel = lazyPanel(() => import('./panels/UsagePanel.vue'))
+const SiteConfigPanel = lazyPanel(() => import('./panels/SiteConfigPanel.vue'))
+const MaintenancePanel = lazyPanel(() => import('./panels/MaintenancePanel.vue'))
+const AdvancedPanel = lazyPanel(() => import('./panels/AdvancedPanel.vue'))
 
 const GROUPS = [
   {
@@ -179,7 +191,7 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
         <template #title>{{ __("Cloud Settings") }}</template>
 
         <Button
-          class="absolute right-3 top-3 z-20"
+          class="cloud-settings-close absolute right-3 top-3 z-20 max-sm:size-10"
           variant="ghost"
           icon="lucide-x"
           :aria-label="__('Close Cloud Settings')"
@@ -187,7 +199,7 @@ const updateCount = computed(() => store.value.state.marketplace?.update_count |
         />
 
         <div class="shrink-0 border-b border-outline-gray-1 bg-surface-sidebar px-4 pb-4 pt-3 sm:hidden">
-          <p class="mb-3 pr-8 text-base-semibold text-ink-gray-8">{{ __('Cloud Settings') }}</p>
+          <p class="mb-3 pr-12 text-base-semibold text-ink-gray-8">{{ __('Cloud Settings') }}</p>
           <Select
             v-model="tab"
             :label="__('Panel')"

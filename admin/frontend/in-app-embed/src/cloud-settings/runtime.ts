@@ -31,12 +31,25 @@ if (typeof CSS !== 'undefined' && 'registerProperty' in CSS) {
 }
 
 let host: InstanceType<typeof CloudSettingsElement> | undefined
+let isFontChecked = false
+
+// Desk and most Frappe apps load Inter. Only the npm build carries the font, for a page without it.
+const loadFontIfMissing = (): void => {
+  if (import.meta.env.MODE !== 'sdk' || isFontChecked) return
+
+  isFontChecked = true
+  if (![...document.fonts].some((font) => /^["']?inter/i.test(font.family))) {
+    import('./font').then(({ loadInter }) => loadInter())
+  }
+}
 
 export const closeCloudSettings = (): void => {
   host?.dispatchEvent(new CustomEvent('close'))
 }
 
 export const mountCloudSettings = (context: CloudContext, options: CloudSettingsOptions = {}): void => {
+  loadFontIfMissing()
+
   const existing = document.querySelector(TAG)
   existing?.dispatchEvent(new CustomEvent('close'))
 
