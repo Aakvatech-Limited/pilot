@@ -63,9 +63,9 @@ class DependencyDeclarationsCheck:
             )
         self._check_version_specifiers(app, declared)
 
-        # hooks.py's required_apps never lists frappe itself (it's implicit),
-        # while pyproject.toml always does - exclude it before comparing.
-        missing = sorted(set(self.get_hooks_required_apps(app)) - (set(declared) - {"frappe"}))
+        # Frappe is mandatory in pyproject and may also be explicit in hooks.
+        # Compare every required app against the complete declaration table.
+        missing = sorted(set(self.get_hooks_required_apps(app)) - set(declared))
         if missing:
             raise AppValidationError(
                 f"'{app.config.name}' requires {missing} in hooks.py, but pyproject.toml's "

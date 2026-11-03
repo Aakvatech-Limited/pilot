@@ -147,6 +147,29 @@ def test_dependency_declarations_passes_when_required_app_is_declared(tmp_path: 
     Validator(app, checks=_static_checks()).validate()
 
 
+@pytest.mark.parametrize("required_apps", [["frappe"], ["frappe", "frappe/erpnext"]])
+def test_dependency_declarations_accepts_explicit_frappe(tmp_path: Path, required_apps: list[str]) -> None:
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench.frappe-dependencies]\n'
+        'frappe = ">=16.50.0,<17.0.0"\nerpnext = ">=16.0.0,<17.0.0"\n',
+        {"myapp/hooks.py": f"required_apps = {required_apps!r}\n"},
+    )
+    Validator(app, checks=_static_checks()).validate()
+
+
+def test_explicit_frappe_does_not_hide_a_missing_other_app(tmp_path: Path) -> None:
+    app = _make_app(
+        tmp_path,
+        "myapp",
+        '[project]\nname = "myapp"\n\n[tool.bench.frappe-dependencies]\nfrappe = ">=16"\n',
+        {"myapp/hooks.py": 'required_apps = ["frappe", "erpnext"]\n'},
+    )
+    with pytest.raises(AppValidationError, match=r"requires \['erpnext'\]"):
+        Validator(app, checks=_static_checks()).validate()
+
+
 def test_dependency_declarations_fails_when_required_app_is_missing(tmp_path: Path) -> None:
     app = _make_app(
         tmp_path,
@@ -185,8 +208,7 @@ def test_dependency_declarations_fails_when_frappe_dependencies_omits_frappe(
 
 
 def test_dependency_declarations_excludes_frappe_from_hooks_comparison(tmp_path: Path) -> None:
-    """pyproject always declares frappe; hooks.py's required_apps never does -
-    frappe being present in pyproject alone must not cause any false failure."""
+    """A declaration of frappe must also work when hooks leave it implicit."""
     app = _make_app(
         tmp_path,
         "myapp",
