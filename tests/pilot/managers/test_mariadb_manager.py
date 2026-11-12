@@ -253,6 +253,13 @@ def test_write_config_contains_all_server_settings(tmp_path) -> None:
     assert f"key-buffer-size = {sizing.key_buffer_mb}M" in content
     assert f"max-connections = {sizing.max_connections}" in content
 
+    # Slow-query logging is managed by Pilot for database diagnostics.
+    assert f"log-error = {manager.error_log_path}" in content
+    assert "slow-query-log = ON" in content
+    assert f"slow-query-log-file = {manager.slow_log_path}" in content
+    assert "long-query-time = 1" in content
+    assert "log-output = FILE" in content
+
     for unsupported_or_unmanaged_option in (
         "innodb-file-format",
         "innodb-file-per-table",
@@ -260,7 +267,6 @@ def test_write_config_contains_all_server_settings(tmp_path) -> None:
         "innodb-large-prefix",
         "log-bin",
         "query-cache",
-        "slow-query-log",
     ):
         assert unsupported_or_unmanaged_option not in content
 
